@@ -15,6 +15,19 @@ public final class NativeBridge {
         loaded = ok;
     }
     private static native int nativeProtocolVersion();
+    private static native int nativeUdpPreflight();
+    public static String udpDiagnostic() {
+        if (!loaded) return "JNI_LIBRARY_MISSING";
+        try {
+            switch (nativeUdpPreflight()) {
+                case 0: return "UDP_LOOPBACK_BIND_OK";
+                case 1: return "UDP_SOCKET_UNAVAILABLE";
+                default: return "UDP_LOOPBACK_BIND_FAILED";
+            }
+        } catch (UnsatisfiedLinkError | SecurityException e) {
+            return "UDP_JNI_ENTRYPOINT_MISSING";
+        }
+    }
     public static String diagnostic() {
         if (!loaded) return "JNI_LIBRARY_MISSING";
         try {
