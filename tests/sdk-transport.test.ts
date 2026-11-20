@@ -10,20 +10,24 @@ test('SDK bridge wires login, owner discovery, join and spawn', async () => {
     async login() { calls.push('login'); },
     async getFriendSessions() { calls.push('sessions'); return [{sessionId:'owner-session', hostXuid:'42'}]; },
     async joinFriendSession(id) { calls.push('join:' + id); },
-    async waitUntilSpawned() { calls.push('spawn'); }
+    async waitUntilSpawned() { calls.push('spawn'); },
+    async disconnect() { calls.push('disconnect'); }
   };
   const controller = new ConnectionController(new BedrockConnectionDriver(new SdkBedrockTransport(sdk), '42'));
   await controller.start();
   assert.equal(controller.state, 'ready');
   assert.deepEqual(calls, ['login', 'sessions', 'join:owner-session', 'spawn']);
   controller.stop();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(calls.at(-1), 'disconnect');
 });
 test('SDK transport rejects malformed friend session metadata', async () => {
   const sdk: BedrockSdkBridge = {
     async login() {},
     async getFriendSessions() { return [{ sessionId: '', hostXuid: '42' }]; },
     async joinFriendSession() {},
-    async waitUntilSpawned() {}
+    async waitUntilSpawned() {},
+    async disconnect() {}
   };
   await assert.rejects(new SdkBedrockTransport(sdk).listFriendSessions(new AbortController().signal), /Invalid Xbox session metadata/);
 });
@@ -32,7 +36,8 @@ test('SDK transport refuses aborted login and join', async () => {
     async login() { throw new Error('must not call'); },
     async getFriendSessions() { return []; },
     async joinFriendSession() { throw new Error('must not call'); },
-    async waitUntilSpawned() {}
+    async waitUntilSpawned() {},
+    async disconnect() {}
   };
   const signal = AbortSignal.abort();
   const transport = new SdkBedrockTransport(sdk);
