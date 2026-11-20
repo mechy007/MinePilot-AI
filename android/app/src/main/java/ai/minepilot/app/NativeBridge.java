@@ -15,6 +15,17 @@ public final class NativeBridge {
         loaded = ok;
     }
     private static native int nativeProtocolVersion();
+    private static native int nativeUdpSocketProbe();
+    /** Local socket capability only; does not authenticate or send Minecraft packets. */
+    public static String udpDiagnostic() {
+        if (!loaded) return "UDP_BRIDGE_UNAVAILABLE";
+        try {
+            int code = nativeUdpSocketProbe();
+            return code == 0 ? "UDP_SOCKET_READY" : "UDP_SOCKET_ERROR_" + code;
+        } catch (UnsatisfiedLinkError | SecurityException e) {
+            return "UDP_ENTRYPOINT_MISSING";
+        }
+    }
     public static String diagnostic() {
         if (!loaded) return "JNI_LIBRARY_MISSING";
         try {
