@@ -13,6 +13,8 @@ export interface BedrockClientLike {
 export type BedrockClientFactory = (options: {
   username: string;
   offline: false;
+  profilesFolder?: string | false;
+  onMsaCode?: (code: { user_code?: string; verification_uri?: string; verification_uri_complete?: string; message?: string }) => void;
   world: { pickSession: (sessions: WorldSessionCandidate[]) => WorldSessionCandidate };
 }) => BedrockClientLike;
 
@@ -34,7 +36,8 @@ export class PrismarineWorldClient {
   constructor(
     private readonly username: string,
     private readonly ownerXuid: string,
-    private readonly createClient: BedrockClientFactory = loadBedrockClient
+    private readonly createClient: BedrockClientFactory = loadBedrockClient,
+    private readonly auth?: { profilesFolder?: string | false; onMsaCode?: Parameters<BedrockClientFactory>[0]['onMsaCode'] }
   ) {}
   async connectAndSpawn(signal: AbortSignal): Promise<void> {
     if (this.client) throw new Error('Already connected');
@@ -42,6 +45,7 @@ export class PrismarineWorldClient {
     const client = this.createClient({
       username: this.username,
       offline: false,
+      ...this.auth,
       world: { pickSession: sessions => pickOwnerWorld(sessions, this.ownerXuid) }
     });
     this.client = client;
