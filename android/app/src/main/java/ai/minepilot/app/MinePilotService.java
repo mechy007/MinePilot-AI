@@ -23,5 +23,6 @@ public final class MinePilotService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         return START_NOT_STICKY;
     }
+    @Override public void onTimeout(int startId, int fgsType) { stopSelf(); }
     @Override public IBinder onBind(Intent intent) { return null; }
 }
