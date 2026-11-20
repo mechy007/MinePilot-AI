@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.minepilot-private-auth/
+*.log
+.env
+.env.*
