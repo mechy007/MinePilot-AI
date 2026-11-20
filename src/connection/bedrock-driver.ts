@@ -15,6 +15,7 @@ export class BedrockConnectionDriver implements ConnectionDriver {
     return this.transport.authenticate(signal);
   }
   async discoverOwnerSession(signal: AbortSignal): Promise<void> {
+    this.session = null;
     const sessions = await this.transport.listFriendSessions(signal);
     if (signal.aborted) throw new Error('Connection cancelled');
     this.session = selectOwnerSession(sessions, this.ownerXuid);
@@ -22,7 +23,9 @@ export class BedrockConnectionDriver implements ConnectionDriver {
   async connect(signal: AbortSignal): Promise<void> {
     if (!this.session) throw new Error('No selected owner session');
     if (signal.aborted) throw new Error('Connection cancelled');
-    await this.transport.join(this.session, signal);
+    const selected = this.session;
+    this.session = null;
+    await this.transport.join(selected, signal);
   }
   async waitForSpawn(signal: AbortSignal): Promise<void> {
     if (signal.aborted) throw new Error('Connection cancelled');
