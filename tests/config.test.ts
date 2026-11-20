@@ -16,3 +16,16 @@ test('rejects unexpected fields to avoid accidental secret storage', () => {
   assert.throws(() => parseConnectionConfig({ ownerXuid: '2', accessToken: 'secret' }));
   assert.throws(() => parseConnectionConfig({ ownerXuid: '2', accountLabel: 'bad\nlabel' }));
 });
+test('reads each property once even when getters change their values', () => {
+  let xuidReads = 0;
+  let labelReads = 0;
+  const config = {
+    get ownerXuid() { return ++xuidReads === 1 ? '2' : 'invalid'; },
+    get accountLabel() { return ++labelReads === 1 ? 'Bot' : 'bad\nlabel'; }
+  };
+  const result = parseConnectionConfig(config);
+  assert.equal(result.ownerXuid, '2');
+  assert.equal(result.accountLabel, 'Bot');
+  assert.equal(xuidReads, 1);
+  assert.equal(labelReads, 1);
+});
