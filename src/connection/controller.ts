@@ -7,6 +7,7 @@ export interface ConnectionDriver {
   discoverOwnerSession(signal: AbortSignal): Promise<void>;
   connect(signal: AbortSignal): Promise<void>;
   waitForSpawn(signal: AbortSignal): Promise<void>;
+  disconnect?(): Promise<void>;
 }
 export class ConnectionController {
   readonly machine = new ConnectionMachine();
@@ -16,6 +17,7 @@ export class ConnectionController {
   get state(): ConnectionState { return this.machine.state; }
   stop(): void {
     this.aborter?.abort();
+    if (this.driver.disconnect) void this.driver.disconnect().catch(() => this.report('warning', 'DISCONNECT_FAILED'));
     if (this.machine.state !== 'disconnected') this.change('DISCONNECT');
   }
   private change(event: ConnectionEvent): void {

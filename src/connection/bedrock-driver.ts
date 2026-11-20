@@ -6,9 +6,14 @@ export interface BedrockSessionTransport {
   listFriendSessions(signal: AbortSignal): Promise<readonly FriendSession[]>;
   join(session: FriendSession, signal: AbortSignal): Promise<void>;
   awaitSpawn(signal: AbortSignal): Promise<void>;
+  disconnect?(): Promise<void>;
 }
 export class BedrockConnectionDriver implements ConnectionDriver {
   private session: FriendSession | null = null;
+  disconnect(): Promise<void> {
+    this.session = null;
+    return this.transport.disconnect?.() ?? Promise.resolve();
+  }
   constructor(private readonly transport: BedrockSessionTransport, private readonly ownerXuid: string) {}
   authenticate(signal: AbortSignal): Promise<void> {
     this.session = null;
