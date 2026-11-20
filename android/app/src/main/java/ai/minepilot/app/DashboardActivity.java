@@ -133,6 +133,7 @@ public final class DashboardActivity extends Activity {
             case "Settings":
                 label("Performance: Balanced (future option)", 17);
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 17);
+                button("Test native UDP loopback", () -> status.setText("UDP preflight: " + NativeBridge.udpDiagnostic()));
                 TextView runtimeLabel = new TextView(this);
                 runtimeLabel.setText("Android runtime preflight: " + RuntimeProbe.inspect(this));
                 runtimeLabel.setTextSize(17);
@@ -154,6 +155,7 @@ public final class DashboardActivity extends Activity {
             case "Logs":
                 label("No real game telemetry is available in this build.", 16);
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 16);
+                label("Native UDP loopback (no packets sent): " + NativeBridge.udpDiagnostic(), 16);
                 label("Runtime preflight: " + RuntimeProbe.inspect(this), 16);
                 label("No authenticated Xbox or live Bedrock session has been verified.", 16);
                 break;
