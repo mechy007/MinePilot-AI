@@ -24,17 +24,21 @@ public interface BedrockEngine {
     /** Fail-closed implementation until a real embedded runtime is verified. */
     final class Unavailable implements BedrockEngine {
         private Listener listener;
+        private State currentState = State.STOPPED;
         @Override public Set<Capability> capabilities() { return Collections.emptySet(); }
-        @Override public State state() { return State.STOPPED; }
+        @Override public State state() { return currentState; }
         @Override public void setListener(Listener listener) { this.listener = listener; }
         @Override public void start(String ownerXuid) {
-            if (listener != null) listener.onStateChanged(State.FAILED, "ENGINE_NOT_INSTALLED");
+            currentState = State.FAILED;
+            if (listener != null) listener.onStateChanged(currentState, "ENGINE_NOT_INSTALLED");
         }
         @Override public void command(String name) {
-            if (listener != null) listener.onStateChanged(State.FAILED, "ENGINE_NOT_INSTALLED");
+            currentState = State.FAILED;
+            if (listener != null) listener.onStateChanged(currentState, "ENGINE_NOT_INSTALLED");
         }
         @Override public void stop() {
-            if (listener != null) listener.onStateChanged(State.STOPPED, "STOPPED");
+            currentState = State.STOPPED;
+            if (listener != null) listener.onStateChanged(currentState, "STOPPED");
         }
     }
 }
