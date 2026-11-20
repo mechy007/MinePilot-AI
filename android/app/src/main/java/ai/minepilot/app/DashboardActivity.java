@@ -134,6 +134,7 @@ public final class DashboardActivity extends Activity {
                 label("Performance: Balanced (future option)", 17);
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 17);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 17);
+                label("RakNet pong codec (offline only): " + NativeBridge.raknetPongDiagnostic(), 17);
                 button("Test native UDP loopback", () -> status.setText("UDP preflight: " + NativeBridge.udpDiagnostic()));
                 TextView runtimeLabel = new TextView(this);
                 runtimeLabel.setText("Android runtime preflight: " + RuntimeProbe.inspect(this));
@@ -157,6 +158,7 @@ public final class DashboardActivity extends Activity {
                 label("No real game telemetry is available in this build.", 16);
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 16);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 16);
+                label("RakNet pong codec (offline only): " + NativeBridge.raknetPongDiagnostic(), 16);
                 label("Native UDP loopback (no packets sent): " + NativeBridge.udpDiagnostic(), 16);
                 label("Runtime preflight: " + RuntimeProbe.inspect(this), 16);
                 label("No authenticated Xbox or live Bedrock session has been verified.", 16);
