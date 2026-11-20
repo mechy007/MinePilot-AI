@@ -23,6 +23,8 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror -o /tmp/test-raknet-ping tests/test_raknet_ping_codec.c
           /tmp/test-raknet-ping
+          cc -std=c11 -Wall -Wextra -Werror -o /tmp/test-raknet-pong tests/test_raknet_pong_codec.c
+          /tmp/test-raknet-pong
       - name: Build Android debug APK
         working-directory: android
         run: gradle --no-daemon :app:assembleDebug
