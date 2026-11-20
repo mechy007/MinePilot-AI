@@ -1,4 +1,6 @@
 #include <jni.h>
+#include <string.h>
+#include "raknet_ping.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -27,4 +29,20 @@ Java_ai_minepilot_app_NativeBridge_nativeUdpPreflight(JNIEnv *env, jclass clazz)
     int result = bind(fd, (const struct sockaddr *)&addr, sizeof(addr));
     close(fd);
     return result == 0 ? 0 : 2;
+}
+
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetPingCodecSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env;
+    (void)clazz;
+    uint8_t packet[MP_RAKNET_PING_SIZE] = {0};
+    if (mp_encode_unconnected_ping(packet, sizeof(packet),
+        UINT64_C(0x0102030405060708), UINT64_C(0x1112131415161718)) != MP_RAKNET_PING_SIZE) return 1;
+    const uint8_t ts[] = {1,2,3,4,5,6,7,8};
+    const uint8_t guid[] = {0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18};
+    if (packet[0] != 1 || memcmp(packet+1, ts, 8) ||
+        memcmp(packet+9, MP_RAKNET_MAGIC, 16) || memcmp(packet+25, guid, 8)) return 2;
+    if (mp_encode_unconnected_ping(packet, 32, 0, 0) != -1 ||
+        mp_encode_unconnected_ping(NULL, 33, 0, 0) != -1) return 3;
+    return 0;
 }
