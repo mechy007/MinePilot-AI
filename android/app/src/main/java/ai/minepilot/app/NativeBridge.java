@@ -16,6 +16,15 @@ public final class NativeBridge {
     }
     private static native int nativeProtocolVersion();
     private static native int nativeUdpPreflight();
+    private static native int nativeRaknetPingCodecSelfTest();
+    public static String raknetCodecDiagnostic() {
+        if (!loaded) return "JNI_LIBRARY_MISSING";
+        try {
+            return nativeRaknetPingCodecSelfTest() == 0 ? "RAKNET_PING_CODEC_OK_OFFLINE" : "RAKNET_PING_CODEC_FAILED";
+        } catch (UnsatisfiedLinkError | SecurityException e) {
+            return "RAKNET_CODEC_ENTRYPOINT_MISSING";
+        }
+    }
     public static String udpDiagnostic() {
         if (!loaded) return "JNI_LIBRARY_MISSING";
         try {
