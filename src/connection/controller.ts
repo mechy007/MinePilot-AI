@@ -44,7 +44,7 @@ export class ConnectionController {
           this.change('CONNECTED');
           await this.driver.waitForSpawn(aborter.signal);
           if (aborter.signal.aborted) break;
-          this.change('SPAWNED');
+          this.change('READY');
           return;
         } catch {
           if (aborter.signal.aborted) break;
