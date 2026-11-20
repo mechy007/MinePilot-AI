@@ -1,11 +1,11 @@
 export type ConnectionState = 'disconnected' | 'authenticating' | 'discovering' | 'connecting' | 'spawned' | 'ready' | 'failed';
-export type ConnectionEvent = 'START' | 'AUTH_OK' | 'SESSION_FOUND' | 'CONNECTED' | 'SPAWNED' | 'READY' | 'ERROR' | 'DISCONNECT' | 'RETRY';
+export type ConnectionEvent = 'START' | 'AUTH_OK' | 'SESSION_FOUND' | 'CONNECTED' | 'READY' | 'ERROR' | 'DISCONNECT' | 'RETRY';
 const transitions: Record<ConnectionState, Partial<Record<ConnectionEvent, ConnectionState>>> = {
   disconnected: { START: 'authenticating' },
   authenticating: { AUTH_OK: 'discovering', ERROR: 'failed', DISCONNECT: 'disconnected' },
   discovering: { SESSION_FOUND: 'connecting', ERROR: 'failed', DISCONNECT: 'disconnected' },
   connecting: { CONNECTED: 'spawned', ERROR: 'failed', DISCONNECT: 'disconnected' },
-  spawned: { SPAWNED: 'ready', ERROR: 'failed', DISCONNECT: 'disconnected' },
+  spawned: { READY: 'ready', ERROR: 'failed', DISCONNECT: 'disconnected' },
   ready: { ERROR: 'failed', DISCONNECT: 'disconnected' },
   failed: { RETRY: 'authenticating', DISCONNECT: 'disconnected' }
 };

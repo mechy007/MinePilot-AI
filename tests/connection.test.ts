@@ -4,7 +4,7 @@ import { ConnectionMachine } from '../src/connection/state-machine.js';
 import { selectOwnerSession } from '../src/connection/session-selection.js';
 test('connection lifecycle reaches ready', () => {
   const m = new ConnectionMachine();
-  for (const event of ['START','AUTH_OK','SESSION_FOUND','CONNECTED','SPAWNED'] as const) m.transition(event);
+  for (const event of ['START','AUTH_OK','SESSION_FOUND','CONNECTED','READY'] as const) m.transition(event);
   assert.equal(m.state, 'ready');
   m.transition('DISCONNECT');
   assert.equal(m.state, 'disconnected');
