@@ -22,6 +22,20 @@ jobs:
       - name: Build Android debug APK
         working-directory: android
         run: gradle --no-daemon :app:assembleDebug
+      - name: Verify ARM64 JNI library is packaged
+        run: |
+          python3 - <<'PY'
+          import pathlib, zipfile
+          apk = pathlib.Path("android/app/build/outputs/apk/debug/app-debug.apk")
+          with zipfile.ZipFile(apk) as archive:
+              names = set(archive.namelist())
+              expected = "lib/arm64-v8a/libminepilot_bridge.so"
+              assert expected in names, f"Missing {expected}"
+              assert not any(name.startswith("lib/") and not name.startswith("lib/arm64-v8a/") for name in names), "Unexpected non-ARM64 native library"
+              data = archive.read(expected)
+              assert len(data) >= 64 and data[:4] == bytes([127,69,76,70]) and data[4] == 2 and data[5] == 1 and int.from_bytes(data[18:20], "little") == 183, "Invalid ARM64 ELF"
+              print(f"Verified ARM64 JNI library ({len(data)} bytes); APK size {apk.stat().st_size} bytes")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: minepilot-android-shell-debug
