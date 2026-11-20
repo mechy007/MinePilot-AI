@@ -7,11 +7,13 @@ export interface BedrockSdkBridge {
   getFriendSessions(signal: AbortSignal): Promise<readonly FriendSession[]>;
   joinFriendSession(sessionId: string, signal: AbortSignal): Promise<void>;
   waitUntilSpawned(signal: AbortSignal): Promise<void>;
+  disconnect(): Promise<void>;
 }
 
 /** Real transport wiring, without claiming that an SDK is bundled yet. */
 export class SdkBedrockTransport implements BedrockSessionTransport {
   constructor(private readonly sdk: BedrockSdkBridge) {}
+  disconnect(): Promise<void> { return this.sdk.disconnect(); }
   authenticate(signal: AbortSignal): Promise<void> {
     if (signal.aborted) return Promise.reject(new Error('Connection cancelled'));
     return this.sdk.login(signal);
