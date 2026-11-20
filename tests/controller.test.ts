@@ -30,3 +30,22 @@ test('stop during pending auth never advances connection state', async () => {
   await pending;
   assert.equal(c.state, 'disconnected');
 });
+
+test('controller can restart cleanly after stopping a ready connection', async () => {
+  const c = new ConnectionController(successDriver);
+  await c.start();
+  c.stop();
+  await c.start();
+  assert.equal(c.state, 'ready');
+  c.stop();
+});
+test('controller rejects overlapping start calls', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const c = new ConnectionController({ ...successDriver, async authenticate() { await gate; } });
+  const first = c.start();
+  await assert.rejects(c.start(), /already running/);
+  c.stop();
+  release();
+  await first;
+});
