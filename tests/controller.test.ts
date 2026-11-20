@@ -49,3 +49,28 @@ test('controller rejects overlapping start calls', async () => {
   release();
   await first;
 });
+
+for (const stage of ['discoverOwnerSession', 'connect', 'waitForSpawn'] as const) {
+  test(`stop during pending ${stage} does not advance or retry`, async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const reached = new Promise<void>(resolve => { entered = resolve; });
+    let laterCalls = 0;
+    const driver: ConnectionDriver = {
+      async authenticate() { if (stage !== 'discoverOwnerSession') return; },
+      async discoverOwnerSession() { if (stage === 'discoverOwnerSession') { entered(); await gate; } else return; },
+      async connect() { if (stage === 'connect') { entered(); await gate; } else return; },
+      async waitForSpawn() { if (stage === 'waitForSpawn') { entered(); await gate; } else laterCalls++; }
+    };
+    const c = new ConnectionController(driver);
+    const pending = c.start();
+    await reached;
+    c.stop();
+    release();
+    await pending;
+    assert.equal(c.state, 'disconnected');
+    assert.equal(laterCalls, 0);
+    assert.ok(!c.diagnostics.snapshot().some(e => e.code === 'CONNECTION_ATTEMPT_FAILED'));
+  });
+}
