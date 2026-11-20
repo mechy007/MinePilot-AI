@@ -16,7 +16,8 @@ test('rejects secrets or free-form error messages as codes', () => {
 test('returned events cannot mutate stored history', () => {
   const d = new ConnectionDiagnostics();
   d.record('ready', 'info', 'READY', 1);
-  const events = d.snapshot() as { code: string }[];
-  events[0].code = 'CHANGED';
+  const event = d.snapshot()[0];
+  // The snapshot is readonly by API contract; deliberately mutate via a test-only cast.
+  (event as { code: string }).code = 'CHANGED';
   assert.equal(d.snapshot()[0].code, 'READY');
 });
