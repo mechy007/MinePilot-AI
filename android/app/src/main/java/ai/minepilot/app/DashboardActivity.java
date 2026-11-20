@@ -132,9 +132,18 @@ public final class DashboardActivity extends Activity {
                 break;
             case "Settings":
                 label("Performance: Balanced (future option)", 17);
-                label("Android runtime preflight: " + RuntimeProbe.inspect(this), 17);
+                TextView runtimeLabel = new TextView(this);
+                runtimeLabel.setText("Android runtime preflight: " + RuntimeProbe.inspect(this));
+                runtimeLabel.setTextSize(17);
+                runtimeLabel.setTextColor(Color.WHITE);
+                runtimeLabel.setPadding(12, 16, 12, 16);
+                body.addView(runtimeLabel);
                 label("A present ELF header does not prove the engine can run.", 14);
-                button("Recheck runtime packaging", () -> status.setText("Runtime preflight: " + RuntimeProbe.inspect(this)));
+                button("Recheck runtime packaging", () -> {
+                    String result = "Android runtime preflight: " + RuntimeProbe.inspect(this);
+                    runtimeLabel.setText(result);
+                    status.setText(result);
+                });
                 label("Same-phone world join: UNVERIFIED", 17);
                 button("Stop diagnostic service", () -> {
                     stopService(new Intent(this, MinePilotService.class));
