@@ -59,8 +59,8 @@ for (const stage of ['discoverOwnerSession', 'connect', 'waitForSpawn'] as const
     let laterCalls = 0;
     const driver: ConnectionDriver = {
       async authenticate() { if (stage !== 'discoverOwnerSession') return; },
-      async discoverOwnerSession() { if (stage === 'discoverOwnerSession') { entered(); await gate; } else if (stage === 'connect') return; else laterCalls++; },
-      async connect() { if (stage === 'connect') { entered(); await gate; } else if (stage === 'waitForSpawn') return; else laterCalls++; },
+      async discoverOwnerSession() { if (stage === 'discoverOwnerSession') { entered(); await gate; } else return; },
+      async connect() { if (stage === 'connect') { entered(); await gate; } else return; },
       async waitForSpawn() { if (stage === 'waitForSpawn') { entered(); await gate; } else laterCalls++; }
     };
     const c = new ConnectionController(driver);
