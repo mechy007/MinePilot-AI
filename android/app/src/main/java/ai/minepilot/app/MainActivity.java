@@ -24,7 +24,7 @@ public final class MainActivity extends Activity {
         title.setTextSize(28);
         root.addView(title);
         status = new TextView(this);
-        status.setText("Android shell only — Xbox connection not yet available.");
+        status.setText("MinePilot dashboard: Xbox, tasks, commands and engine integration are pending.");
         status.setPadding(0, 24, 0, 24);
         root.addView(status);
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
