@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { retryDelay, waitForRetry } from '../src/connection/retry.js';
+import { retryDelay, waitForRetry, MAX_TIMER_DELAY_MS } from '../src/connection/retry.js';
 test('retry delay increases with cap and attempt limit', () => {
   assert.equal(retryDelay(1), 1000);
   assert.equal(retryDelay(2), 2000);
@@ -10,6 +10,11 @@ test('retry delay increases with cap and attempt limit', () => {
 test('invalid retry policies and attempts are rejected', () => {
   assert.throws(() => retryDelay(0));
   assert.throws(() => retryDelay(1, { initialDelayMs: 0, maxDelayMs: 100, maxAttempts: 3 }));
+  assert.throws(() => retryDelay(1, { initialDelayMs: 1000, maxDelayMs: MAX_TIMER_DELAY_MS + 1, maxAttempts: 3 }));
+  assert.throws(() => retryDelay(1, { initialDelayMs: MAX_TIMER_DELAY_MS + 1, maxDelayMs: MAX_TIMER_DELAY_MS + 1, maxAttempts: 3 }));
+});
+test('oversized wait delay is rejected instead of scheduling immediately', async () => {
+  await assert.rejects(waitForRetry(MAX_TIMER_DELAY_MS + 1, new AbortController().signal), RangeError);
 });
 test('cancelled retry stops immediately', async () => {
   const controller = new AbortController();
