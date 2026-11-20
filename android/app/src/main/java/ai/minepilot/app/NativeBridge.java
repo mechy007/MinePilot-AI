@@ -17,6 +17,15 @@ public final class NativeBridge {
     private static native int nativeProtocolVersion();
     private static native int nativeUdpPreflight();
     private static native int nativeRaknetPingCodecSelfTest();
+    private static native int nativeRaknetPongCodecSelfTest();
+    public static String raknetPongDiagnostic() {
+        if (!loaded) return "JNI_LIBRARY_MISSING";
+        try {
+            return nativeRaknetPongCodecSelfTest() == 0 ? "RAKNET_PONG_CODEC_OK_OFFLINE" : "RAKNET_PONG_CODEC_FAILED";
+        } catch (UnsatisfiedLinkError | SecurityException e) {
+            return "RAKNET_PONG_ENTRYPOINT_MISSING";
+        }
+    }
     public static String raknetCodecDiagnostic() {
         if (!loaded) return "JNI_LIBRARY_MISSING";
         try {
