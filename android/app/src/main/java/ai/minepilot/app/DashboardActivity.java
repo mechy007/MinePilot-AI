@@ -132,7 +132,18 @@ public final class DashboardActivity extends Activity {
                 break;
             case "Settings":
                 label("Performance: Balanced (future option)", 17);
-                label("Embedded networking runtime: NOT INSTALLED", 17);
+                TextView runtimeLabel = new TextView(this);
+                runtimeLabel.setText("Android runtime preflight: " + RuntimeProbe.inspect(this));
+                runtimeLabel.setTextSize(17);
+                runtimeLabel.setTextColor(Color.WHITE);
+                runtimeLabel.setPadding(12, 16, 12, 16);
+                body.addView(runtimeLabel);
+                label("A present ELF header does not prove the engine can run.", 14);
+                button("Recheck runtime packaging", () -> {
+                    String result = "Android runtime preflight: " + RuntimeProbe.inspect(this);
+                    runtimeLabel.setText(result);
+                    status.setText(result);
+                });
                 label("Same-phone world join: UNVERIFIED", 17);
                 button("Stop diagnostic service", () -> {
                     stopService(new Intent(this, MinePilotService.class));
@@ -141,7 +152,8 @@ public final class DashboardActivity extends Activity {
                 break;
             case "Logs":
                 label("No real game telemetry is available in this build.", 16);
-                label("The connection engine has not been embedded in Android.", 16);
+                label("Runtime preflight: " + RuntimeProbe.inspect(this), 16);
+                label("No authenticated Xbox or live Bedrock session has been verified.", 16);
                 break;
             default:
                 label("Connection: DISCONNECTED", 21);
