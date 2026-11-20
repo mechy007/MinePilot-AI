@@ -1,6 +1,12 @@
 package ai.minepilot.app;
 
 import android.app.Activity;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.view.WindowInsets;
+import android.view.WindowInsets.Type;
+import android.widget.Toast;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -14,6 +20,10 @@ import android.widget.TextView;
 public final class DashboardActivity extends Activity {
     private LinearLayout body;
     private TextView status;
+    private String currentTab = "Home";
+    private EditText xuidInput;
+    private String xuidDraft;
+    private static final int NOTIFICATION_REQUEST = 101;
     private void label(String text, int size) {
         TextView v = new TextView(this);
         v.setText(text);
@@ -34,12 +44,31 @@ public final class DashboardActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        show("Home");
+        if (state != null) {
+            currentTab = state.getString("tab", "Home");
+            xuidDraft = state.getString("xuid_draft");
+        }
+        show(currentTab);
+    }
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putString("tab", currentTab);
+        if (xuidInput != null) state.putString("xuid_draft", xuidInput.getText().toString());
+        super.onSaveInstanceState(state);
     }
     private void show(String tab) {
+        if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
+        xuidInput = null;
+        currentTab = tab;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(20, 24, 20, 12);
+        if (Build.VERSION.SDK_INT >= 30) {
+            root.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(Type.systemBars() | Type.displayCutout());
+                view.setPadding(20 + bars.left, 24 + bars.top, 20 + bars.right, 12 + bars.bottom);
+                return insets;
+            });
+        }
         root.setBackgroundColor(Color.rgb(15, 23, 36));
         TextView title = new TextView(this);
         title.setText("MINEPILOT AI  /  " + tab.toUpperCase());
@@ -75,7 +104,8 @@ public final class DashboardActivity extends Activity {
                 xuid.setHintTextColor(Color.LTGRAY);
                 xuid.setHint("Owner Xbox XUID (numeric)");
                 xuid.setInputType(2);
-                xuid.setText(getPreferences(MODE_PRIVATE).getString("owner_xuid", ""));
+                xuid.setText(xuidDraft != null ? xuidDraft : getPreferences(MODE_PRIVATE).getString("owner_xuid", ""));
+                xuidInput = xuid;
                 body.addView(xuid);
                 button("Save owner XUID locally", () -> {
                     String value = xuid.getText().toString().trim();
@@ -83,6 +113,7 @@ public final class DashboardActivity extends Activity {
                         if (!value.matches("[0-9]{1,20}")) throw new NumberFormatException();
                         Long.parseUnsignedLong(value);
                         getPreferences(MODE_PRIVATE).edit().putString("owner_xuid", value).apply();
+                        xuidDraft = value;
                         status.setText("Saved locally. No login attempted.");
                     } catch (NumberFormatException e) { status.setText("Invalid unsigned 64-bit XUID."); }
                 });
@@ -118,6 +149,9 @@ public final class DashboardActivity extends Activity {
                 button("Connect bot (unavailable)", () -> disabled("Connect"));
                 button("Start diagnostic service", () -> {
                     try {
+                        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_REQUEST);
+                        }
                         startForegroundService(new Intent(this, MinePilotService.class));
                         status.setText("Diagnostic service requested; bot remains offline.");
                     } catch (RuntimeException e) { status.setText("Service start failed: " + e.getClass().getSimpleName()); }
@@ -126,6 +160,12 @@ public final class DashboardActivity extends Activity {
                     stopService(new Intent(this, MinePilotService.class));
                     status.setText("Stopped; no Minecraft connection.");
                 });
+        }
+    }
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NOTIFICATION_REQUEST && (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED)) {
+            status.setText("Notifications denied. Diagnostic service may still run, but its notification may be hidden.");
         }
     }
 }
