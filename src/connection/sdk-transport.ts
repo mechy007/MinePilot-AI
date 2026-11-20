@@ -22,7 +22,7 @@ export class SdkBedrockTransport implements BedrockSessionTransport {
     if (signal.aborted) throw new Error('Connection cancelled');
     if (!Array.isArray(sessions) || !sessions.every(s =>
       typeof s?.sessionId === 'string' && s.sessionId.length > 0 &&
-      typeof s.hostXuid === 'string' && /^\\d+$/.test(s.hostXuid))) {
+      typeof s.hostXuid === 'string' && /^\d+$/.test(s.hostXuid))) {
       throw new Error('Invalid Xbox session metadata');
     }
     return sessions.map(s => ({ sessionId: s.sessionId, hostXuid: s.hostXuid, ...(s.hostGamertag === undefined ? {} : { hostGamertag: s.hostGamertag }) }));
