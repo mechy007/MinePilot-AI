@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <string.h>
 #include "raknet_ping.h"
+#include "raknet_pong.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -44,5 +45,32 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetPingCodecSelfTest(JNIEnv *env, jc
         memcmp(packet+9, MP_RAKNET_MAGIC, 16) || memcmp(packet+25, guid, 8)) return 2;
     if (mp_encode_unconnected_ping(packet, 32, 0, 0) != -1 ||
         mp_encode_unconnected_ping(NULL, 33, 0, 0) != -1) return 3;
+    return 0;
+}
+
+/* On-device offline codec verification. No network traffic or world joining. */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetPongCodecSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env;
+    (void)clazz;
+    uint8_t packet[39] = {0};
+    packet[0] = 0x1c;
+    for (int i = 0; i < 8; ++i) {
+        packet[1+i] = (uint8_t)(i+1);
+        packet[9+i] = (uint8_t)(i+17);
+    }
+    memcpy(packet+17, MP_RAKNET_MAGIC, 16);
+    packet[33] = 0;
+    packet[34] = 4;
+    memcpy(packet+35, "MCPE", 4);
+    mp_raknet_pong decoded = {0};
+    if (mp_decode_unconnected_pong(packet, sizeof(packet), &decoded) != 0) return 1;
+    if (decoded.timestamp != UINT64_C(0x0102030405060708) ||
+        decoded.server_guid != UINT64_C(0x1112131415161718) ||
+        decoded.motd_length != 4 || memcmp(decoded.motd, "MCPE", 4)) return 2;
+    packet[17] ^= 1;
+    if (mp_decode_unconnected_pong(packet, sizeof(packet), &decoded) == 0) return 3;
+    packet[17] ^= 1;
+    if (mp_decode_unconnected_pong(packet, sizeof(packet)-1, &decoded) == 0) return 4;
     return 0;
 }
