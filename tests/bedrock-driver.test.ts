@@ -27,3 +27,37 @@ test('driver fails closed when owner session is unavailable', async () => {
   await c.start();
   assert.equal(c.state, 'failed');
 });
+
+test('selected session cannot be reused after join attempt fails', async () => {
+  let joins = 0;
+  const driver = new BedrockConnectionDriver({
+    async authenticate() {},
+    async listFriendSessions() { return [{ sessionId: 'mine', hostXuid: '2' }]; },
+    async join() { joins++; throw new Error('network unavailable'); },
+    async awaitSpawn() {}
+  }, '2');
+  const signal = new AbortController().signal;
+  await driver.authenticate(signal);
+  await driver.discoverOwnerSession(signal);
+  await assert.rejects(driver.connect(signal), /network unavailable/);
+  await assert.rejects(driver.connect(signal), /No selected owner session/);
+  assert.equal(joins, 1);
+});
+test('failed rediscovery clears previously selected session', async () => {
+  let discoveries = 0;
+  let joins = 0;
+  const driver = new BedrockConnectionDriver({
+    async authenticate() {},
+    async listFriendSessions() {
+      return ++discoveries === 1 ? [{ sessionId: 'mine', hostXuid: '2' }] : [];
+    },
+    async join() { joins++; },
+    async awaitSpawn() {}
+  }, '2');
+  const signal = new AbortController().signal;
+  await driver.authenticate(signal);
+  await driver.discoverOwnerSession(signal);
+  await assert.rejects(driver.discoverOwnerSession(signal), /Owner session not found/);
+  await assert.rejects(driver.connect(signal), /No selected owner session/);
+  assert.equal(joins, 0);
+});
