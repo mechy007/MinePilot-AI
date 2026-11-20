@@ -1,0 +1,19 @@
+name: Bedrock SDK Smoke
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install
+      - run: npm install --no-save --ignore-scripts bedrock-protocol@3.61.0
+      - run: npm run build
+      - run: node scripts/bedrock-sdk-smoke.mjs
