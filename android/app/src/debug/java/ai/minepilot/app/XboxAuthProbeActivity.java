@@ -3,6 +3,9 @@ package ai.minepilot.app;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -16,9 +19,11 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -146,7 +151,10 @@ public final class XboxAuthProbeActivity extends Activity {
                 }
                 directory = Files.createTempDirectory(cache, "xbox-auth-probe-");
                 NodeSmokeActivity.unpackSdk(this, directory);
-                if (joining) Files.write(directory.resolve("owner-xuid"), ownerXuid.getBytes(StandardCharsets.UTF_8));
+                if (joining) {
+                    Files.write(directory.resolve("owner-xuid"), ownerXuid.getBytes(StandardCharsets.UTF_8));
+                    saveActiveNetworkAddresses(directory);
+                }
                 statusPath = directory.resolve("auth-status.json");
                 System.loadLibrary("minepilot_node_smoke");
                 String entrypoint = joining ? "friend-world-session.cjs" : "xbox-auth-probe.cjs";
@@ -161,6 +169,27 @@ public final class XboxAuthProbeActivity extends Activity {
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
             }
         }, "minepilot-xbox-auth-probe").start();
+    }
+
+    private void saveActiveNetworkAddresses(Path directory) throws IOException {
+        ConnectivityManager connectivity = getSystemService(ConnectivityManager.class);
+        if (connectivity == null) return;
+        Network active = connectivity.getActiveNetwork();
+        if (active == null) return;
+        LinkProperties properties = connectivity.getLinkProperties(active);
+        if (properties == null) return;
+
+        JSONArray addresses = new JSONArray();
+        for (var link : properties.getLinkAddresses()) {
+            InetAddress address = link.getAddress();
+            if (address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isAnyLocalAddress()) continue;
+            String host = address.getHostAddress();
+            int scope = host.indexOf('%');
+            addresses.put(scope == -1 ? host : host.substring(0, scope));
+        }
+        if (addresses.length() > 0) {
+            Files.write(directory.resolve("network-addresses.json"), addresses.toString().getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     private void refreshStatus() {

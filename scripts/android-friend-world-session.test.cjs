@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
-const { observeSession, run, validateOwner } = require('./friend-world-session.cjs');
+const { androidNetworkInterfaces, observeSession, run, validateOwner } = require('./friend-world-session.cjs');
 
 class Client extends EventEmitter {
   closed = 0;
@@ -129,4 +129,28 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
   assert.equal(membership.mock.callCount(), 1, JSON.stringify(snapshots));
   assert.equal(membership.mock.calls[0].arguments[0], 'expected');
   assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'connection' });
+});
+
+
+test('uses the Android network addresses to gather a Werift ICE candidate when libuv is denied', async context => {
+  const os = require('node:os');
+  const denied = Object.assign(new Error('Permission denied'), {
+    info: { syscall: 'uv_interface_addresses', errno: 13 }
+  });
+  const fallback = androidNetworkInterfaces(() => { throw denied; }, () => ['127.0.0.1', 'invalid']);
+  assert.deepEqual(fallback(), { android: [{ address: '127.0.0.1', family: 'IPv4', internal: false }] });
+  const empty = androidNetworkInterfaces(() => { throw denied; }, () => []);
+  assert.throws(empty, error => error === denied);
+  const stockInterfaces = { sample: [{ address: '127.0.0.1', family: 'IPv4', internal: true }] };
+  assert.equal(androidNetworkInterfaces(() => stockInterfaces, () => assert.fail('Fallback read'))(), stockInterfaces);
+  context.mock.method(os, 'networkInterfaces', fallback);
+  const { RTCPeerConnection } = require('nethernet/src/webrtc').getWebRTC('werift');
+  const peer = new RTCPeerConnection({ iceServers: [] });
+  try {
+    peer.createDataChannel('runtime-test');
+    await peer.setLocalDescription(await peer.createOffer());
+    assert.match(peer.localDescription.sdp, /^a=candidate:.*127\.0\.0\.1/m);
+  } finally {
+    await peer.close();
+  }
 });

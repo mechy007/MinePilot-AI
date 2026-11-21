@@ -2,8 +2,27 @@
 
 const { existsSync, readFileSync, renameSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
+const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
 const { verifyXbox } = require('./xbox-auth-probe.cjs');
+
+function androidNetworkInterfaces(readInterfaces, readAddresses) {
+  return () => {
+    try {
+      return readInterfaces();
+    } catch (error) {
+      if (error?.info?.syscall !== 'uv_interface_addresses' ||
+          ![1, 13].includes(Math.abs(error.info.errno))) throw error;
+      const addresses = readAddresses().flatMap(address => {
+        const family = typeof address === 'string' ? isIP(address) : 0;
+        return family ? [{ address, family: 'IPv' + family, internal: false }] : [];
+      });
+      if (addresses.length === 0) throw error;
+      return { android: addresses };
+    }
+  };
+}
 
 function validateOwner(ownerXuid, botXuid) {
   if (typeof ownerXuid !== 'string' || !/^[1-9]\d{0,19}$/.test(ownerXuid) ||
@@ -114,6 +133,13 @@ if (require.main === module) {
     if (existsSync(path.join(__dirname, 'stop-session'))) controller.abort();
   }, 250);
   (async () => {
+    const addressFile = path.join(__dirname, 'network-addresses.json');
+    if (existsSync(addressFile)) {
+      // Werift uses Node's interface enumeration when gathering ICE candidates.
+      // The isolated Android process supplies its documented default-network addresses on permission errors.
+      os.networkInterfaces = androidNetworkInterfaces(os.networkInterfaces,
+        () => JSON.parse(readFileSync(addressFile, 'utf8')));
+    }
     const { Authflow, Titles } = require('prismarine-auth');
     const { XboxClient } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
@@ -130,4 +156,4 @@ if (require.main === module) {
     .finally(() => clearInterval(stop));
 }
 
-module.exports = { observeSession, run, validateOwner };
+module.exports = { androidNetworkInterfaces, observeSession, run, validateOwner };
