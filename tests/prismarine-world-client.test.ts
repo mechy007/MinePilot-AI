@@ -4,11 +4,20 @@ import { EventEmitter } from 'node:events';
 import { pickOwnerWorld, PrismarineWorldClient, type BedrockClientFactory } from '../src/connection/prismarine-world-client.js';
 
 test('friend world selection requires exact unique owner XUID', () => {
-  const mine = { hostXuid: '123', customProperties: { worldName: 'My World' } };
-  assert.equal(pickOwnerWorld([{ hostXuid: '456' }, mine], '123'), mine);
-  assert.throws(() => pickOwnerWorld([{ hostXuid: '456' }], '123'), /not found/);
+  const mine = { sessionRef: { name: 'mine' }, customProperties: { ownerId: '123', protocol: 2225 } };
+  const visited = { sessionRef: { name: 'visited' }, ownerXuid: '123', customProperties: { ownerId: '456' } };
+  assert.equal(pickOwnerWorld([visited, mine], '123'), mine);
+  assert.throws(() => pickOwnerWorld([visited], '123'), /not found/);
+  assert.throws(() => pickOwnerWorld([{ ...mine, sessionRef: { name: '' } }], '123'), /not found/);
   assert.throws(() => pickOwnerWorld([mine, mine], '123'), /Ambiguous/);
 });
+test('friend world selection rejects an incompatible advertised protocol', () => {
+  assert.throws(() => pickOwnerWorld([{
+    sessionRef: { name: 'incompatible' },
+    customProperties: { ownerId: '123', protocol: 2193 }
+  }], '123'), /protocol mismatch.*2225/);
+});
+
 test('actual client path requests Xbox auth and waits for spawn', async () => {
   const emitter = new EventEmitter();
   let closed = false;
@@ -20,7 +29,9 @@ test('actual client path requests Xbox auth and waits for spawn', async () => {
   const client = new PrismarineWorldClient('MinePilotBot', '123', factory);
   const pending = client.connectAndSpawn(new AbortController().signal);
   assert.equal(options?.offline, false);
-  assert.equal(options?.world.pickSession([{hostXuid:'123'}]).hostXuid, '123');
+  assert.equal(options?.version, '1.26.60');
+  const session = { sessionRef: { name: 'mine' }, customProperties: { ownerId: '123', protocol: '2225' } };
+  assert.equal(options?.world.pickSession([session]), session);
   emitter.emit('spawn');
   await pending;
   assert.equal(closed, false);
