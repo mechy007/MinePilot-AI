@@ -15,3 +15,7 @@ jobs:
       - run: npm install --no-save --ignore-scripts bedrock-protocol@3.61.0
       - run: npm run build
       - run: node scripts/validate-bedrock-connection.mjs --dry-run
+      - name: Compile and exercise native UDP handshake against local synthetic responder
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pthread -Iandroid/app/src/main/cpp android/app/src/main/cpp/test_raknet_udp_transport.c -o /tmp/minepilot-udp-handshake-test
+          /tmp/minepilot-udp-handshake-test

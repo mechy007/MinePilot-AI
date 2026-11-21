@@ -15,6 +15,21 @@ public final class NativeBridge {
         loaded = ok;
     }
     private static native int nativeProtocolVersion();
+    private static native int nativeRaknetUdpHandshake(int a, int b, int c, int d,
+            int port, int protocol, int mtu, long guid);
+    /**
+     * Performs real network I/O. Call ONLY on a background worker thread.
+     * A zero return means the RakNet open-connection exchange completed;
+     * it does NOT mean Xbox authentication or Minecraft world joining.
+     */
+    public static int raknetUdpHandshake(int[] ipv4, int port, int protocol,
+            int mtu, long guid) {
+        if (!loaded || ipv4 == null || ipv4.length != 4) return -1;
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper())
+            throw new IllegalStateException("Network handshake must run off UI thread");
+        return nativeRaknetUdpHandshake(ipv4[0], ipv4[1], ipv4[2], ipv4[3],
+                port, protocol, mtu, guid);
+    }
     private static native int nativeUdpPreflight();
     private static native int nativeRaknetPingCodecSelfTest();
     private static native int nativeRaknetPongCodecSelfTest();

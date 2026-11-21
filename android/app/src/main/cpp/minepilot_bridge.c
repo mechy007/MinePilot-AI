@@ -6,6 +6,7 @@
 #include "raknet_open_connection_reply.h"
 #include "raknet_open_connection_stage2.h"
 #include "raknet_handshake_state.h"
+#include "raknet_udp_transport.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -256,4 +257,23 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetHandshakeStateSelfTest(JNIEnv *en
     if (mp_handshake_init(&hs, 11, 1400, 42, &hs.server_address) ||
         hs.server_address.port != 19132 || hs.server_address.ipv4[0] != 127) return 18;
     return 0;
+}
+
+/* Real UDP handshake probe. Must be called from a worker thread, not UI.
+ * Returns 0 only after RakNet Open Connection Reply 2, not Bedrock login.
+ * IPv4 bytes are supplied separately to avoid DNS and untrusted string parsing.
+ */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetUdpHandshake(
+        JNIEnv *env, jclass clazz, jint a, jint b, jint c, jint d,
+        jint port, jint protocol, jint mtu, jlong guid) {
+    (void)env; (void)clazz;
+    if ((a | b | c | d) < 0 || a > 255 || b > 255 || c > 255 || d > 255 ||
+        port < 1 || port > 65535 || protocol < 1 || protocol > 255 ||
+        mtu < 18 || mtu > 1492) return -1;
+    mp_raknet_ipv4 server = {{(uint8_t)a,(uint8_t)b,(uint8_t)c,(uint8_t)d},
+                              (uint16_t)port};
+    mp_raknet_handshake result = {0};
+    return mp_raknet_udp_handshake(&server, (uint8_t)protocol,
+                                   (uint16_t)mtu, (uint64_t)guid, &result);
 }
