@@ -31,3 +31,34 @@ test('hazards preempt work and report safety action',()=>{
  assert.equal(out.task.status,'paused_for_survival');assert.equal(executed,0);assert.equal(out.movement.source,'survival');
  assert.equal(assessSurvival({drowning:true}).action,'surface');
 });
+
+test('slow cumulative progress is not incorrectly stalled',()=>{
+ const nav=new MovementAuthority({stallTicks:3,progressDistance:0.12});
+ nav.request('follow',{x:5,y:0,z:0},Priority.FOLLOW,1);
+ for(let t=1;t<=12;t++) assert.notEqual(nav.step({x:t*0.05,y:0,z:0},t).status,'stalled');
+});
+test('survival without a safe position suppresses follow movement',()=>{
+ const core=new AutonomyCore();let moves=0;
+ core.movement.request('follow',{x:10,y:0,z:0},Priority.FOLLOW,1);
+ const result=core.tick({tick:2,position:{x:0,y:0,z:0},observation:{drowning:true},adapter:{moveToward:()=>moves++}});
+ assert.equal(result.movement.status,'suspended_for_survival');
+ assert.equal(moves,0);
+});
+test('task callbacks receive current movement clock',()=>{
+ const core=new AutonomyCore();
+ core.tasks.enqueue({id:'walk',type:'move'});
+ core.tick({tick:100,position:{x:0,y:0,z:0},executeTask:()=>{
+   core.movement.request('task',{x:1,y:0,z:0});
+   return {status:'running'};
+ }});
+ assert.equal(core.movement.requests.get('task').expires,120);
+});
+test('survival pause does not consume task timeout',()=>{
+ const core=new AutonomyCore({tasks:{timeoutTicks:2}});
+ core.tasks.enqueue({id:'gather',type:'gather'});
+ const pos={x:0,y:0,z:0};
+ core.tick({tick:1,position:pos,executeTask:()=>({status:'running'})});
+ for(let tick=2;tick<=100;tick++)core.tick({tick,position:pos,observation:{drowning:true}});
+ const resumed=core.tick({tick:101,position:pos,executeTask:()=>({status:'done'})});
+ assert.equal(resumed.task.status,'done');
+});
