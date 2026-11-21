@@ -9,6 +9,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - run: npm install
+          node-version: '24'
+      - run: npm install --omit=optional
       - run: npm test
+      - name: Verify friend-world CLI reports missing SDK
+        run: |
+          if npm run --silent friend:check > readiness.json; then
+            echo 'Expected friend:check to exit unsuccessfully without the SDK'
+            exit 1
+          fi
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const status = JSON.parse(readFileSync('readiness.json', 'utf8'));
+          assert.equal(status.nodeSupported, true);
+          assert.equal(status.sdkInstalled, false);
+          assert.equal(status.readyForNodeJoinAttempt, false);
+          assert.equal(status.androidEmbedded, false);
+          JS
