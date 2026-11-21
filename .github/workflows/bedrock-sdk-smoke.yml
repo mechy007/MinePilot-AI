@@ -16,4 +16,5 @@ jobs:
       - run: npm install
       - run: npm install --no-save --ignore-scripts bedrock-protocol@3.61.0
       - run: npm run build
+      - run: npm run friend:check
       - run: node scripts/bedrock-sdk-smoke.mjs

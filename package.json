@@ -5,10 +5,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/tests/*.test.js",
-    "friend:join": "npm run build && node dist/src/connection/friend-world-cli.js"
+    "friend:join": "npm run build && node dist/src/connection/friend-world-cli.js",
+    "friend:check": "npm run build && node dist/src/connection/friend-world-runtime-check-cli.js"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
     "@types/node": "^22.13.0"
+  },
+  "optionalDependencies": {
+    "bedrock-protocol": "3.61.0"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
