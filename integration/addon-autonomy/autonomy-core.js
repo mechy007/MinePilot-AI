@@ -10,6 +10,7 @@ const validPoint = p => p && [p.x,p.y,p.z].every(Number.isFinite);
 export class MovementAuthority {
   constructor({ ttlTicks=20, stallTicks=25, progressDistance=0.12 }={}) {
     this.ttlTicks=ttlTicks; this.stallTicks=stallTicks; this.progressDistance=progressDistance;
+    // progressDistance measures cumulative displacement from the last progress anchor.
     this.requests=new Map(); this.last=null; this.stalled=0; this.tick=0;
   }
   request(source, target, priority=Priority.TASK, tick=this.tick) {
@@ -24,12 +25,12 @@ export class MovementAuthority {
     for(const [key,req] of this.requests) if(req.expires<tick) this.requests.delete(key);
     const winner=[...this.requests.values()].sort((a,b)=>b.priority-a.priority || a.source.localeCompare(b.source))[0];
     if(!winner){this.last=null;this.stalled=0;return {status:'idle'};}
-    if(this.last && this.last.source===winner.source && distance(this.last.position,position)<this.progressDistance) this.stalled++;
-    else this.stalled=0;
-    this.last={source:winner.source,position:{...position}};
+    if(this.last && this.last.source===winner.source && distance(this.last.target,winner.target)<0.001 && distance(this.last.position,position)<this.progressDistance) this.stalled++;
+    else {this.stalled=0;this.last={source:winner.source,target:{...winner.target},position:{...position}};}
     if(this.stalled>=this.stallTicks) {
       adapter?.onStall?.({source:winner.source,target:winner.target,position,stalledTicks:this.stalled});
       this.stalled=0;
+      this.last={source:winner.source,target:{...winner.target},position:{...position}};
       return {status:'stalled',source:winner.source};
     }
     adapter?.moveToward?.(winner.target,{source:winner.source,priority:winner.priority});
@@ -52,6 +53,7 @@ export class TaskScheduler {
   }
   step(tick,executor) {
     if(!Number.isFinite(tick) || typeof executor!=='function') throw new TypeError('Invalid task step');
+    this.lastTick=tick;
     if(!this.active && this.queue.length){this.active=this.queue.shift();this.active.started=tick;this.active.state='running';}
     const task=this.active;if(!task)return {status:'idle'};
     if(tick-task.started>this.timeoutTicks)return this.retry(task,tick,'timeout');
@@ -61,6 +63,11 @@ export class TaskScheduler {
       if(result?.status==='failed')return this.retry(task,tick,result.reason||'failed');
       return {status:'running',task:task.id};
     } catch(error){return this.retry(task,tick,String(error?.message||error));}
+  }
+  pause(tick) {
+    // Survival pauses do not consume task timeout or retry attempts.
+    if(this.active && Number.isFinite(this.lastTick)) this.active.started+=Math.max(0,tick-this.lastTick);
+    this.lastTick=tick;
   }
   retry(task,tick,reason) {
     task.attempts++;
@@ -78,15 +85,17 @@ export function assessSurvival(observation={}) {
 export class AutonomyCore {
   constructor(options={}){this.movement=new MovementAuthority(options.movement);this.tasks=new TaskScheduler(options.tasks);}
   tick({tick,position,observation={},adapter,executeTask}) {
+    this.movement.tick=tick;
     const survival=assessSurvival(observation);
     if(survival.priority===Priority.SURVIVAL) {
-      this.movement.release('task');this.movement.release('combat');
+      this.tasks.pause(tick);
       if(validPoint(observation.safePosition))this.movement.request('survival',observation.safePosition,Priority.SURVIVAL,tick);
       else this.movement.release('survival');
       adapter?.onSurvival?.(survival);
     } else this.movement.release('survival');
     const taskResult=survival.priority===Priority.SURVIVAL?{status:'paused_for_survival'}:this.tasks.step(tick,executeTask||(()=>({status:'running'})));
-    const movementResult=this.movement.step(position,tick,adapter);
+    const movementResult=survival.priority===Priority.SURVIVAL && !validPoint(observation.safePosition)
+      ? {status:'suspended_for_survival'} : this.movement.step(position,tick,adapter);
     return {survival,task:taskResult,movement:movementResult};
   }
 }
