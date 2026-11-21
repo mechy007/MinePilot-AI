@@ -222,18 +222,21 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetHandshakeStateSelfTest(JNIEnv *en
     r1[24] = 42; r1[26] = 5; r1[27] = 120;
     if (mp_handshake_accept_reply(&hs, r1, sizeof(r1)) ||
         hs.phase != MP_HS_READY_REQUEST2 || hs.negotiated_mtu != 1400) return 3;
-    if (mp_handshake_accept_reply(&hs, r1, sizeof(r1)) == 0) return 14;
-    if (mp_handshake_next_request(&hs, out, 33) != -1 ||
-        hs.phase != MP_HS_READY_REQUEST2) return 15;
-    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34 || out[0] != 7 ||
-        hs.phase != MP_HS_WAIT_REPLY2) return 4;
-    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34) return 16;
     uint8_t r2[35] = {0};
     r2[0] = 8; memcpy(r2+1, MP_RAKNET_MAGIC, 16);
     r2[24] = 42;
     r2[25] = 4; r2[26] = 0x80; r2[27] = 0xff;
     r2[28] = 0xff; r2[29] = 0xfe; r2[30] = 0x4a; r2[31] = 0xbc;
     r2[32] = 5; r2[33] = 120;
+    if (mp_handshake_accept_reply(&hs, r2, sizeof(r2)) == 0 ||
+        hs.phase != MP_HS_READY_REQUEST2) return 14;
+    if (mp_handshake_next_request(&hs, out, 33) != -1 ||
+        hs.phase != MP_HS_READY_REQUEST2 ||
+        mp_handshake_accept_reply(&hs, r2, sizeof(r2)) == 0 ||
+        hs.phase != MP_HS_READY_REQUEST2) return 15;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34 || out[0] != 7 ||
+        hs.phase != MP_HS_WAIT_REPLY2) return 4;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34) return 16;
     if (mp_handshake_accept_reply(&hs, r2, sizeof(r2)) ||
         hs.phase != MP_HS_OPEN_CONNECTION_COMPLETE) return 5;
     if (mp_handshake_next_request(&hs, out, sizeof(out)) != -1) return 6;
