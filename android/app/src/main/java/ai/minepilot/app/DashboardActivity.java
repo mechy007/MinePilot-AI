@@ -100,11 +100,12 @@ public final class DashboardActivity extends Activity {
         setContentView(root);
         switch (tab) {
             case "Xbox":
-                label("Bot account sign-in: unavailable. Never enter Microsoft credentials here.", 16);
+                label("Sign in with your own Xbox account when authentication is available. Enter your FRIEND'S world-owner XUID below, not your own Xbox ID. Never enter Microsoft credentials here.", 16);
+                label(FriendWorldJoinReadiness.summary(new BedrockEngine.Unavailable()), 14);
                 EditText xuid = new EditText(this);
                 xuid.setTextColor(Color.WHITE);
                 xuid.setHintTextColor(Color.LTGRAY);
-                xuid.setHint("Owner Xbox XUID (numeric)");
+                xuid.setHint("Friend world owner XUID (numeric)");
                 xuid.setInputType(2);
                 xuid.setText(xuidDraft != null ? xuidDraft : getPreferences(MODE_PRIVATE).getString("owner_xuid", ""));
                 xuidInput = xuid;
@@ -118,6 +119,13 @@ public final class DashboardActivity extends Activity {
                         xuidDraft = value;
                         status.setText("Saved locally. No login attempted.");
                     } catch (NumberFormatException e) { status.setText("Invalid unsigned 64-bit XUID."); }
+                });
+                button("Check friend-world join readiness", () -> {
+                    BedrockEngine engine = new BedrockEngine.Unavailable();
+                    String owner = xuid.getText().toString().trim();
+                    status.setText(FriendWorldJoinReadiness.summary(engine)
+                            + (FriendWorldJoinReadiness.canAttemptJoin(engine, owner)
+                            ? " / Ready to attempt join" : " / No join attempted"));
                 });
                 button("Sign in to Xbox (unavailable)", () -> disabled("Xbox sign-in"));
                 break;
