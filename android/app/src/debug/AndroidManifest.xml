@@ -6,20 +6,12 @@
             android:exported="${minepilotNodeSmoke}"
             android:label="MinePilot Node Runtime Test"
             android:process=":node_smoke">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
         <activity android:name=".XboxAuthProbeActivity"
             android:enabled="${minepilotNodeSmoke}"
             android:exported="${minepilotNodeSmoke}"
             android:label="MinePilot Friend World Test"
             android:process=":xbox_auth_probe">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
     </application>
 </manifest>
