@@ -41,6 +41,15 @@ public final class DashboardActivity extends Activity {
         b.setOnClickListener(v -> callback.run());
         body.addView(b);
     }
+    private void launchDiagnostic(String activityName) {
+        try {
+            Intent intent = new Intent();
+            intent.setClassName(getPackageName(), activityName);
+            startActivity(intent);
+        } catch (android.content.ActivityNotFoundException | SecurityException error) {
+            status.setText("This diagnostic is available in the ARM64 runtime-enabled debug APK only.");
+        }
+    }
     private void disabled(String feature) {
         status.setText(feature + " is not implemented. No Minecraft packets sent.");
     }
@@ -127,7 +136,7 @@ public final class DashboardActivity extends Activity {
                             + (FriendWorldJoinReadiness.canAttemptJoin(engine, owner)
                             ? " / Ready to attempt join" : " / No join attempted"));
                 });
-                button("Sign in to Xbox (unavailable)", () -> disabled("Xbox sign-in"));
+                button("Sign in / Join friend\'s world", () -> launchDiagnostic("ai.minepilot.app.XboxAuthProbeActivity"));
                 break;
             case "Commands":
                 label("Offline command planning is available; execution requires a live Bedrock session.", 16);
@@ -183,6 +192,7 @@ public final class DashboardActivity extends Activity {
                     runtimeLabel.setText(result);
                     status.setText(result);
                 });
+                button("Run Node and NetherNet self-test", () -> launchDiagnostic("ai.minepilot.app.NodeSmokeActivity"));
                 label("Same-phone world join: UNVERIFIED", 17);
                 button("Stop diagnostic service", () -> {
                     stopService(new Intent(this, MinePilotService.class));
