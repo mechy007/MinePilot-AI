@@ -1,0 +1,57 @@
+name: Android Node Runtime Probe
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/android-node-smoke.yml
+      - scripts/stage-android-node-smoke.sh
+      - 'android/**'
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Check the smoke program on host Node
+        run: node android/app/src/debug/assets/node-smoke.cjs
+      - name: Install Android build dependencies
+        run: sdkmanager 'build-tools;35.0.0' 'platforms;android-35' 'ndk;28.0.13004108' 'cmake;3.22.1'
+      - name: Verify and stage ARM64 Node
+        run: bash scripts/stage-android-node-smoke.sh
+      - name: Build debug APK with Node
+        working-directory: android
+        run: gradle --no-daemon -PminepilotNodeSmoke=true :app:assembleDebug
+      - name: Verify APK contents and 16 KB alignment
+        run: |
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$apk"
+          python3 - "$apk" <<'PY'
+          import sys
+          from zipfile import ZipFile
+
+          with ZipFile(sys.argv[1]) as apk:
+              for name in ("libnode.so", "libminepilot_node_smoke.so", "libc++_shared.so"):
+                  data = apk.read(f"lib/arm64-v8a/{name}")
+                  assert data[:6] == b"\x7fELF\x02\x01", name
+                  assert int.from_bytes(data[18:20], "little") == 183, name
+              for name in ("node-smoke.cjs", "Node.js-LICENSE.txt", "Node.js-Mobile-LICENSE.txt"):
+                  assert apk.getinfo(f"assets/{name}").file_size > 0, name
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minepilot-android-arm64-node-smoke
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
