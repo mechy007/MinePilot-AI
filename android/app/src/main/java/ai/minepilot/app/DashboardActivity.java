@@ -128,7 +128,9 @@ public final class DashboardActivity extends Activity {
                         String action = name.equals("Come here") ? "come"
                                 : name.equals("Gather wood") ? "gather" : name.toLowerCase(java.util.Locale.ROOT);
                         GameplayPlanner.Plan plan = GameplayPlanner.plan(GameplayPlanner.VERSION, action, "");
-                        status.setText(plan.status + ": " + plan.message
+                        GameplayActionGate.Decision decision = GameplayActionGate.evaluate(plan,
+                                new GameplayActionGate.Context(false, false, false, false, false));
+                        status.setText(plan.status + " / " + decision + ": " + plan.message
                                 + (plan.requiresConfirmation ? " (confirmation required before future execution)" : ""));
                     });
                 }
