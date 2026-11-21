@@ -18,10 +18,11 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
   private client: BedrockClientLike | null = null;
   private entityId: string | number | bigint | null = null;
   private movementTick = 0n;
-  private readonly packetWriter = new MovePlayerPacketWriter(() => this.movementSession());
+  private queuedPosition: Position | null = null;
+  private readonly packetWriter = new MovePlayerPacketWriter(() => this.movementSession(), 0.25, p => { this.queuedPosition = { ...p }; });
   private movementSession(): MovementSession | null {
     if (!this.connected || !this.observation || this.entityId === null) return null;
-    return { runtimeEntityId: this.entityId, position: this.observation.position, tick: ++this.movementTick };
+    return { runtimeEntityId: this.entityId, position: this.queuedPosition ?? this.observation.position, tick: ++this.movementTick };
   }
   constructor(
     username: string,
@@ -37,6 +38,7 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
     await this.world.connectAndSpawn(abort.signal);
     this.client = this.world.activeClient;
     if (!this.client) throw new Error('Spawned client unavailable');
+    this.queuedPosition = null;
     this.onStartGame(this.world.lastStartGamePacket);
     this.client.on('start_game', this.onStartGame);
     this.client.on('move_player', this.onMove);
@@ -44,15 +46,18 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
     this.client.on('close', this.onClose);
     this.connected = true;
   }
-  private readonly onClose = () => { this.connected = false; this.observation = null; this.entityId = null; };
+  private readonly onClose = () => { this.connected = false; this.observation = null; this.entityId = null; this.queuedPosition = null; };
   private readonly onStartGame = (...args: unknown[]) => {
     const packet = args[0] as { runtime_entity_id?: string | number | bigint } | undefined;
     if (packet?.runtime_entity_id !== undefined) this.entityId = packet.runtime_entity_id;
   };
   private readonly onMove = (...args: unknown[]) => {
-    const packet = args[0] as { position?: Position } | undefined;
+    const packet = args[0] as { position?: Position; runtime_id?: string | number | bigint } | undefined;
+    if (this.entityId === null || packet?.runtime_id === undefined ||
+        String(packet.runtime_id) !== String(this.entityId)) return;
     const p = packet?.position;
     if (!p || ![p.x,p.y,p.z].every(Number.isFinite)) return;
+    this.queuedPosition = { ...p };
     this.observation = { position: { ...p }, health: this.observation?.health ?? NaN, hunger: this.observation?.hunger ?? NaN };
   };
   private readonly onAttributes = (...args: unknown[]) => {
@@ -73,7 +78,9 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
   async moveToward(target: Position, signal: AbortSignal): Promise<void> {
     if (!this.connected || !this.client) throw new Error('Not connected');
     if (signal.aborted) throw new Error('Movement cancelled');
-    await (this.writer ?? this.packetWriter).move(this.client, target, signal);
+    if (this.writer) await this.writer.move(this.client, target, signal);
+    else await this.packetWriter.move(this.client, target, signal);
+    // The default writer advances its cursor only after a successful queue().
   }
   async disconnect(): Promise<void> {
     const client = this.client;
@@ -81,6 +88,7 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
     this.connected = false;
     this.observation = null;
     this.entityId = null;
+    this.queuedPosition = null;
     client?.removeListener('start_game', this.onStartGame);
     client?.removeListener('move_player', this.onMove);
     client?.removeListener('update_attributes', this.onAttributes);
