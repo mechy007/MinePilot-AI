@@ -52,6 +52,7 @@ async function verifyXbox({ Authflow, Titles, XboxClient }, publish) {
     const identity = JSON.parse(Buffer.from(chain[1].split('.')[1], 'base64url').toString('utf8'));
     if (identity.extraData?.XUID !== profile.xuid) throw new Error('Bedrock and Xbox identities differ');
     publish({ phase: 'verified', gamertag: profile.gamertag, xuid: profile.xuid });
+    return { auth, profile };
   } catch {
     publish({ phase: 'failed', stage });
     throw new Error('Xbox authentication probe failed');

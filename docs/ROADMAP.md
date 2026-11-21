@@ -1,27 +1,15 @@
 # MinePilot development roadmap
 
-Target: Minecraft Bedrock 1.26.66.1 on Vivo V2544, 8 GB RAM.
+Target: Minecraft Bedrock 1.26.66.1 on the Vivo V2544 with 8 GB RAM.
 
-## Phase 0 — prove feasibility
-- [ ] Confirm Minecraft protocol 2225 interoperability
-- [ ] Test Microsoft/Xbox login with separate bot identity
-- [ ] Discover correct owner-hosted world via NetherNet
-- [ ] Verify same-phone session while Minecraft stays foregrounded
-- [ ] Validate Android ARM64 embedded runtime and lifecycle policy
+| Phase | Status | Acceptance work remaining |
+| --- | --- | --- |
+| 0. Android and networking | In progress | Install the ARM64 debug APK and verify Microsoft/Xbox identity, exact owner discovery, NetherNet login, host-observed spawn, live world packets, and session duration. Integrate the validated path with a production foreground service and secure account lifecycle. |
+| 1. Gameplay | In progress | Connect live world, player, inventory and health updates to gameplay. Verify follow, stop, block interaction, simple navigation, and session recovery against server-observed state. |
+| 2. Autonomy | In progress | Wire the existing planning foundation to verified gameplay. Add persistent world memory and validate commands, multistep goals and recovery. |
+| 3. Advanced gameplay | Not started | Verify representative construction, survival, defensive combat, cooperative farming, exploration and storage tasks. |
+| 4. Android experience | In progress | Add authenticated world selection, live session and task reporting, emergency stop, accessibility and settings to the Android dashboard. |
+| 5. Stability and optimization | Not started | Profile sustained sessions on the 8 GB target. Measure memory, battery, resource cleanup, recovery and Android lifecycle behavior. |
+| 6. Testing and release | In progress | Keep engine, SDK and APK workflows passing and attach a signed release APK once live, device and gameplay acceptance checks pass. |
 
-## Phase 1 — gameplay
-- [ ] Decode chunks, position, inventory and entity updates
-- [ ] Implement move/follow/stop with confirmed state changes
-- [ ] Add safe reconnect and diagnostics
-
-## Phase 2 — intelligence
-- [ ] Task graph, priorities and cancellation
-- [ ] World memory, experience records and checkpoints
-- [ ] Mining, crafting, survival and cooperation
-
-## Phase 3 — advanced skills
-- [ ] Building blueprints and placement verification
-- [ ] Combat tactics and owner protection
-- [ ] Bedrock-specific Redstone circuit templates
-
-No Bedrock connectivity, Android runtime, or APK is implemented by this foundation commit.
+The [Android test guide](ANDROID-APP-STATUS.md) records the current build, verification procedure and limitations. Check [pull requests](https://github.com/mechy007/MinePilot-AI/pulls) and [workflow runs](https://github.com/mechy007/MinePilot-AI/actions) for current commits, CI results, and APK artifacts.
