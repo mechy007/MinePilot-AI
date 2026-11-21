@@ -33,6 +33,8 @@ async function verifyXbox({ Authflow, Titles, XboxClient }, publish) {
       authTitle: Titles.MinecraftAndroid,
       deviceType: 'Android'
     }, code => publish(deviceCodeStatus(code)));
+    // Wait for interactive sign-in before the Xbox profile request starts its deadline.
+    await auth.getXboxToken('http://xboxlive.com');
     const xbox = new XboxClient(auth);
     const profile = await xbox.getProfile('me');
     if (typeof profile.xuid !== 'string' || !/^\d{1,20}$/.test(profile.xuid) || typeof profile.gamertag !== 'string' || !profile.gamertag) {

@@ -18,6 +18,9 @@ test('accepts official verification links and strips query parameters', () => {
 test('uses an Android title, keeps cache stores independent, and publishes no credentials', async () => {
   const statuses = [];
   class Authflow {
+    async getXboxToken(relyingParty) {
+      assert.equal(relyingParty, 'http://xboxlive.com');
+    }
     constructor(username, cacheFactory, options, onCode) {
       assert.equal(options.authTitle, 'android-fixture');
       assert.equal(options.deviceType, 'Android');
@@ -47,6 +50,9 @@ test('uses an Android title, keeps cache stores independent, and publishes no cr
 test('outputs a safe failure when a Bedrock token cannot be minted', async () => {
   const statuses = [];
   class Authflow {
+    async getXboxToken(relyingParty) {
+      assert.equal(relyingParty, 'http://xboxlive.com');
+    }
     async getMinecraftBedrockToken() { throw new Error('a token-bearing upstream error'); }
   }
   class XboxClient {
@@ -60,6 +66,9 @@ test('outputs a safe failure when a Bedrock token cannot be minted', async () =>
 test('rejects a Bedrock identity that differs from the signed-in Xbox profile', async () => {
   const statuses = [];
   class Authflow {
+    async getXboxToken(relyingParty) {
+      assert.equal(relyingParty, 'http://xboxlive.com');
+    }
     async getMinecraftBedrockToken() {
       const identity = Buffer.from(JSON.stringify({ extraData: { XUID: '84' } })).toString('base64url');
       return { chain: ['fixture', 'header.' + identity + '.signature'], token: 'fixture' };
@@ -70,4 +79,25 @@ test('rejects a Bedrock identity that differs from the signed-in Xbox profile', 
   }
   await assert.rejects(verifyXbox({ Authflow, XboxClient, Titles: {} }, status => statuses.push(status)));
   assert.deepEqual(statuses.at(-1), { phase: 'failed', stage: 'bedrock_credentials' });
+});
+
+test('waits for interactive Xbox authorization before requesting the profile', async () => {
+  let finishSignIn;
+  let profileRequested = false;
+  class Authflow {
+    getXboxToken() {
+      return new Promise(resolve => { finishSignIn = resolve; });
+    }
+  }
+  class XboxClient {
+    async getProfile() {
+      profileRequested = true;
+      return {};
+    }
+  }
+  const result = verifyXbox({ Authflow, XboxClient, Titles: {} }, () => {});
+  assert.equal(profileRequested, false);
+  finishSignIn();
+  await assert.rejects(result, /authentication probe failed/);
+  assert.equal(profileRequested, true);
 });
