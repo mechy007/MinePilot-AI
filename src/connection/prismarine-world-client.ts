@@ -33,6 +33,9 @@ export function pickOwnerWorld(sessions: readonly WorldSessionCandidate[], owner
  */
 export class PrismarineWorldClient {
   private client: BedrockClientLike | null = null;
+  private startGamePacket: unknown = null;
+  get lastStartGamePacket(): unknown { return this.startGamePacket; }
+  private readonly onStartGame = (...args: unknown[]) => { this.startGamePacket = args[0]; };
   get activeClient(): BedrockClientLike | null { return this.client; }
   constructor(
     private readonly username: string,
@@ -50,6 +53,8 @@ export class PrismarineWorldClient {
       world: { pickSession: sessions => pickOwnerWorld(sessions, this.ownerXuid) }
     });
     this.client = client;
+    this.startGamePacket = null;
+    client.on('start_game', this.onStartGame);
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       const cleanup = () => {
@@ -64,6 +69,7 @@ export class PrismarineWorldClient {
         cleanup();
         if (error) {
           this.client = null;
+          client.removeListener('start_game', this.onStartGame);
           client.close();
           reject(error);
         } else resolve();
@@ -82,6 +88,8 @@ export class PrismarineWorldClient {
   disconnect(): void {
     const client = this.client;
     this.client = null;
+    this.startGamePacket = null;
+    client?.removeListener('start_game', this.onStartGame);
     client?.close();
   }
 }

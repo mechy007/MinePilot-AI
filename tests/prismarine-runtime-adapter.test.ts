@@ -21,7 +21,8 @@ test('authenticated world spawn connects to runtime, decodes state and delegates
   const runtime = new BotRuntime(adapter);
   await runtime.connect();
   await assert.rejects(adapter.observe(), /incomplete/);
-  client.emit('move_player',{position:{x:1,y:64,z:2}});
+  client.emit('start_game',{runtime_entity_id:'7'});
+  client.emit('move_player',{runtime_id:7,position:{x:1,y:64,z:2}});
   client.emit('update_attributes',{attributes:[
     {name:'minecraft:health',current:20},
     {name:'minecraft:player.hunger',current:15}
@@ -38,6 +39,21 @@ test('movement fails closed without a verified packet writer', async () => {
     return client as BedrockClientLike;
   });
   await adapter.connect();
-  await assert.rejects(adapter.moveToward({x:1,y:2,z:3},new AbortController().signal), /No verified/);
+  await assert.rejects(adapter.moveToward({x:1,y:2,z:3},new AbortController().signal), /session not initialized/);
+  await adapter.disconnect();
+});
+
+test('ignores movement for other entities and accepts normalized self ID', async () => {
+  const client = new FakeClient();
+  const adapter = new PrismarineRuntimeAdapter('bot','123',undefined,() => {
+    queueMicrotask(() => client.emit('spawn'));
+    return client as BedrockClientLike;
+  });
+  await adapter.connect();
+  client.emit('start_game',{runtime_entity_id:'7'});
+  client.emit('move_player',{runtime_id:7,position:{x:1,y:64,z:2}});
+  client.emit('update_attributes',{attributes:[{name:'minecraft:health',current:20},{name:'minecraft:player.hunger',current:20}]});
+  client.emit('move_player',{runtime_id:8,position:{x:999,y:64,z:2}});
+  assert.equal((await adapter.observe()).position.x,1);
   await adapter.disconnect();
 });
