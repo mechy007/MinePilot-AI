@@ -137,6 +137,7 @@ public final class DashboardActivity extends Activity {
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 17);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 17);
                 label("RakNet pong codec (offline only): " + NativeBridge.raknetPongDiagnostic(), 17);
+                label("RakNet request-1 codec (offline only): " + NativeBridge.raknetRequest1Diagnostic(), 17);
                 button("Test local RakNet ping UDP roundtrip", () -> {
                     final TextView settingsStatus = status;
                     final int requestGeneration = ++udpDiagnosticGeneration;
@@ -176,6 +177,7 @@ public final class DashboardActivity extends Activity {
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 16);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 16);
                 label("RakNet pong codec (offline only): " + NativeBridge.raknetPongDiagnostic(), 16);
+                label("RakNet request-1 codec (offline only): " + NativeBridge.raknetRequest1Diagnostic(), 16);
                 label("Native UDP loopback (no packets sent): " + NativeBridge.udpDiagnostic(), 16);
                 label("Runtime preflight: " + RuntimeProbe.inspect(this), 16);
                 label("No authenticated Xbox or live Bedrock session has been verified.", 16);
