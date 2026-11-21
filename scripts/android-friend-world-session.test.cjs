@@ -95,6 +95,7 @@ test('hands the verified account to the friend-world SDK with exact owner select
 
 test('packaged Bedrock SDK reaches the Xbox membership request for the selected owner', async context => {
   const { createClient } = require('bedrock-protocol');
+  const { Titles } = require('prismarine-auth');
   const { XboxClient } = require('prismarine-xbox-services');
   const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
   const ownerXuid = '2533274790000002';
@@ -119,11 +120,13 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
     ownerXuid,
     publish: snapshot => snapshots.push(snapshot),
     signal: new AbortController().signal,
-    authDependencies: { Authflow, XboxClient, Titles: { MinecraftAndroid: 'fixture' } },
+    authDependencies: { Authflow, XboxClient, Titles },
     createClient,
     pickOwnerWorld
   });
+  assert.equal(activity.mock.callCount(), 1, JSON.stringify(snapshots));
   assert.equal(activity.mock.calls[0].arguments[0], botXuid);
+  assert.equal(membership.mock.callCount(), 1, JSON.stringify(snapshots));
   assert.equal(membership.mock.calls[0].arguments[0], 'expected');
   assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'connection' });
 });
