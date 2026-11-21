@@ -26,7 +26,7 @@ export class FriendWorldJoinRunner {
   constructor(config: FriendWorldJoinConfig, report: (event: FriendWorldJoinEvent) => void,
       factory?: BedrockClientFactory, onMsaCode?: (code: { user_code?: string; verification_uri?: string; verification_uri_complete?: string; message?: string }) => void) {
     if (!config.username.trim()) throw new Error('Xbox username required');
-    if (!/^\\d{1,20}$/.test(config.friendOwnerXuid)) throw new Error('Friend owner XUID required');
+    if (!/^\d{1,20}$/.test(config.friendOwnerXuid)) throw new Error('Friend owner XUID required');
     try { BigInt(config.friendOwnerXuid) <= 18446744073709551615n || (() => { throw new Error('XUID out of range'); })(); }
     catch { throw new Error('XUID out of range'); }
     this.timeoutMs = config.timeoutMs ?? 45000;
