@@ -14,6 +14,7 @@ curl --fail --location --silent --show-error --retry 2 --max-time 45 \
     -o "$data_notice"
 echo "70458c05b33622a05e4e2bbc5811f6221e4085003db25292ef122e0c830397a1  $data_notice" | sha256sum --check -
 cp "$root/scripts/android-node-bedrock-smoke.cjs" "$temp/node-smoke.cjs"
+cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 
 python3 - "$temp" <<'PY'
 from pathlib import Path
@@ -23,7 +24,8 @@ import sys
 runtime = Path(sys.argv[1])
 zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
-    archive.write(runtime / "node-smoke.cjs", "node-smoke.cjs")
+    for entrypoint in ("node-smoke.cjs", "xbox-auth-probe.cjs"):
+        archive.write(runtime / entrypoint, entrypoint)
     for source in sorted((runtime / "node_modules").rglob("*")):
         if source.is_file() and not source.is_symlink():
             if source.suffix == ".node":

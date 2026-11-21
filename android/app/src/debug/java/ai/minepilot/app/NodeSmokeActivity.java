@@ -1,6 +1,7 @@
 package ai.minepilot.app;
 
 import android.app.Activity;
+import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
@@ -20,7 +21,7 @@ public final class NodeSmokeActivity extends Activity {
     private static final CompletableFuture<String> result = new CompletableFuture<>();
     private static boolean started;
 
-    private static native int runNode(String entrypoint);
+    static native int runNode(String entrypoint);
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -44,7 +45,7 @@ public final class NodeSmokeActivity extends Activity {
         Path directory = null;
         try {
             directory = Files.createTempDirectory(getCodeCacheDir().toPath(), "bedrock-sdk-");
-            unpackSdk(directory);
+            unpackSdk(this, directory);
             System.loadLibrary("minepilot_node_smoke");
             int exitCode = runNode(directory.resolve("node-smoke.cjs").toString());
             message = exitCode == 0
@@ -60,8 +61,8 @@ public final class NodeSmokeActivity extends Activity {
         result.complete(message);
     }
 
-    private void unpackSdk(Path directory) throws IOException {
-        try (InputStream asset = getAssets().open("bedrock-sdk.zip");
+    static void unpackSdk(Context context, Path directory) throws IOException {
+        try (InputStream asset = context.getAssets().open("bedrock-sdk.zip");
                 ZipInputStream zip = new ZipInputStream(asset)) {
             for (ZipEntry entry; (entry = zip.getNextEntry()) != null;) {
                 Path target = directory.resolve(entry.getName()).normalize();
@@ -78,7 +79,7 @@ public final class NodeSmokeActivity extends Activity {
         }
     }
 
-    private void removeSdk(Path directory) {
+    static void removeSdk(Path directory) {
         try (var paths = Files.walk(directory)) {
             for (Path path : paths.sorted(Comparator.reverseOrder()).collect(Collectors.toList())) Files.deleteIfExists(path);
         } catch (IOException error) {
