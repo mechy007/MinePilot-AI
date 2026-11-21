@@ -9,6 +9,9 @@ import android.view.WindowInsets.Type;
 import android.widget.Toast;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.view.Gravity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -26,20 +29,58 @@ public final class DashboardActivity extends Activity {
     private EditText xuidInput;
     private String xuidDraft;
     private static final int NOTIFICATION_REQUEST = 101;
-    private void label(String text, int size) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(size);
-        v.setTextColor(Color.WHITE);
-        v.setPadding(12, 16, 12, 16);
-        body.addView(v);
+    private static final int BG = Color.rgb(10, 12, 23);
+    private static final int PANEL = Color.rgb(23, 27, 45);
+    private static final int PURPLE = Color.rgb(157, 103, 255);
+    private static final int MUTED = Color.rgb(166, 174, 197);
+    private int dp(int value) { return (int)(getResources().getDisplayMetrics().density * value + .5f); }
+    private GradientDrawable surface(int color, int radius) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color); d.setCornerRadius(dp(radius)); return d;
+    }
+    private TextView text(String value, int size, int color, boolean bold) {
+        TextView t = new TextView(this); t.setText(value); t.setTextSize(size);
+        t.setTextColor(color); if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        return t;
+    }
+    private void label(String value, int size) {
+        TextView t = text(value, size, size >= 19 ? Color.WHITE : MUTED, size >= 19);
+        t.setPadding(dp(16), dp(14), dp(16), dp(14));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(10));
+        t.setBackground(surface(PANEL, 16)); body.addView(t, lp);
     }
     private void button(String name, Runnable callback) {
-        Button b = new Button(this);
-        b.setText(name);
-        b.setAllCaps(false);
+        TextView b = text(name + "   ›", 15, Color.WHITE, true);
+        b.setGravity(Gravity.CENTER_VERTICAL);
+        b.setPadding(dp(18), dp(17), dp(18), dp(17));
+        b.setBackground(surface(PANEL, 14));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(10)); body.addView(b, lp);
         b.setOnClickListener(v -> callback.run());
-        body.addView(b);
+    }
+    private void hero(String eyebrow, String headline, String detail) {
+        LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(22), dp(20), dp(22));
+        GradientDrawable gradient = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(74, 39, 139), Color.rgb(31, 30, 72), PANEL});
+        gradient.setCornerRadius(dp(22)); panel.setBackground(gradient);
+        TextView tag = text(eyebrow, 12, Color.rgb(207, 181, 255), true);
+        TextView title = text(headline, 28, Color.WHITE, true);
+        TextView sub = text(detail, 14, Color.rgb(216, 215, 239), false);
+        title.setPadding(0, dp(12), 0, dp(10));
+        panel.addView(tag); panel.addView(title); panel.addView(sub);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(18)); body.addView(panel, lp);
+    }
+    private void launchDiagnostic(String activityName) {
+        try {
+            Intent intent = new Intent();
+            intent.setClassName(getPackageName(), activityName);
+            startActivity(intent);
+        } catch (android.content.ActivityNotFoundException | SecurityException error) {
+            status.setText("This diagnostic is available in the ARM64 runtime-enabled debug APK only.");
+        }
     }
     private void disabled(String feature) {
         status.setText(feature + " is not implemented. No Minecraft packets sent.");
@@ -63,43 +104,53 @@ public final class DashboardActivity extends Activity {
         currentTab = tab;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(20, 24, 20, 12);
+        root.setBackgroundColor(BG);
+        root.setPadding(dp(18), dp(12), dp(18), dp(10));
         if (Build.VERSION.SDK_INT >= 30) {
             root.setOnApplyWindowInsetsListener((view, insets) -> {
                 android.graphics.Insets bars = insets.getInsets(Type.systemBars() | Type.displayCutout());
-                view.setPadding(20 + bars.left, 24 + bars.top, 20 + bars.right, 12 + bars.bottom);
+                view.setPadding(dp(18) + bars.left, dp(12) + bars.top, dp(18) + bars.right, dp(10) + bars.bottom);
                 return insets;
             });
         }
-        root.setBackgroundColor(Color.rgb(15, 23, 36));
-        TextView title = new TextView(this);
-        title.setText("MINEPILOT AI  /  " + tab.toUpperCase());
-        title.setTextSize(22);
-        title.setTextColor(Color.rgb(105, 230, 185));
-        root.addView(title);
-        LinearLayout nav = new LinearLayout(this);
-        for (String page : new String[]{"Home", "Xbox", "Commands", "Tasks", "Settings", "Logs"}) {
-            TextView item = new TextView(this);
-            item.setText(page.substring(0, 3));
-            item.setTextColor(Color.WHITE);
-            item.setTextSize(12);
-            item.setPadding(4, 18, 4, 18);
-            item.setOnClickListener(v -> show(page));
-            nav.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
-        }
-        root.addView(nav);
+        LinearLayout heading = new LinearLayout(this); heading.setGravity(Gravity.CENTER_VERTICAL);
+        TextView brand = text("◆  MINEPILOT", 21, Color.WHITE, true);
+        heading.addView(brand, new LinearLayout.LayoutParams(0, dp(62), 1));
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        TextView version = text("AI  •  PREVIEW", 11, PURPLE, true);
+        version.setGravity(Gravity.CENTER);
+        heading.addView(version); root.addView(heading);
+        TextView subtitle = text(tab.toUpperCase(java.util.Locale.ROOT) + "  /  CONTROL CENTER", 11, MUTED, true);
+        subtitle.setPadding(dp(3), 0, 0, dp(14)); root.addView(subtitle);
         ScrollView scroll = new ScrollView(this);
-        body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(body);
+        scroll.setFillViewport(true); scroll.setVerticalScrollBarEnabled(false);
+        body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(0, dp(6), 0, dp(16)); scroll.addView(body);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        status = new TextView(this);
-        status.setTextColor(Color.rgb(105, 230, 185));
-        status.setText("OFFLINE  •  Bedrock engine not integrated");
+        status = text("●  OFFLINE  •  No active Bedrock session", 12, MUTED, false);
+        status.setPadding(dp(12), dp(12), dp(12), dp(12));
+        status.setBackground(surface(PANEL, 12));
         root.addView(status);
-        setContentView(root);
+        LinearLayout nav = new LinearLayout(this); nav.setGravity(Gravity.CENTER);
+        nav.setPadding(0, dp(10), 0, 0);
+        String[] pages = {"Home", "Xbox", "Commands", "Tasks", "Settings", "Logs"};
+        String[] icons = {"⌂", "◎", "⌘", "▦", "⚙", "≡"};
+        for (int i = 0; i < pages.length; i++) {
+            final String page = pages[i];
+            LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL);
+            cell.setGravity(Gravity.CENTER); cell.setPadding(0, dp(9), 0, dp(9));
+            if (tab.equals(page)) cell.setBackground(surface(Color.rgb(52, 38, 87), 12));
+            TextView symbol = text(icons[i], 22, tab.equals(page) ? PURPLE : MUTED, true);
+            symbol.setGravity(Gravity.CENTER); cell.addView(symbol);
+            TextView caption = text(page, 10, tab.equals(page) ? Color.WHITE : MUTED, false);
+            caption.setGravity(Gravity.CENTER); cell.addView(caption);
+            nav.addView(cell, new LinearLayout.LayoutParams(0, -2, 1));
+            cell.setOnClickListener(v -> show(page));
+        }
+        root.addView(nav); setContentView(root);
         switch (tab) {
             case "Xbox":
+                hero("ACCOUNT & MULTIPLAYER", "Friend world", "Sign-in and join diagnostics • Experimental");
                 label("Sign in with your own Xbox account when authentication is available. Enter your FRIEND'S world-owner XUID below, not your own Xbox ID. Never enter Microsoft credentials here.", 16);
                 label(FriendWorldJoinReadiness.summary(new BedrockEngine.Unavailable()), 14);
                 EditText xuid = new EditText(this);
@@ -127,9 +178,10 @@ public final class DashboardActivity extends Activity {
                             + (FriendWorldJoinReadiness.canAttemptJoin(engine, owner)
                             ? " / Ready to attempt join" : " / No join attempted"));
                 });
-                button("Sign in to Xbox (unavailable)", () -> disabled("Xbox sign-in"));
+                button("Sign in / Join friend\'s world", () -> launchDiagnostic("ai.minepilot.app.XboxAuthProbeActivity"));
                 break;
             case "Commands":
+                hero("AI COMMAND CENTER", "Bot commands", "Offline plans only • Live execution unavailable");
                 label("Offline command planning is available; execution requires a live Bedrock session.", 16);
                 for (String name : new String[]{"Follow", "Come here", "Protect", "Mine", "Gather wood", "Craft", "Build", "Explore", "Return"}) {
                     button("Plan " + name + " (offline)", () -> {
@@ -144,11 +196,13 @@ public final class DashboardActivity extends Activity {
                 }
                 break;
             case "Tasks":
+                hero("AUTOMATION", "Task library", "Upcoming autonomous Minecraft abilities");
                 for (String name : new String[]{"Survival and safety", "Mining and gathering", "Crafting and inventory", "Navigation", "Blueprint building", "Redstone", "Memory and learning"}) {
                     label(name + " — planned, not implemented", 17);
                 }
                 break;
             case "Settings":
+                hero("ENGINE & PERFORMANCE", "Diagnostics", "Runtime checks and developer tools");
                 label("Performance: Balanced (future option)", 17);
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 17);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 17);
@@ -183,6 +237,7 @@ public final class DashboardActivity extends Activity {
                     runtimeLabel.setText(result);
                     status.setText(result);
                 });
+                button("Run Node and NetherNet self-test", () -> launchDiagnostic("ai.minepilot.app.NodeSmokeActivity"));
                 label("Same-phone world join: UNVERIFIED", 17);
                 button("Stop diagnostic service", () -> {
                     stopService(new Intent(this, MinePilotService.class));
@@ -190,6 +245,7 @@ public final class DashboardActivity extends Activity {
                 });
                 break;
             case "Logs":
+                hero("SYSTEM MONITOR", "Activity logs", "Local diagnostics • No live game telemetry");
                 label("No real game telemetry is available in this build.", 16);
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 16);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 16);
@@ -201,6 +257,8 @@ public final class DashboardActivity extends Activity {
                 label("No authenticated Xbox or live Bedrock session has been verified.", 16);
                 break;
             default:
+                hero("●  BOT OFFLINE", "Your world. Your AI.", "Connect a separate Xbox bot account to explore friend-world joining.");
+                label("CONNECTION OVERVIEW", 19);
                 label("Connection: DISCONNECTED", 21);
                 label("Xbox auth: unavailable\nFriend world discovery: unavailable\nSpawn: unavailable", 16);
                 button("Connect bot (unavailable)", () -> disabled("Connect"));
