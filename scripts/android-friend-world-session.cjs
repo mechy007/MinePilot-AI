@@ -47,6 +47,9 @@ async function observeSession(client, publish, signal, getStage) {
       clearInterval(heartbeat);
       signal.removeEventListener('abort', stop);
       client.removeListener('close', closed);
+      client.removeListener('start_game', onStartGame);
+      client.removeListener('spawn', onSpawn);
+      client.removeListener('level_chunk', onChunk);
       // Keep the error handler through close to suppress late SDK errors.
       publish({ phase: reason, stage: getStage() });
       try {
@@ -63,15 +66,18 @@ async function observeSession(client, publish, signal, getStage) {
       }
     };
     const checkSpawn = () => {
-      if (!startGame || !spawn) return;
+      if (finished || !startGame || !spawn) return;
       clearTimeout(timeout);
       joinedAt = performance.now();
       report();
       heartbeat = setInterval(report, 1000);
     };
-    client.once('start_game', () => { startGame = true; checkSpawn(); });
-    client.once('spawn', () => { spawn = true; checkSpawn(); });
-    client.on('level_chunk', () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); });
+    const onStartGame = () => { startGame = true; checkSpawn(); };
+    const onSpawn = () => { spawn = true; checkSpawn(); };
+    const onChunk = () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); };
+    client.once('start_game', onStartGame);
+    client.once('spawn', onSpawn);
+    client.on('level_chunk', onChunk);
     client.once('close', closed);
     client.on('error', () => finish('failed'));
     timeout = setTimeout(() => finish('failed'), 90000);

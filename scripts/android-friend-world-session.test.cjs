@@ -40,6 +40,23 @@ test('requires start game and spawn and waits for SDK cleanup when stopped', asy
   await session;
 });
 
+test('ignores late spawn events while an aborted client closes', async () => {
+  const client = new Client();
+  client.close = () => {
+    client.emit('start_game');
+    client.emit('spawn');
+    client.emit('level_chunk', {});
+    client.emit('error', new Error('Late SDK error'));
+  };
+  const controller = new AbortController();
+  const snapshots = [];
+  const session = observeSession(client, state => snapshots.push(state), controller.signal, () => 'connection');
+  controller.abort();
+  await session;
+  assert.deepEqual(snapshots, [{ phase: 'stopped', stage: 'connection' }]);
+  assert.equal(client.listenerCount('level_chunk'), 0);
+});
+
 test('reports a safe failure on a disconnect before the world starts', async () => {
   const client = new Client();
   const snapshots = [];
