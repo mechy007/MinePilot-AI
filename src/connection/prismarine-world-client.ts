@@ -1,10 +1,13 @@
 import { createRequire } from 'node:module';
 
 export interface WorldSessionCandidate {
-  hostXuid?: string;
-  customProperties?: { hostXuid?: string; [key: string]: unknown };
-  [key: string]: unknown;
+  sessionRef: { name: string };
+  ownerXuid?: string;
+  customProperties?: { ownerId?: string; protocol?: string | number; [key: string]: unknown };
 }
+
+const FRIEND_WORLD_VERSION = '1.26.60';
+const FRIEND_WORLD_PROTOCOL = 2225;
 export interface BedrockClientLike {
   on(event: string, listener: (...args: unknown[]) => void): this;
   removeListener(event: string, listener: (...args: unknown[]) => void): this;
@@ -13,6 +16,7 @@ export interface BedrockClientLike {
 export type BedrockClientFactory = (options: {
   username: string;
   offline: false;
+  version: string;
   profilesFolder?: string | false;
   onMsaCode?: (code: { user_code?: string; verification_uri?: string; verification_uri_complete?: string; message?: string }) => void;
   world: { pickSession: (sessions: WorldSessionCandidate[]) => WorldSessionCandidate };
@@ -21,8 +25,20 @@ export type BedrockClientFactory = (options: {
 /** Selects by exact owner XUID, never by mutable gamertag or list order. */
 export function pickOwnerWorld(sessions: readonly WorldSessionCandidate[], ownerXuid: string): WorldSessionCandidate {
   if (!/^\d+$/.test(ownerXuid)) throw new Error('Invalid owner XUID');
-  const matches = sessions.filter(s => s.hostXuid === ownerXuid || s.customProperties?.hostXuid === ownerXuid);
-  if (matches.length !== 1) throw new Error(matches.length ? 'Ambiguous owner world' : 'Owner world not found or XUID not exposed');
+  const matches = sessions.filter(session => session.customProperties?.ownerId === ownerXuid &&
+    typeof session.sessionRef?.name === 'string' && session.sessionRef.name.trim().length > 0);
+  if (matches.length === 0) throw new Error('Owner world not found or XUID not exposed');
+  // The SDK queries and joins within its fixed Minecraft service configuration and lobby template.
+  if (new Set(matches.map(session => session.sessionRef.name)).size !== 1) {
+    throw new Error('Ambiguous owner world');
+  }
+  const incompatible = matches.some(session => {
+    const protocol = session.customProperties?.protocol;
+    return protocol !== undefined && String(protocol) !== String(FRIEND_WORLD_PROTOCOL);
+  });
+  if (incompatible) {
+    throw new Error(`Friend world protocol mismatch: expected ${FRIEND_WORLD_PROTOCOL} (${FRIEND_WORLD_VERSION})`);
+  }
   return matches[0];
 }
 
@@ -53,6 +69,7 @@ export class PrismarineWorldClient {
     const client = this.createClient({
       username: this.username,
       offline: false,
+      version: FRIEND_WORLD_VERSION,
       ...this.auth,
       world: { pickSession: sessions => pickOwnerWorld(sessions, this.ownerXuid) }
     });
