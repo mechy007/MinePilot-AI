@@ -1,5 +1,6 @@
 import { PrismarineWorldClient, type BedrockClientFactory, type BedrockClientLike } from '../connection/prismarine-world-client.js';
 import type { BotRuntimeAdapter, BotObservation, Position } from '../core/bot-runtime.js';
+import { MovePlayerPacketWriter, type MovementSession } from './move-player-writer.js';
 
 /** Packet output must be implemented against the negotiated Bedrock protocol version. */
 export interface BedrockMovementWriter {
@@ -15,6 +16,13 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
   private connected = false;
   private observation: BotObservation | null = null;
   private client: BedrockClientLike | null = null;
+  private entityId: string | number | bigint | null = null;
+  private movementTick = 0n;
+  private readonly packetWriter = new MovePlayerPacketWriter(() => this.movementSession());
+  private movementSession(): MovementSession | null {
+    if (!this.connected || !this.observation || this.entityId === null) return null;
+    return { runtimeEntityId: this.entityId, position: this.observation.position, tick: ++this.movementTick };
+  }
   constructor(
     username: string,
     ownerXuid: string,
@@ -29,12 +37,17 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
     await this.world.connectAndSpawn(abort.signal);
     this.client = this.world.activeClient;
     if (!this.client) throw new Error('Spawned client unavailable');
+    this.client.on('start_game', this.onStartGame);
     this.client.on('move_player', this.onMove);
     this.client.on('update_attributes', this.onAttributes);
     this.client.on('close', this.onClose);
     this.connected = true;
   }
-  private readonly onClose = () => { this.connected = false; this.observation = null; };
+  private readonly onClose = () => { this.connected = false; this.observation = null; this.entityId = null; };
+  private readonly onStartGame = (...args: unknown[]) => {
+    const packet = args[0] as { runtime_entity_id?: string | number | bigint } | undefined;
+    if (packet?.runtime_entity_id !== undefined) this.entityId = packet.runtime_entity_id;
+  };
   private readonly onMove = (...args: unknown[]) => {
     const packet = args[0] as { position?: Position } | undefined;
     const p = packet?.position;
@@ -59,14 +72,15 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
   async moveToward(target: Position, signal: AbortSignal): Promise<void> {
     if (!this.connected || !this.client) throw new Error('Not connected');
     if (signal.aborted) throw new Error('Movement cancelled');
-    if (!this.writer) throw new Error('No verified Bedrock movement packet writer installed');
-    await this.writer.move(this.client, target, signal);
+    await (this.writer ?? this.packetWriter).move(this.client, target, signal);
   }
   async disconnect(): Promise<void> {
     const client = this.client;
     this.client = null;
     this.connected = false;
     this.observation = null;
+    this.entityId = null;
+    client?.removeListener('start_game', this.onStartGame);
     client?.removeListener('move_player', this.onMove);
     client?.removeListener('update_attributes', this.onAttributes);
     client?.removeListener('close', this.onClose);
