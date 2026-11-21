@@ -221,9 +221,13 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetHandshakeStateSelfTest(JNIEnv *en
     r1[0] = 6; memcpy(r1+1, MP_RAKNET_MAGIC, 16);
     r1[24] = 42; r1[26] = 5; r1[27] = 120;
     if (mp_handshake_accept_reply(&hs, r1, sizeof(r1)) ||
-        hs.phase != MP_HS_WAIT_REPLY2 || hs.negotiated_mtu != 1400) return 3;
-    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34 || out[0] != 7)
-        return 4;
+        hs.phase != MP_HS_READY_REQUEST2 || hs.negotiated_mtu != 1400) return 3;
+    if (mp_handshake_accept_reply(&hs, r1, sizeof(r1)) == 0) return 14;
+    if (mp_handshake_next_request(&hs, out, 33) != -1 ||
+        hs.phase != MP_HS_READY_REQUEST2) return 15;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34 || out[0] != 7 ||
+        hs.phase != MP_HS_WAIT_REPLY2) return 4;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34) return 16;
     uint8_t r2[35] = {0};
     r2[0] = 8; memcpy(r2+1, MP_RAKNET_MAGIC, 16);
     r2[24] = 42;
@@ -244,5 +248,9 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetHandshakeStateSelfTest(JNIEnv *en
     r1[25] = 1;
     if (mp_handshake_accept_reply(&hs, r1, sizeof(r1)) != -2 ||
         hs.phase != MP_HS_FAILED) return 13;
+    // Reinitialization must preserve an address passed from inside hs itself.
+    if (mp_handshake_init(&hs, 11, 1400, 42, &server)) return 17;
+    if (mp_handshake_init(&hs, 11, 1400, 42, &hs.server_address) ||
+        hs.server_address.port != 19132 || hs.server_address.ipv4[0] != 127) return 18;
     return 0;
 }
