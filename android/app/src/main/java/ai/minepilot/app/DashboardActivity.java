@@ -167,6 +167,36 @@ public final class DashboardActivity extends Activity {
                     runtimeLabel.setText(result);
                     status.setText(result);
                 });
+                label("CraftNode direct integration: probes a locally running Bedrock server at 127.0.0.1:19132. This only tests RakNet open-connection, not login or world join.", 16);
+                button("Probe CraftNode local Bedrock server", () -> {
+                    final TextView probeStatus = status;
+                    final int requestGeneration = ++udpDiagnosticGeneration;
+                    probeStatus.setText("CraftNode local UDP handshake: connecting...");
+                    new Thread(() -> {
+                        String result;
+                        try {
+                            // RakNet protocol 11 is the open-connection version used by
+                            // the current transport implementation. No Xbox credentials.
+                            int rc = NativeBridge.raknetUdpHandshake(
+                                    new int[]{127, 0, 0, 1}, 19132, 11, 1400,
+                                    new java.security.SecureRandom().nextLong());
+                            result = rc == 0
+                                    ? "CraftNode RakNet open connection OK (NO LOGIN / WORLD JOIN)"
+                                    : "CraftNode RakNet probe failed (" + rc
+                                        + "). Start CraftNode server and confirm UDP 19132.";
+                        } catch (Exception | UnsatisfiedLinkError e) {
+                            result = "CraftNode probe error: " + e.getClass().getSimpleName();
+                        }
+                        final String outcome = result;
+                        runOnUiThread(() -> {
+                            if (!isFinishing() && !isDestroyed() && "Settings".equals(currentTab)
+                                    && status == probeStatus
+                                    && requestGeneration == udpDiagnosticGeneration) {
+                                probeStatus.setText(outcome);
+                            }
+                        });
+                    }, "minepilot-craftnode-probe").start();
+                });
                 label("Same-phone world join: UNVERIFIED", 17);
                 button("Stop diagnostic service", () -> {
                     stopService(new Intent(this, MinePilotService.class));
