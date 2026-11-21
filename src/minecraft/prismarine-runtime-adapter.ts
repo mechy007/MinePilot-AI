@@ -37,6 +37,7 @@ export class PrismarineRuntimeAdapter implements BotRuntimeAdapter {
     await this.world.connectAndSpawn(abort.signal);
     this.client = this.world.activeClient;
     if (!this.client) throw new Error('Spawned client unavailable');
+    this.onStartGame(this.world.lastStartGamePacket);
     this.client.on('start_game', this.onStartGame);
     this.client.on('move_player', this.onMove);
     this.client.on('update_attributes', this.onAttributes);
