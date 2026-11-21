@@ -11,7 +11,7 @@ test('friend-world runner selects owner, observes spawn, and disconnects', async
   const factory: BedrockClientFactory = options => {
     assert.equal(options.offline, false);
     assert.equal(options.username, 'MyXboxAccount');
-    ownerSelected = options.world.pickSession([{ hostXuid: '12345' }]).hostXuid === '12345';
+    ownerSelected = options.world.pickSession([{ sessionRef: { name: 'friend' }, customProperties: { ownerId: '12345' } }]).sessionRef.name === 'friend';
     return Object.assign(emitter, { close() { closed++; } });
   };
   const phases: string[] = [];

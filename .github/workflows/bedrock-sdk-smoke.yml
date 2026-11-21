@@ -18,3 +18,4 @@ jobs:
       - run: npm run build
       - run: npm run friend:check
       - run: node scripts/bedrock-sdk-smoke.mjs
+      - run: node --test scripts/bedrock-friend-discovery.test.mjs
