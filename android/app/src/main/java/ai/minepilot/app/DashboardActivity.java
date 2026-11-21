@@ -21,6 +21,8 @@ public final class DashboardActivity extends Activity {
     private LinearLayout body;
     private TextView status;
     private String currentTab = "Home";
+    // UI-thread-only generation counter prevents stale asynchronous diagnostic results.
+    private int udpDiagnosticGeneration;
     private EditText xuidInput;
     private String xuidDraft;
     private static final int NOTIFICATION_REQUEST = 101;
@@ -135,6 +137,21 @@ public final class DashboardActivity extends Activity {
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 17);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 17);
                 label("RakNet pong codec (offline only): " + NativeBridge.raknetPongDiagnostic(), 17);
+                button("Test local RakNet ping UDP roundtrip", () -> {
+                    final TextView settingsStatus = status;
+                    final int requestGeneration = ++udpDiagnosticGeneration;
+                    settingsStatus.setText("Local-only UDP roundtrip: testing...");
+                    new Thread(() -> {
+                        final String result = NativeBridge.raknetUdpLoopbackDiagnostic();
+                        runOnUiThread(() -> {
+                            if (!isFinishing() && !isDestroyed() && "Settings".equals(currentTab)
+                                    && status == settingsStatus
+                                    && requestGeneration == udpDiagnosticGeneration) {
+                                settingsStatus.setText("Local-only UDP roundtrip: " + result);
+                            }
+                        });
+                    }, "minepilot-udp-diagnostic").start();
+                });
                 button("Test native UDP loopback", () -> status.setText("UDP preflight: " + NativeBridge.udpDiagnostic()));
                 TextView runtimeLabel = new TextView(this);
                 runtimeLabel.setText("Android runtime preflight: " + RuntimeProbe.inspect(this));

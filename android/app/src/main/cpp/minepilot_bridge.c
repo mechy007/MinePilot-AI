@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 // JNI bridge and local UDP socket preflight only. No Bedrock protocol or login.
@@ -73,4 +74,36 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetPongCodecSelfTest(JNIEnv *env, jc
     packet[17] ^= 1;
     if (mp_decode_unconnected_pong(packet, sizeof(packet)-1, &decoded) == 0) return 4;
     return 0;
+}
+
+/* Local-only UDP roundtrip: encoded RakNet ping bytes, never a remote server. */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetUdpLoopbackSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env;
+    (void)clazz;
+    int receiver = -1, sender = -1, code = 1;
+    receiver = socket(AF_INET, SOCK_DGRAM, 0);
+    sender = socket(AF_INET, SOCK_DGRAM, 0);
+    if (receiver < 0 || sender < 0) goto done;
+    struct timeval timeout = {.tv_sec = 0, .tv_usec = 250000};
+    if (setsockopt(receiver, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) goto done;
+    struct sockaddr_in dest = {0};
+    dest.sin_family = AF_INET;
+    dest.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    dest.sin_port = htons(0);
+    if (bind(receiver, (struct sockaddr *)&dest, sizeof(dest)) != 0) goto done;
+    socklen_t destlen = sizeof(dest);
+    if (getsockname(receiver, (struct sockaddr *)&dest, &destlen) != 0) goto done;
+    uint8_t packet[MP_RAKNET_PING_SIZE], received[MP_RAKNET_PING_SIZE + 1];
+    if (mp_encode_unconnected_ping(packet, sizeof(packet),
+        UINT64_C(0x0102030405060708), UINT64_C(0x1112131415161718)) != MP_RAKNET_PING_SIZE) goto done;
+    if (sendto(sender, packet, sizeof(packet), 0, (struct sockaddr *)&dest, sizeof(dest)) != (ssize_t)sizeof(packet)) goto done;
+    ssize_t n = recvfrom(receiver, received, sizeof(received), 0, NULL, NULL);
+    if (n != (ssize_t)sizeof(packet)) { code = 2; goto done; }
+    if (memcmp(packet, received, sizeof(packet)) != 0) { code = 3; goto done; }
+    code = 0;
+done:
+    if (sender >= 0) close(sender);
+    if (receiver >= 0) close(receiver);
+    return code;
 }

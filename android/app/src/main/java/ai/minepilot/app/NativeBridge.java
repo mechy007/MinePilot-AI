@@ -18,6 +18,20 @@ public final class NativeBridge {
     private static native int nativeUdpPreflight();
     private static native int nativeRaknetPingCodecSelfTest();
     private static native int nativeRaknetPongCodecSelfTest();
+    private static native int nativeRaknetUdpLoopbackSelfTest();
+    public static String raknetUdpLoopbackDiagnostic() {
+        if (!loaded) return "JNI_LIBRARY_MISSING";
+        try {
+            switch (nativeRaknetUdpLoopbackSelfTest()) {
+                case 0: return "RAKNET_PING_UDP_LOOPBACK_OK_LOCAL_ONLY";
+                case 2: return "RAKNET_UDP_LOOPBACK_RECEIVE_FAILED";
+                case 3: return "RAKNET_UDP_LOOPBACK_PAYLOAD_MISMATCH";
+                default: return "RAKNET_UDP_LOOPBACK_SOCKET_FAILED";
+            }
+        } catch (UnsatisfiedLinkError | SecurityException e) {
+            return "RAKNET_UDP_LOOPBACK_ENTRYPOINT_MISSING";
+        }
+    }
     public static String raknetPongDiagnostic() {
         if (!loaded) return "JNI_LIBRARY_MISSING";
         try {
