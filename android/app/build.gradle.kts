@@ -15,7 +15,10 @@ android {
     }
     if (nodeSmoke) {
         ndkVersion = "28.0.13004108"
-        sourceSets.getByName("debug").assets.srcDir(nodeSmokeDir.map { it.dir("notices") })
+        sourceSets.getByName("debug").assets.srcDirs(
+            nodeSmokeDir.map { it.dir("notices") },
+            nodeSmokeDir.map { it.dir("sdk") }
+        )
     }
     buildTypes.getByName("debug") {
         manifestPlaceholders["minepilotNodeSmoke"] = nodeSmoke.toString()

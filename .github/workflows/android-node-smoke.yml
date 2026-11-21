@@ -5,6 +5,8 @@ on:
     paths:
       - .github/workflows/android-node-smoke.yml
       - scripts/stage-android-node-smoke.sh
+      - 'scripts/stage-android-bedrock-sdk.*'
+      - scripts/android-node-bedrock-smoke.cjs
       - 'android/**'
 jobs:
   package:
@@ -25,15 +27,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Check the smoke program on host Node
-        run: node android/app/src/debug/assets/node-smoke.cjs
       - name: Install Android build dependencies
         run: sdkmanager 'build-tools;35.0.0' 'platforms;android-35' 'ndk;28.0.13004108' 'cmake;3.22.1'
       - name: Verify and stage ARM64 Node
         run: bash scripts/stage-android-node-smoke.sh
-      - name: Build debug APK with Node
+      - name: Stage and test the Bedrock SDK bundle
+        run: bash scripts/stage-android-bedrock-sdk.sh
+      - name: Build debug APK with Node and the Bedrock SDK
         working-directory: android
-        run: gradle --no-daemon -PminepilotNodeSmoke=true :app:assembleDebug
+        run: gradle --no-daemon -PminepilotNodeSmoke=true :app:assembleDebug :app:testDebugUnitTest
       - name: Verify APK contents and 16 KB alignment
         run: |
           apk=android/app/build/outputs/apk/debug/app-debug.apk
@@ -47,11 +49,11 @@ jobs:
                   data = apk.read(f"lib/arm64-v8a/{name}")
                   assert data[:6] == b"\x7fELF\x02\x01", name
                   assert int.from_bytes(data[18:20], "little") == 183, name
-              for name in ("node-smoke.cjs", "Node.js-LICENSE.txt", "Node.js-Mobile-LICENSE.txt"):
+              for name in ("bedrock-sdk.zip", "Node.js-LICENSE.txt", "Node.js-Mobile-LICENSE.txt"):
                   assert apk.getinfo(f"assets/{name}").file_size > 0, name
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: minepilot-android-arm64-node-smoke
+          name: minepilot-android-arm64-bedrock-sdk-smoke
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
