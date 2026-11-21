@@ -122,7 +122,17 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetRequest1CodecSelfTest(JNIEnv *env
     if (packet[32] != 0xa5 || packet[63] != 0xa5) return 4;
     if (mp_encode_open_connection_request1(packet, sizeof(packet), 17, 11) != -1 ||
         mp_encode_open_connection_request1(packet, sizeof(packet), 65, 11) != -1 ||
-        mp_encode_open_connection_request1(NULL, 32, 32, 11) != -1 ||
-        mp_encode_open_connection_request1(packet, sizeof(packet), 1493, 11) != -1) return 5;
+        mp_encode_open_connection_request1(NULL, 32, 32, 11) != -1) return 5;
+    uint8_t boundary[1493];
+    memset(boundary, 0xa5, sizeof(boundary));
+    if (mp_encode_open_connection_request1(boundary, sizeof(boundary), 18, 11) != 18 ||
+        boundary[0] != 0x05 || memcmp(boundary + 1, MP_RAKNET_MAGIC, 16) ||
+        boundary[17] != 11 || boundary[18] != 0xa5) return 6;
+    memset(boundary, 0xa5, sizeof(boundary));
+    if (mp_encode_open_connection_request1(boundary, sizeof(boundary), 1492, 11) != 1492 ||
+        boundary[0] != 0x05 || memcmp(boundary + 1, MP_RAKNET_MAGIC, 16) ||
+        boundary[17] != 11 || boundary[18] != 0 ||
+        boundary[1491] != 0 || boundary[1492] != 0xa5) return 7;
+    if (mp_encode_open_connection_request1(boundary, sizeof(boundary), 1493, 11) != -1) return 8;
     return 0;
 }
