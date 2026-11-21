@@ -19,7 +19,8 @@ export interface MovementSession {
 export class MovePlayerPacketWriter implements BedrockMovementWriter {
   constructor(
     private readonly session: () => MovementSession | null,
-    private readonly maxStep = 0.25
+    private readonly maxStep = 0.25,
+    private readonly onQueued?: (position: Position) => void
   ) {
     if (!Number.isFinite(maxStep) || maxStep <= 0 || maxStep > 0.5) throw new RangeError('Unsafe movement step');
   }
@@ -54,5 +55,6 @@ export class MovePlayerPacketWriter implements BedrockMovementWriter {
       teleport_source_entity_type: 0,
       tick: state.tick
     });
+    this.onQueued?.(position);
   }
 }
