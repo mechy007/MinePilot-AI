@@ -122,9 +122,15 @@ public final class DashboardActivity extends Activity {
                 button("Sign in to Xbox (unavailable)", () -> disabled("Xbox sign-in"));
                 break;
             case "Commands":
-                label("Commands are unavailable until a live Bedrock session is established.", 16);
+                label("Offline command planning is available; execution requires a live Bedrock session.", 16);
                 for (String name : new String[]{"Follow", "Come here", "Protect", "Mine", "Gather wood", "Craft", "Build", "Explore", "Return"}) {
-                    button(name + " (unavailable)", () -> disabled(name));
+                    button("Plan " + name + " (offline)", () -> {
+                        String action = name.equals("Come here") ? "come"
+                                : name.equals("Gather wood") ? "gather" : name.toLowerCase(java.util.Locale.ROOT);
+                        GameplayPlanner.Plan plan = GameplayPlanner.plan(GameplayPlanner.VERSION, action, "");
+                        status.setText(plan.status + ": " + plan.message
+                                + (plan.requiresConfirmation ? " (confirmation required before future execution)" : ""));
+                    });
                 }
                 break;
             case "Tasks":
