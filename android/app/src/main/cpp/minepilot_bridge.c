@@ -4,6 +4,7 @@
 #include "raknet_pong.h"
 #include "raknet_open_connection.h"
 #include "raknet_open_connection_reply.h"
+#include "raknet_open_connection_stage2.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -164,5 +165,38 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetReply1CodecSelfTest(JNIEnv *env, 
     if (mp_decode_open_connection_reply1(p, sizeof(p), &result) == 0) return 6;
     p[26] = 5; p[27] = 213;
     if (mp_decode_open_connection_reply1(p, sizeof(p), &result) == 0) return 7;
+    return 0;
+}
+
+/* Offline RakNet request-2 and reply-2 test vectors; no network traffic. */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetStage2CodecSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    mp_raknet_ipv4 server = {{127,0,0,1}, 19132};
+    uint8_t request[MP_RAKNET_REQUEST2_SIZE+1] = {0};
+    if (mp_encode_open_connection_request2(request, sizeof(request), &server, 1400,
+        UINT64_C(0x0102030405060708)) != MP_RAKNET_REQUEST2_SIZE) return 1;
+    if (request[0] != 7 || memcmp(request+1, MP_RAKNET_MAGIC, 16) ||
+        request[17] != 4 || request[24] != 5 || request[25] != 120 ||
+        request[26] != 1 || request[33] != 8) return 2;
+    if (mp_encode_open_connection_request2(request, 33, &server, 1400, 0) != -1 ||
+        mp_encode_open_connection_request2(NULL, 34, &server, 1400, 0) != -1 ||
+        mp_encode_open_connection_request2(request, 34, &server, 1493, 0) != -1) return 3;
+    uint8_t reply[MP_RAKNET_REPLY2_SIZE] = {0};
+    reply[0] = 8;
+    memcpy(reply+1, MP_RAKNET_MAGIC, 16);
+    mp_raknet_write_u64_be(reply+17, UINT64_C(0x0102030405060708));
+    mp_raknet_write_ipv4(reply+25, &server);
+    reply[32] = 5; reply[33] = 120;
+    mp_raknet_reply2 parsed = {0};
+    if (mp_decode_open_connection_reply2(reply, sizeof(reply), &parsed) ||
+        parsed.server_guid != UINT64_C(0x0102030405060708) ||
+        parsed.mtu != 1400 || parsed.client_address.port != 19132 ||
+        memcmp(parsed.client_address.ipv4, server.ipv4, 4)) return 4;
+    if (mp_decode_open_connection_reply2(reply, 34, &parsed) == 0) return 5;
+    reply[25] = 6;
+    if (mp_decode_open_connection_reply2(reply, 35, &parsed) == 0) return 6;
+    reply[25] = 4; reply[34] = 2;
+    if (mp_decode_open_connection_reply2(reply, 35, &parsed) == 0) return 7;
     return 0;
 }
