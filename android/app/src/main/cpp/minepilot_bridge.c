@@ -5,6 +5,7 @@
 #include "raknet_open_connection.h"
 #include "raknet_open_connection_reply.h"
 #include "raknet_open_connection_stage2.h"
+#include "raknet_handshake_state.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -203,5 +204,56 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetStage2CodecSelfTest(JNIEnv *env, 
     if (mp_decode_open_connection_reply2(reply, 35, &parsed) == 0) return 6;
     reply[25] = 4; reply[34] = 2;
     if (mp_decode_open_connection_reply2(reply, 35, &parsed) == 0) return 7;
+    return 0;
+}
+
+/* Deterministic state transitions; no network, login, or gameplay. */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetHandshakeStateSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    mp_raknet_ipv4 server = {{127,0,0,1},19132};
+    mp_raknet_handshake hs;
+    if (mp_handshake_init(&hs, 11, 1400, 42, &server)) return 1;
+    uint8_t out[1492] = {0};
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 1400 ||
+        hs.phase != MP_HS_WAIT_REPLY1 || out[0] != 5) return 2;
+    uint8_t r1[28] = {0};
+    r1[0] = 6; memcpy(r1+1, MP_RAKNET_MAGIC, 16);
+    r1[24] = 42; r1[26] = 5; r1[27] = 120;
+    if (mp_handshake_accept_reply(&hs, r1, sizeof(r1)) ||
+        hs.phase != MP_HS_READY_REQUEST2 || hs.negotiated_mtu != 1400) return 3;
+    uint8_t r2[35] = {0};
+    r2[0] = 8; memcpy(r2+1, MP_RAKNET_MAGIC, 16);
+    r2[24] = 42;
+    r2[25] = 4; r2[26] = 0x80; r2[27] = 0xff;
+    r2[28] = 0xff; r2[29] = 0xfe; r2[30] = 0x4a; r2[31] = 0xbc;
+    r2[32] = 5; r2[33] = 120;
+    if (mp_handshake_accept_reply(&hs, r2, sizeof(r2)) == 0 ||
+        hs.phase != MP_HS_READY_REQUEST2) return 14;
+    if (mp_handshake_next_request(&hs, out, 33) != -1 ||
+        hs.phase != MP_HS_READY_REQUEST2 ||
+        mp_handshake_accept_reply(&hs, r2, sizeof(r2)) == 0 ||
+        hs.phase != MP_HS_READY_REQUEST2) return 15;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34 || out[0] != 7 ||
+        hs.phase != MP_HS_WAIT_REPLY2) return 4;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 34) return 16;
+    if (mp_handshake_accept_reply(&hs, r2, sizeof(r2)) ||
+        hs.phase != MP_HS_OPEN_CONNECTION_COMPLETE) return 5;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != -1) return 6;
+    if (mp_handshake_init(&hs, 11, 1400, 42, &server)) return 7;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 1400) return 8;
+    for (int i = 0; i < MP_HS_MAX_RETRIES; ++i)
+        if (mp_handshake_on_timeout(&hs)) return 9;
+    if (mp_handshake_on_timeout(&hs) != -1 || hs.phase != MP_HS_FAILED)
+        return 10;
+    if (mp_handshake_init(&hs, 11, 1400, 42, &server)) return 11;
+    if (mp_handshake_next_request(&hs, out, sizeof(out)) != 1400) return 12;
+    r1[25] = 1;
+    if (mp_handshake_accept_reply(&hs, r1, sizeof(r1)) != -2 ||
+        hs.phase != MP_HS_FAILED) return 13;
+    // Reinitialization must preserve an address passed from inside hs itself.
+    if (mp_handshake_init(&hs, 11, 1400, 42, &server)) return 17;
+    if (mp_handshake_init(&hs, 11, 1400, 42, &hs.server_address) ||
+        hs.server_address.port != 19132 || hs.server_address.ipv4[0] != 127) return 18;
     return 0;
 }
