@@ -27,13 +27,19 @@ export function pickOwnerWorld(sessions: readonly WorldSessionCandidate[], owner
   if (!/^\d+$/.test(ownerXuid)) throw new Error('Invalid owner XUID');
   const matches = sessions.filter(session => session.customProperties?.ownerId === ownerXuid &&
     typeof session.sessionRef?.name === 'string' && session.sessionRef.name.trim().length > 0);
-  if (matches.length !== 1) throw new Error(matches.length ? 'Ambiguous owner world' : 'Owner world not found or XUID not exposed');
-  const session = matches[0];
-  const advertisedProtocol = session.customProperties?.protocol;
-  if (advertisedProtocol !== undefined && String(advertisedProtocol) !== String(FRIEND_WORLD_PROTOCOL)) {
+  if (matches.length === 0) throw new Error('Owner world not found or XUID not exposed');
+  // The SDK queries and joins within its fixed Minecraft service configuration and lobby template.
+  if (new Set(matches.map(session => session.sessionRef.name)).size !== 1) {
+    throw new Error('Ambiguous owner world');
+  }
+  const incompatible = matches.some(session => {
+    const protocol = session.customProperties?.protocol;
+    return protocol !== undefined && String(protocol) !== String(FRIEND_WORLD_PROTOCOL);
+  });
+  if (incompatible) {
     throw new Error(`Friend world protocol mismatch: expected ${FRIEND_WORLD_PROTOCOL} (${FRIEND_WORLD_VERSION})`);
   }
-  return session;
+  return matches[0];
 }
 
 /**

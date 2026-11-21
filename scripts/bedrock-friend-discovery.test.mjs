@@ -35,6 +35,11 @@ for (const protocol of [2225, 2193]) {
           sessionRef: { name: 'friend-world' },
           ownerXuid: friendXuid,
           customProperties: { ownerId: friendXuid, protocol }
+        },
+        {
+          sessionRef: { name: 'friend-world' },
+          ownerXuid: '2533274790000003',
+          customProperties: { ownerId: friendXuid, protocol }
         }
       ] });
     });

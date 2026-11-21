@@ -9,7 +9,8 @@ test('friend world selection requires exact unique owner XUID', () => {
   assert.equal(pickOwnerWorld([visited, mine], '123'), mine);
   assert.throws(() => pickOwnerWorld([visited], '123'), /not found/);
   assert.throws(() => pickOwnerWorld([{ ...mine, sessionRef: { name: '' } }], '123'), /not found/);
-  assert.throws(() => pickOwnerWorld([mine, mine], '123'), /Ambiguous/);
+  assert.equal(pickOwnerWorld([mine, { ...mine, ownerXuid: '456' }], '123'), mine);
+  assert.throws(() => pickOwnerWorld([mine, { ...mine, sessionRef: { name: 'another' } }], '123'), /Ambiguous/);
 });
 test('friend world selection rejects an incompatible advertised protocol', () => {
   assert.throws(() => pickOwnerWorld([{
