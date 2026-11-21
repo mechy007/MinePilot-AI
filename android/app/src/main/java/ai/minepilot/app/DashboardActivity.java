@@ -135,7 +135,19 @@ public final class DashboardActivity extends Activity {
                 label("Native JNI bridge: " + NativeBridge.diagnostic(), 17);
                 label("RakNet ping codec (offline only): " + NativeBridge.raknetCodecDiagnostic(), 17);
                 label("RakNet pong codec (offline only): " + NativeBridge.raknetPongDiagnostic(), 17);
-                button("Test local RakNet ping UDP roundtrip", () -> status.setText("Local-only UDP roundtrip: " + NativeBridge.raknetUdpLoopbackDiagnostic()));
+                button("Test local RakNet ping UDP roundtrip", () -> {
+                    final TextView settingsStatus = status;
+                    settingsStatus.setText("Local-only UDP roundtrip: testing...");
+                    new Thread(() -> {
+                        final String result = NativeBridge.raknetUdpLoopbackDiagnostic();
+                        runOnUiThread(() -> {
+                            if (!isFinishing() && !isDestroyed() && "Settings".equals(currentTab)
+                                    && status == settingsStatus) {
+                                settingsStatus.setText("Local-only UDP roundtrip: " + result);
+                            }
+                        });
+                    }, "minepilot-udp-diagnostic").start();
+                });
                 button("Test native UDP loopback", () -> status.setText("UDP preflight: " + NativeBridge.udpDiagnostic()));
                 TextView runtimeLabel = new TextView(this);
                 runtimeLabel.setText("Android runtime preflight: " + RuntimeProbe.inspect(this));
