@@ -23,8 +23,9 @@ static inline int mp_raknet_udp_handshake(const mp_raknet_ipv4 *server,
     mp_raknet_handshake hs = {0};
     if (mp_handshake_init(&hs, protocol, mtu, client_guid, server)) return -1;
     int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (fd < 0) return -2;
+    if (fd < 0) { *result = hs; return -2; }
     int status = -3;
+    *result = hs;
     struct sockaddr_in peer = {0};
     peer.sin_family = AF_INET;
     peer.sin_port = htons(server->port);
@@ -46,7 +47,7 @@ static inline int mp_raknet_udp_handshake(const mp_raknet_ipv4 *server,
         for (int i = 0; i < MP_UDP_MAX_PACKETS_PER_ATTEMPT; ++i) {
             ssize_t received = recv(fd, reply, sizeof(reply), 0);
             if (received < 0) {
-                if (errno == EINTR) { --i; continue; }
+                if (errno == EINTR) continue;
                 if (errno == EAGAIN || errno == EWOULDBLOCK) break;
                 goto done;
             }
