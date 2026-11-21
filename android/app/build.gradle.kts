@@ -23,7 +23,6 @@ android {
     buildTypes.getByName("debug") {
         manifestPlaceholders["minepilotNodeSmoke"] = nodeSmoke.toString()
         if (nodeSmoke) {
-            applicationIdSuffix = ".runtimeprobe"
             externalNativeBuild.cmake.arguments += listOf(
                 "-DANDROID_STL=c++_shared",
                 "-DMINEPILOT_NODE_SMOKE_DIR=${nodeSmokeDir.get().asFile.absolutePath}"
