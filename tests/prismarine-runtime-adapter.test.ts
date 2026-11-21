@@ -39,7 +39,7 @@ test('movement fails closed without a verified packet writer', async () => {
     return client as BedrockClientLike;
   });
   await adapter.connect();
-  await assert.rejects(adapter.moveToward({x:1,y:2,z:3},new AbortController().signal), /session not initialized/);
+  await assert.rejects(adapter.moveToward({x:1,y:2,z:3},new AbortController().signal), /player_auth_input required/);
   await adapter.disconnect();
 });
 
