@@ -20,12 +20,14 @@ export class MovePlayerPacketWriter implements BedrockMovementWriter {
   constructor(
     private readonly session: () => MovementSession | null,
     private readonly maxStep = 0.25,
-    private readonly onQueued?: (position: Position) => void
+    private readonly onQueued?: (position: Position) => void,
+    private readonly legacyMovePlayerAllowed = false
   ) {
     if (!Number.isFinite(maxStep) || maxStep <= 0 || maxStep > 0.5) throw new RangeError('Unsafe movement step');
   }
   async move(client: BedrockClientLike, target: Position, signal: AbortSignal): Promise<void> {
     if (signal.aborted) throw new Error('Movement cancelled');
+    if (!this.legacyMovePlayerAllowed) throw new Error('Movement mode unverified: server-authoritative player_auth_input required; legacy move_player disabled');
     const state = this.session();
     if (!state) throw new Error('Bedrock movement session not initialized');
     const sender = client as Partial<MovementPacketClient>;
@@ -51,8 +53,7 @@ export class MovePlayerPacketWriter implements BedrockMovementWriter {
       mode: 'normal',
       on_ground: false,
       ridden_runtime_id: 0,
-      teleport_cause: 0,
-      teleport_source_entity_type: 0,
+      teleport: null,
       tick: state.tick
     });
     this.onQueued?.(position);
