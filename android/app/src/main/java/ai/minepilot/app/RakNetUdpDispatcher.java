@@ -47,17 +47,6 @@ public final class RakNetUdpDispatcher implements Closeable {
         return incoming.result == RakNetReceiveWindow.Result.ACCEPTED ? packet : null;
     }
 
-    /** Send an already-framed datagram and retain it for ACK/NACK tracking. */
-    public synchronized int sendTracked(byte[] packet, long nowMillis) throws IOException {
-        ensureOpen();
-        if (packet == null || packet.length < 4 || (packet[0] & 255) < 0x80
-                || (packet[0] & 255) > 0x8f)
-            throw new IllegalArgumentException("Expected framed RakNet data datagram");
-        RakNetReliabilityWindow.Pending pending = control.queue(packet, nowMillis);
-        transport.send(pending.packet);
-        return pending.sequence;
-    }
-
     public synchronized int pendingCount() { return control.pendingCount(); }
 
     @Override public synchronized void close() {
