@@ -176,18 +176,23 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetStage2CodecSelfTest(JNIEnv *env, 
     uint8_t request[MP_RAKNET_REQUEST2_SIZE+1] = {0};
     if (mp_encode_open_connection_request2(request, sizeof(request), &server, 1400,
         UINT64_C(0x0102030405060708)) != MP_RAKNET_REQUEST2_SIZE) return 1;
-    if (request[0] != 7 || memcmp(request+1, MP_RAKNET_MAGIC, 16) ||
-        request[17] != 4 || request[24] != 5 || request[25] != 120 ||
-        request[26] != 1 || request[33] != 8) return 2;
+    const uint8_t expected_request[MP_RAKNET_REQUEST2_SIZE] = {
+        0x07, 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe,
+        0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78,
+        0x04, 0x80, 0xff, 0xff, 0xfe, 0x4a, 0xbc,
+        0x05, 0x78, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
+    };
+    if (memcmp(request, expected_request, sizeof(expected_request))) return 2;
     if (mp_encode_open_connection_request2(request, 33, &server, 1400, 0) != -1 ||
         mp_encode_open_connection_request2(NULL, 34, &server, 1400, 0) != -1 ||
         mp_encode_open_connection_request2(request, 34, &server, 1493, 0) != -1) return 3;
-    uint8_t reply[MP_RAKNET_REPLY2_SIZE] = {0};
-    reply[0] = 8;
-    memcpy(reply+1, MP_RAKNET_MAGIC, 16);
-    mp_raknet_write_u64_be(reply+17, UINT64_C(0x0102030405060708));
-    mp_raknet_write_ipv4(reply+25, &server);
-    reply[32] = 5; reply[33] = 120;
+    uint8_t reply[MP_RAKNET_REPLY2_SIZE] = {
+        0x08, 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe,
+        0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x04, 0x80, 0xff, 0xff, 0xfe, 0x4a, 0xbc,
+        0x05, 0x78, 0x00
+    };
     mp_raknet_reply2 parsed = {0};
     if (mp_decode_open_connection_reply2(reply, sizeof(reply), &parsed) ||
         parsed.server_guid != UINT64_C(0x0102030405060708) ||
