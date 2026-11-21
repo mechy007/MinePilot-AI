@@ -33,6 +33,7 @@ export function pickOwnerWorld(sessions: readonly WorldSessionCandidate[], owner
  */
 export class PrismarineWorldClient {
   private client: BedrockClientLike | null = null;
+  get activeClient(): BedrockClientLike | null { return this.client; }
   constructor(
     private readonly username: string,
     private readonly ownerXuid: string,
