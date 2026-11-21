@@ -2,6 +2,7 @@
 #include <string.h>
 #include "raknet_ping.h"
 #include "raknet_pong.h"
+#include "raknet_open_connection.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -106,4 +107,22 @@ done:
     if (sender >= 0) close(sender);
     if (receiver >= 0) close(receiver);
     return code;
+}
+
+/* Offline request-1 framing self-test. No packets sent. */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetRequest1CodecSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    uint8_t packet[64];
+    memset(packet, 0xa5, sizeof(packet));
+    if (mp_encode_open_connection_request1(packet, sizeof(packet), 32, 11) != 32) return 1;
+    if (packet[0] != 0x05 || memcmp(packet + 1, MP_RAKNET_MAGIC, 16) ||
+        packet[17] != 11) return 2;
+    for (int i = 18; i < 32; ++i) if (packet[i] != 0) return 3;
+    if (packet[32] != 0xa5 || packet[63] != 0xa5) return 4;
+    if (mp_encode_open_connection_request1(packet, sizeof(packet), 17, 11) != -1 ||
+        mp_encode_open_connection_request1(packet, sizeof(packet), 65, 11) != -1 ||
+        mp_encode_open_connection_request1(NULL, 32, 32, 11) != -1 ||
+        mp_encode_open_connection_request1(packet, sizeof(packet), 1493, 11) != -1) return 5;
+    return 0;
 }
