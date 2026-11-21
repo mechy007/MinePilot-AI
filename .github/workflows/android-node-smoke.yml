@@ -8,6 +8,10 @@ on:
       - 'scripts/stage-android-bedrock-sdk.*'
       - scripts/android-node-bedrock-smoke.cjs
       - 'scripts/android-xbox-auth-probe*.cjs'
+      - 'scripts/android-friend-world-session*.cjs'
+      - src/connection/prismarine-world-client.ts
+      - package.json
+      - tsconfig.json
       - 'android/**'
 jobs:
   package:
@@ -34,6 +38,8 @@ jobs:
         run: bash scripts/stage-android-node-smoke.sh
       - name: Test Xbox sign-in program with synthetic account responses
         run: node --test scripts/android-xbox-auth-probe.test.cjs
+      - name: Install engine build dependencies
+        run: npm install --ignore-scripts --omit=optional
       - name: Stage and test the Bedrock SDK bundle
         run: bash scripts/stage-android-bedrock-sdk.sh
       - name: Build debug APK with Node and the Bedrock SDK
@@ -57,6 +63,6 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: minepilot-android-arm64-bedrock-sdk-smoke
+          name: minepilot-android-arm64-friend-world-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

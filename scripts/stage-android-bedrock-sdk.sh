@@ -6,6 +6,7 @@ destination="$root/android/app/build/node-smoke/sdk"
 temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
 
+npm --prefix "$root" run build
 npm install --prefix "$temp" --no-save --ignore-scripts --omit=optional bedrock-protocol@3.61.0 minecraft-data@3.119.0
 node "$root/scripts/stage-android-bedrock-sdk.mjs" "$temp" 1.26.60
 data_notice="$temp/node_modules/minecraft-data/minecraft-data/README.md"
@@ -15,6 +16,9 @@ curl --fail --location --silent --show-error --retry 2 --max-time 45 \
 echo "70458c05b33622a05e4e2bbc5811f6221e4085003db25292ef122e0c830397a1  $data_notice" | sha256sum --check -
 cp "$root/scripts/android-node-bedrock-smoke.cjs" "$temp/node-smoke.cjs"
 cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
+cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
+cp "$root/dist/src/connection/prismarine-world-client.js" "$temp/prismarine-world-client.mjs"
+cp "$root/scripts/android-friend-world-session.test.cjs" "$temp/friend-world-session.test.cjs"
 
 python3 - "$temp" <<'PY'
 from pathlib import Path
@@ -24,7 +28,7 @@ import sys
 runtime = Path(sys.argv[1])
 zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
-    for entrypoint in ("node-smoke.cjs", "xbox-auth-probe.cjs"):
+    for entrypoint in ("node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs", "prismarine-world-client.mjs"):
         archive.write(runtime / entrypoint, entrypoint)
     for source in sorted((runtime / "node_modules").rglob("*")):
         if source.is_file() and not source.is_symlink():
@@ -38,6 +42,8 @@ PY
 mv "$temp/node_modules" "$temp/installed-modules"
 
 node "$temp/verify/node-smoke.cjs"
+cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
+node --test "$temp/verify/friend-world-session.test.cjs"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 du -h "$destination/bedrock-sdk.zip"

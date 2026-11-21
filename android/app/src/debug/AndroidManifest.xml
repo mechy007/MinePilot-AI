@@ -13,7 +13,7 @@
         <activity android:name=".XboxAuthProbeActivity"
             android:enabled="${minepilotNodeSmoke}"
             android:exported="${minepilotNodeSmoke}"
-            android:label="MinePilot Xbox Sign-in Test"
+            android:label="MinePilot Friend World Test"
             android:process=":xbox_auth_probe">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

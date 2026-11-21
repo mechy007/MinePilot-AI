@@ -8,9 +8,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
+import android.text.InputType;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.io.IOException;
@@ -25,12 +27,16 @@ public final class XboxAuthProbeActivity extends Activity {
     private static volatile Path statusPath;
     private static volatile String completedMessage;
     private static volatile boolean started;
+    private static volatile boolean stopping;
+    private static volatile boolean joining;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::refreshStatus;
     private TextView status;
     private Button start;
+    private EditText owner;
     private Button openMicrosoft;
+    private Button close;
 
     @Override public void onCreate(Bundle savedState) {
         super.onCreate(savedState);
@@ -44,8 +50,14 @@ public final class XboxAuthProbeActivity extends Activity {
         status.setTextIsSelectable(true);
         layout.addView(status);
 
+        owner = new EditText(this);
+        owner.setHint("Friend’s Xbox ID (XUID), optional");
+        owner.setInputType(InputType.TYPE_CLASS_NUMBER);
+        owner.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(20) });
+        layout.addView(owner);
+
         start = new Button(this);
-        start.setText("Start Microsoft sign-in");
+        start.setText("Start sign-in or join friend’s world");
         start.setOnClickListener(view -> startProbe());
         layout.addView(start);
 
@@ -54,9 +66,9 @@ public final class XboxAuthProbeActivity extends Activity {
         openMicrosoft.setVisibility(View.GONE);
         layout.addView(openMicrosoft);
 
-        Button close = new Button(this);
+        close = new Button(this);
         close.setText("End test");
-        close.setOnClickListener(view -> finish());
+        close.setOnClickListener(view -> endProbe());
         layout.addView(close);
         setContentView(layout);
     }
@@ -87,8 +99,42 @@ public final class XboxAuthProbeActivity extends Activity {
         }
     }
 
+    @Override public void onBackPressed() {
+        endProbe();
+    }
+
+    private void endProbe() {
+        Path file = statusPath;
+        if (joining && completedMessage == null && file != null) {
+            if (stopping) {
+                finish();
+                return;
+            }
+            try {
+                Files.write(file.resolveSibling("stop-session"), new byte[0]);
+                stopping = true;
+                refreshStatus();
+                return;
+            } catch (IOException ignored) {
+                // Fall back to closing the isolated runtime process.
+            }
+        }
+        finish();
+    }
+
     private void startProbe() {
         if (started) return;
+        String ownerXuid = owner.getText().toString().trim();
+        if (!ownerXuid.isEmpty()) {
+            try {
+                if (!ownerXuid.matches("[1-9][0-9]{0,19}")) throw new NumberFormatException();
+                Long.parseUnsignedLong(ownerXuid);
+            } catch (NumberFormatException invalid) {
+                owner.setError("Enter the world owner’s numeric Xbox ID.");
+                return;
+            }
+        }
+        joining = !ownerXuid.isEmpty();
         started = true;
         refreshStatus();
         new Thread(() -> {
@@ -100,9 +146,11 @@ public final class XboxAuthProbeActivity extends Activity {
                 }
                 directory = Files.createTempDirectory(cache, "xbox-auth-probe-");
                 NodeSmokeActivity.unpackSdk(this, directory);
+                if (joining) Files.write(directory.resolve("owner-xuid"), ownerXuid.getBytes(StandardCharsets.UTF_8));
                 statusPath = directory.resolve("auth-status.json");
                 System.loadLibrary("minepilot_node_smoke");
-                int exitCode = NodeSmokeActivity.runNode(directory.resolve("xbox-auth-probe.cjs").toString());
+                String entrypoint = joining ? "friend-world-session.cjs" : "xbox-auth-probe.cjs";
+                int exitCode = NodeSmokeActivity.runNode(directory.resolve(entrypoint).toString());
                 JSONObject last = readStatus();
                 completedMessage = last == null
                         ? "FAIL. The sign-in runtime exited with code " + exitCode + "."
@@ -119,6 +167,8 @@ public final class XboxAuthProbeActivity extends Activity {
         handler.removeCallbacks(poll);
         if (!started) return;
         start.setEnabled(false);
+        owner.setEnabled(false);
+        close.setText(stopping && completedMessage == null ? "Force close" : "End test");
         if (completedMessage != null) {
             status.setText(completedMessage);
             openMicrosoft.setVisibility(View.GONE);
@@ -128,7 +178,9 @@ public final class XboxAuthProbeActivity extends Activity {
         JSONObject current = readStatus();
         String phase = current == null ? "" : current.optString("phase");
         openMicrosoft.setVisibility(View.GONE);
-        if ("device_code".equals(phase)) {
+        if (stopping) {
+            status.setText("Closing the friend-world session…");
+        } else if ("device_code".equals(phase)) {
             String url = current.optString("url");
             Uri uri = Uri.parse(url);
             if ("https".equals(uri.getScheme()) && uri.getUserInfo() == null && uri.getPort() == -1
@@ -147,6 +199,16 @@ public final class XboxAuthProbeActivity extends Activity {
             }
         } else if ("bedrock_credentials".equals(phase)) {
             status.setText("Xbox profile verified. Requesting Minecraft Bedrock credentials…");
+        } else if ("discovery".equals(phase)) {
+            status.setText("Looking for the specified friend’s Xbox world…");
+        } else if ("connection".equals(phase)) {
+            status.setText("Friend’s world found. Waiting for Bedrock to finish joining…");
+        } else if ("spawned".equals(phase)) {
+            status.setText("Bedrock spawn received. Ask the host to confirm the bot appears in the player list.\n\n"
+                    + "Connected for " + current.optLong("seconds") + " seconds\n"
+                    + "Level chunk packets received " + current.optLong("chunks"));
+        } else if ("disconnected".equals(phase) || "failed".equals(phase) || "stopped".equals(phase)) {
+            status.setText(finalMessage(current, -1));
         } else {
             status.setText("Starting Microsoft sign-in…");
         }
@@ -167,6 +229,15 @@ public final class XboxAuthProbeActivity extends Activity {
         if (exitCode == 0 && "verified".equals(snapshot.optString("phase"))) {
             return "PASS. Xbox and Minecraft Bedrock verified for " + snapshot.optString("gamertag")
                     + ".\nXbox ID " + snapshot.optString("xuid") + ".";
+        }
+        if ("disconnected".equals(snapshot.optString("phase"))) return "The friend-world connection closed.";
+        if ("stopped".equals(snapshot.optString("phase"))) return "Friend-world test ended.";
+        switch (snapshot.optString("stage")) {
+            case "owner": return "Enter your friend’s Xbox ID. The bot and host must use different accounts.";
+            case "discovery": return "The selected owner’s compatible world could not be found on Xbox.";
+            case "connection": return "The friend’s world was found, but the Bedrock session failed.";
+            case "runtime": return "The embedded friend-world runtime could not start.";
+            default: break;
         }
         if ("bedrock_credentials".equals(snapshot.optString("stage"))) {
             return "FAIL. Xbox sign-in passed, but Minecraft Bedrock credentials could not be issued.";
