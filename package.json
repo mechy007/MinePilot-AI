@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/tests/*.test.js"
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "friend:join": "npm run build && node dist/src/connection/friend-world-cli.js"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
