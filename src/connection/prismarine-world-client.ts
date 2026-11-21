@@ -34,6 +34,8 @@ export function pickOwnerWorld(sessions: readonly WorldSessionCandidate[], owner
 export class PrismarineWorldClient {
   private client: BedrockClientLike | null = null;
   private startGamePacket: unknown = null;
+  private lastError: Error | null = null;
+  get connectionError(): Error | null { return this.lastError; }
   get lastStartGamePacket(): unknown { return this.startGamePacket; }
   private readonly onStartGame = (...args: unknown[]) => { this.startGamePacket = args[0]; };
   get activeClient(): BedrockClientLike | null { return this.client; }
@@ -43,9 +45,11 @@ export class PrismarineWorldClient {
     private readonly createClient: BedrockClientFactory = loadBedrockClient,
     private readonly auth?: { profilesFolder?: string | false; onMsaCode?: Parameters<BedrockClientFactory>[0]['onMsaCode'] }
   ) {}
-  async connectAndSpawn(signal: AbortSignal): Promise<void> {
+  async connectAndSpawn(signal: AbortSignal, timeoutMs = 45000): Promise<void> {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 300000) throw new RangeError('Invalid join timeout');
     if (this.client) throw new Error('Already connected');
     if (signal.aborted) throw new Error('Connection cancelled');
+    this.lastError = null;
     const client = this.createClient({
       username: this.username,
       offline: false,
@@ -57,7 +61,9 @@ export class PrismarineWorldClient {
     client.on('start_game', this.onStartGame);
     return new Promise<void>((resolve, reject) => {
       let settled = false;
+      const timer = setTimeout(() => done(new Error('Timed out waiting for friend-world spawn')), timeoutMs);
       const cleanup = () => {
+        clearTimeout(timer);
         client.removeListener('spawn', spawned);
         client.removeListener('error', failed);
         client.removeListener('close', closed);
@@ -68,6 +74,7 @@ export class PrismarineWorldClient {
         settled = true;
         cleanup();
         if (error) {
+          this.lastError = error;
           this.client = null;
           client.removeListener('start_game', this.onStartGame);
           client.close();
@@ -75,7 +82,10 @@ export class PrismarineWorldClient {
         } else resolve();
       };
       const spawned = () => done();
-      const failed = () => done(new Error('Bedrock connection failed'));
+      const failed = (...args: unknown[]) => {
+        const error = args[0];
+        done(new Error(error instanceof Error ? `Bedrock connection failed: ${error.message}` : 'Bedrock connection failed'));
+      };
       const closed = () => done(new Error('Bedrock connection closed before spawn'));
       const aborted = () => done(new Error('Connection cancelled'));
       client.on('spawn', spawned);
