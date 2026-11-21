@@ -7,6 +7,7 @@ on:
       - scripts/stage-android-node-smoke.sh
       - 'scripts/stage-android-bedrock-sdk.*'
       - scripts/android-node-bedrock-smoke.cjs
+      - 'scripts/android-xbox-auth-probe*.cjs'
       - 'android/**'
 jobs:
   package:
@@ -31,6 +32,8 @@ jobs:
         run: sdkmanager 'build-tools;35.0.0' 'platforms;android-35' 'ndk;28.0.13004108' 'cmake;3.22.1'
       - name: Verify and stage ARM64 Node
         run: bash scripts/stage-android-node-smoke.sh
+      - name: Test Xbox sign-in program with synthetic account responses
+        run: node --test scripts/android-xbox-auth-probe.test.cjs
       - name: Stage and test the Bedrock SDK bundle
         run: bash scripts/stage-android-bedrock-sdk.sh
       - name: Build debug APK with Node and the Bedrock SDK
