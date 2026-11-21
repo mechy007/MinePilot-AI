@@ -3,6 +3,8 @@
 #include "raknet_ping.h"
 #include "raknet_pong.h"
 #include "raknet_open_connection.h"
+#include "raknet_open_connection_reply.h"
+#include "raknet_open_connection_stage2.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -134,5 +136,72 @@ Java_ai_minepilot_app_NativeBridge_nativeRaknetRequest1CodecSelfTest(JNIEnv *env
         boundary[17] != 11 || boundary[18] != 0 ||
         boundary[1491] != 0 || boundary[1492] != 0xa5) return 7;
     if (mp_encode_open_connection_request1(boundary, sizeof(boundary), 1493, 11) != -1) return 8;
+    return 0;
+}
+
+/* Offline reply-1 parsing only; no live server handshake. */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetReply1CodecSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    uint8_t p[MP_RAKNET_REPLY1_SIZE] = {0};
+    p[0] = 6;
+    memcpy(p + 1, MP_RAKNET_MAGIC, 16);
+    for (int i = 0; i < 8; ++i) p[17+i] = (uint8_t)(i+1);
+    p[26] = 5; p[27] = 120;
+    mp_raknet_reply1 result = {0};
+    if (mp_decode_open_connection_reply1(p, sizeof(p), &result) ||
+        result.server_guid != UINT64_C(0x0102030405060708) ||
+        result.mtu != 1400 || result.security_enabled != 0) return 1;
+    if (mp_decode_open_connection_reply1(p, sizeof(p)-1, &result) == 0) return 2;
+    p[1] ^= 1;
+    if (mp_decode_open_connection_reply1(p, sizeof(p), &result) == 0) return 3;
+    p[1] ^= 1;
+    p[25] = 2;
+    if (mp_decode_open_connection_reply1(p, sizeof(p), &result) == 0) return 4;
+    p[25] = 1;
+    if (mp_decode_open_connection_reply1(p, sizeof(p), &result) ||
+        result.security_enabled != 1) return 5;
+    p[26] = 0; p[27] = 17;
+    if (mp_decode_open_connection_reply1(p, sizeof(p), &result) == 0) return 6;
+    p[26] = 5; p[27] = 213;
+    if (mp_decode_open_connection_reply1(p, sizeof(p), &result) == 0) return 7;
+    return 0;
+}
+
+/* Offline RakNet request-2 and reply-2 test vectors; no network traffic. */
+JNIEXPORT jint JNICALL
+Java_ai_minepilot_app_NativeBridge_nativeRaknetStage2CodecSelfTest(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    mp_raknet_ipv4 server = {{127,0,0,1}, 19132};
+    uint8_t request[MP_RAKNET_REQUEST2_SIZE+1] = {0};
+    if (mp_encode_open_connection_request2(request, sizeof(request), &server, 1400,
+        UINT64_C(0x0102030405060708)) != MP_RAKNET_REQUEST2_SIZE) return 1;
+    const uint8_t expected_request[MP_RAKNET_REQUEST2_SIZE] = {
+        0x07, 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe,
+        0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78,
+        0x04, 0x80, 0xff, 0xff, 0xfe, 0x4a, 0xbc,
+        0x05, 0x78, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
+    };
+    if (memcmp(request, expected_request, sizeof(expected_request))) return 2;
+    if (mp_encode_open_connection_request2(request, 33, &server, 1400, 0) != -1 ||
+        mp_encode_open_connection_request2(NULL, 34, &server, 1400, 0) != -1 ||
+        mp_encode_open_connection_request2(request, 34, &server, 1493, 0) != -1) return 3;
+    uint8_t reply[MP_RAKNET_REPLY2_SIZE] = {
+        0x08, 0x00, 0xff, 0xff, 0x00, 0xfe, 0xfe, 0xfe, 0xfe,
+        0xfd, 0xfd, 0xfd, 0xfd, 0x12, 0x34, 0x56, 0x78,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x04, 0x80, 0xff, 0xff, 0xfe, 0x4a, 0xbc,
+        0x05, 0x78, 0x00
+    };
+    mp_raknet_reply2 parsed = {0};
+    if (mp_decode_open_connection_reply2(reply, sizeof(reply), &parsed) ||
+        parsed.server_guid != UINT64_C(0x0102030405060708) ||
+        parsed.mtu != 1400 || parsed.client_address.port != 19132 ||
+        memcmp(parsed.client_address.ipv4, server.ipv4, 4)) return 4;
+    if (mp_decode_open_connection_reply2(reply, 34, &parsed) == 0) return 5;
+    reply[25] = 6;
+    if (mp_decode_open_connection_reply2(reply, 35, &parsed) == 0) return 6;
+    reply[25] = 4; reply[34] = 2;
+    if (mp_decode_open_connection_reply2(reply, 35, &parsed) == 0) return 7;
     return 0;
 }
