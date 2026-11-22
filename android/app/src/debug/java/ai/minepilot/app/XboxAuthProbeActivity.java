@@ -246,6 +246,8 @@ public final class XboxAuthProbeActivity extends Activity {
             for (int count; (count = in.read(buffer)) != -1;) {
                 for (int i = 0; i < count; i++) {
                     if (buffer[i] == '\n') {
+                        // The newline can arrive in the same pipe read as the JSON.
+                        bytes.write(buffer, 0, i);
                         persistAccount(bytes);
                         return;
                     }
