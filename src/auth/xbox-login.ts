@@ -130,8 +130,9 @@ export function createDefaultAuthflowFactory(): AuthflowFactory {
 }
 
 function assertSafeCacheDir(dir: string): void {
-  const parsed = path.parse(dir);
-  const depth = dir.slice(parsed.root.length).split(path.sep).filter(Boolean).length;
+  const normalized = path.resolve(dir);
+  const parsed = path.parse(normalized);
+  const depth = normalized.slice(parsed.root.length).split(path.sep).filter(Boolean).length;
   if (!path.isAbsolute(dir) || depth < 2) throw new Error('cacheDir must be an absolute app-private folder');
 }
 
@@ -150,12 +151,13 @@ export class XboxLoginService {
   private inflight: Promise<AuthflowLike> | null = null;
   private abort: AbortController | null = null;
   private attempt = 0;
+  private signOutPending: Promise<void> | null = null;
 
   constructor(config: XboxLoginConfig, report: (event: LoginEvent) => void = () => {}) {
     if (!config.username.trim()) throw new Error('Xbox username required');
     assertSafeCacheDir(config.cacheDir);
     this.username = config.username;
-    this.cacheDir = config.cacheDir;
+    this.cacheDir = path.resolve(config.cacheDir);
     this.factory = config.authflowFactory ?? createDefaultAuthflowFactory();
     this.report = report;
   }
@@ -170,6 +172,7 @@ export class XboxLoginService {
   }
 
   signIn(options: SignInOptions = {}): Promise<AuthflowLike> {
+    if (this.signOutPending) return this.signOutPending.then(() => this.signIn(options));
     if (this.inflight) return this.inflight;
     const run: Promise<AuthflowLike> = this.runSignIn(options).finally(() => {
       if (this.inflight === run) this.inflight = null;
@@ -179,8 +182,9 @@ export class XboxLoginService {
   }
 
   private async runSignIn(options: SignInOptions): Promise<AuthflowLike> {
-    const interactive = options.interactive ?? true;
+    const interactive = options.interactive ?? false;
     const attempt = ++this.attempt;
+    let active = true;
     const abort = new AbortController();
     this.abort = abort;
 
@@ -200,9 +204,11 @@ export class XboxLoginService {
 
     try {
       this.emit('signing_in', 'Checking saved Xbox login');
+      if (abort.signal.aborted) throw new LoginError('cancelled', FRIENDLY.cancelled);
       await mkdir(this.cacheDir, { recursive: true, mode: 0o700 });
+      if (abort.signal.aborted) throw new LoginError('cancelled', FRIENDLY.cancelled);
       const onCode = (raw: RawDeviceCode) => {
-        if (attempt !== this.attempt) return;
+        if (!active || abort.signal.aborted || attempt !== this.attempt) return;
         if (!interactive) {
           rejectGate(new LoginError('interactive_required', FRIENDLY.interactive_required));
           return;
@@ -218,7 +224,7 @@ export class XboxLoginService {
       const token = flow.getXboxToken();
       token.catch(() => {});
       await Promise.race([token, gate]);
-      if (attempt !== this.attempt) throw new LoginError('cancelled', FRIENDLY.cancelled);
+      if (abort.signal.aborted || attempt !== this.attempt) throw new LoginError('cancelled', FRIENDLY.cancelled);
       this.flow = flow;
       this.emit('signed_in', 'Signed in to Xbox Live');
       return flow;
@@ -231,6 +237,7 @@ export class XboxLoginService {
       }
       throw failure;
     } finally {
+      active = false;
       external?.removeEventListener('abort', onExternalAbort);
       abort.signal.removeEventListener('abort', onAbort);
       if (this.abort === abort) this.abort = null;
@@ -239,11 +246,17 @@ export class XboxLoginService {
 
   /** Cancels any sign-in in progress, deletes saved tokens, and returns to signed_out. */
   async signOut(): Promise<void> {
+    if (this.signOutPending) return this.signOutPending;
     this.attempt++;
     this.abort?.abort();
     this.abort = null;
     this.flow = null;
-    await rm(this.cacheDir, { recursive: true, force: true });
-    this.emit('signed_out', 'Signed out');
+    const pending = (async () => {
+      await rm(this.cacheDir, { recursive: true, force: true });
+      this.flow = null;
+      this.emit('signed_out', 'Signed out');
+    })();
+    this.signOutPending = pending;
+    try { await pending; } finally { if (this.signOutPending === pending) this.signOutPending = null; }
   }
 }
