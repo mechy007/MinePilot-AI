@@ -41,7 +41,7 @@ public final class XboxSignInActivity extends Activity {
         c.setRequestMethod("POST"); c.setConnectTimeout(12000); c.setReadTimeout(12000);
         c.setDoOutput(true);
         c.setRequestProperty("Content-Type", bearer == null ? "application/x-www-form-urlencoded" : "application/json");
-        if (bearer != null) c.setRequestProperty("Authorization", "Bearer " + bearer);
+        if (bearer != null && !bearer.isEmpty()) c.setRequestProperty("Authorization", "Bearer " + bearer);
         try (OutputStream out = c.getOutputStream()) { out.write(data.getBytes(StandardCharsets.UTF_8)); }
         try {
             String response = read(c);
