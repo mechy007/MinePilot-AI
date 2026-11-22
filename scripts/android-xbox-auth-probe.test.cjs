@@ -106,8 +106,9 @@ test('connects and hands off a verified Xbox account without requesting Bedrock'
   const events = [];
   const refreshToken = 'synthetic-refresh-token';
   class Authflow {
-    constructor(username, cacheFactory) {
-      this.cache = cacheFactory({ cacheName: 'live' });
+    constructor(username, cacheFactory, options) {
+      assert.equal(options.flow, 'sisu');
+      this.cache = cacheFactory({ cacheName: 'sisu' });
     }
     async getMsaToken() {
       events.push('microsoft');
