@@ -38,30 +38,32 @@ public final class XboxSignInService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (started) return START_NOT_STICKY;
         String host = intent == null ? null : intent.getStringExtra("host");
+        boolean friends = intent != null && intent.getBooleanExtra("friends", false) && host == null;
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(
                 SIGN_IN_CHANNEL, "Xbox sign-in", NotificationManager.IMPORTANCE_LOW));
         Intent resume = new Intent(this, XboxAuthProbeActivity.class)
                 .putExtra("host", host)
+                .putExtra("friends", friends)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent open = PendingIntent.getActivity(this, ACTIVE_NOTIFICATION, resume,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         startForeground(ACTIVE_NOTIFICATION, new Notification.Builder(this, SIGN_IN_CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setContentTitle(host == null ? "Xbox sign-in in progress" : "Connecting to friend’s world")
+                .setContentTitle(friends ? "Refreshing Xbox friends" : host == null ? "Xbox sign-in in progress" : "Connecting to friend’s world")
                 .setContentText("Tap to return to MinePilot.")
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build());
-        notifyOnAccountSave = host == null || !BotAccount.saved(this);
-        startProbe(host);
+        notifyOnAccountSave = !friends && (host == null || !BotAccount.saved(this));
+        startProbe(host, friends);
         return START_NOT_STICKY;
     }
 
-    private void startProbe(String host) {
+    private void startProbe(String host, boolean friends) {
         joining = host != null;
-        if (!joining) XboxSignInReceiver.record(this, "");
+        if (!joining && !friends) XboxSignInReceiver.record(this, "");
         started = true;
         new Thread(() -> {
             Path directory = null;
@@ -84,16 +86,23 @@ public final class XboxSignInService extends Service {
                 accountWriter.start();
                 int exitCode;
                 JSONObject sessionConfig = new JSONObject().put("saveFd", savePipe[1].getFd());
-                if (joining) {
+                if (joining || friends) {
+                    if (friends) {
+                        String owner = BotAccount.xuid(this);
+                        if (owner.isEmpty()) throw new IOException("Xbox account is unavailable");
+                        sessionConfig.put("friendsOwner", owner);
+                    }
                     android.os.ParcelFileDescriptor account = BotAccount.saved(this)
                             ? getContentResolver().openFileDescriptor(
                                     Uri.parse("content://" + getPackageName() + ".bot-session/refresh"), "r")
                             : null;
                     try {
+                        if (friends && account == null) throw new IOException("Xbox session is unavailable");
                         if (account != null) sessionConfig.put("fd", account.getFd());
                         Files.write(directory.resolve("device-session.json"),
                                 sessionConfig.toString().getBytes(StandardCharsets.UTF_8));
-                        exitCode = NodeSmokeActivity.runNode(directory.resolve("friend-world-session.cjs").toString());
+                        exitCode = NodeSmokeActivity.runNode(directory.resolve(
+                                friends ? "xbox-auth-probe.cjs" : "friend-world-session.cjs").toString());
                     } finally {
                         if (account != null) account.close();
                     }
@@ -105,7 +114,11 @@ public final class XboxSignInService extends Service {
                 savePipe[1].close();
                 accountWriter.join(5000);
                 JSONObject last = readStatus();
-                completedMessage = !joining && accountReadBack
+                if (friends && exitCode == 0 && last != null && "friends_loaded".equals(last.optString("phase"))) {
+                    last.put("updatedAt", System.currentTimeMillis());
+                    XboxSignInReceiver.recordFriends(this, last);
+                    completedMessage = "Friends updated. Return to the Xbox tab to view them.";
+                } else completedMessage = !friends && !joining && accountReadBack
                         ? "Xbox account verified and saved on this phone."
                         : last == null
                         ? "FAIL. The sign-in runtime exited with code " + exitCode + "."
@@ -124,7 +137,7 @@ public final class XboxSignInService extends Service {
                         Thread.currentThread().interrupt();
                     }
                 }
-                if (!joining && completedMessage != null) {
+                if (!joining && !friends && completedMessage != null) {
                     XboxSignInReceiver.record(this, completedMessage);
                 }
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
@@ -285,6 +298,10 @@ public final class XboxSignInService extends Service {
             case "microsoft_token": return "Microsoft approval or token exchange did not complete. Start a fresh sign-in code.";
             case "xbox_profile": return "Microsoft approval succeeded, but the Xbox profile could not be loaded. Check that this account has an Xbox gamertag.";
             case "account_save": return "Xbox profile was verified, but MinePilot could not save the account securely.";
+            case "friends":
+                int friendsStatus = snapshot.optInt("httpStatus");
+                return "Xbox friends could not be refreshed" + (friendsStatus >= 400 && friendsStatus <= 599
+                        ? " (HTTP " + friendsStatus + ")." : ".");
             case "owner": return "Could not identify a separate host. Check your friend’s gamertag or XUID.";
             case "discovery": return "The selected owner’s compatible world could not be found on Xbox.";
             case "connection": return "The friend’s world was found, but the Bedrock session failed.";
