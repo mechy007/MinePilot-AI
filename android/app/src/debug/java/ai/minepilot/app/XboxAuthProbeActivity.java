@@ -11,7 +11,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.view.View;
-import android.graphics.Color;
+import android.widget.ImageView;
+import android.view.WindowInsets;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -39,9 +40,9 @@ public final class XboxAuthProbeActivity extends Activity {
     private static boolean browserOpened;
     private String currentCode;
     private boolean explicitlyClosed;
-    private static final int BG = Color.rgb(10, 12, 23);
-    private static final int PANEL = Color.rgb(23, 27, 45);
-    private static final int PURPLE = Color.rgb(157, 103, 255);
+    private static final int BG = 0xff151b15;
+    private static final int PANEL = 0xff222c22;
+    private static final int GRASS = 0xffa8d67d;
     private int dp(int value) { return (int) (getResources().getDisplayMetrics().density * value + .5f); }
 
     @Override public void onCreate(Bundle savedState) {
@@ -51,12 +52,27 @@ public final class XboxAuthProbeActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
         root.setPadding(dp(20), dp(18), dp(20), dp(18));
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            root.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout());
+                view.setPadding(dp(20) + bars.left, dp(18) + bars.top, dp(20) + bars.right, dp(18) + bars.bottom);
+                return insets;
+            });
+        }
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.drawable.minepilot_icon_foreground);
+        mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        heading.addView(mark, new LinearLayout.LayoutParams(dp(46), dp(46)));
         TextView brand = new TextView(this);
-        brand.setText("◆  MINEPILOT");
-        brand.setTextColor(Color.WHITE);
+        brand.setText("MinePilot");
+        brand.setTextColor(0xffeff2e5);
         brand.setTextSize(20);
         brand.setTypeface(null, Typeface.BOLD);
-        root.addView(brand, new LinearLayout.LayoutParams(-1, dp(52)));
+        heading.addView(brand);
+        root.addView(heading, new LinearLayout.LayoutParams(-1, dp(52)));
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
@@ -67,14 +83,14 @@ public final class XboxAuthProbeActivity extends Activity {
 
         TextView title = new TextView(this);
         title.setText(friendsIntent() ? "Refresh Xbox friends" : joiningIntent() ? "Connect to your friend" : "Connect your Xbox account");
-        title.setTextColor(Color.WHITE);
+        title.setTextColor(0xffeff2e5);
         title.setTextSize(26);
         title.setTypeface(null, Typeface.BOLD);
         layout.addView(title);
         TextView description = new TextView(this);
         description.setText(friendsIntent() ? "MinePilot is checking your saved Xbox account for friends and presence."
                 : "MinePilot will open Microsoft sign-in. Approve the bot account there, then return here while MinePilot finishes automatically.");
-        description.setTextColor(Color.rgb(166, 174, 197));
+        description.setTextColor(0xffbac4b2);
         description.setTextSize(15);
         description.setPadding(0, dp(8), 0, dp(18));
         layout.addView(description);
@@ -82,10 +98,10 @@ public final class XboxAuthProbeActivity extends Activity {
         LinearLayout accountCard = new LinearLayout(this);
         accountCard.setOrientation(LinearLayout.VERTICAL);
         accountCard.setPadding(dp(16), dp(16), dp(16), dp(16));
-        accountCard.setBackground(rounded(PANEL, 18));
+        accountCard.setBackground(rounded(PANEL, 6));
         status = new TextView(this);
         status.setTextSize(16);
-        status.setTextColor(Color.WHITE);
+        status.setTextColor(0xffeff2e5);
         status.setText("Preparing secure Microsoft sign-in…");
         accountCard.addView(status);
 
@@ -101,7 +117,8 @@ public final class XboxAuthProbeActivity extends Activity {
         layout.addView(accountCard);
 
         close = authButton(joiningIntent() ? "Stop connection" : "Cancel sign-in");
-        close.setBackground(rounded(Color.rgb(39, 45, 66), 14));
+        close.setBackground(rounded(PANEL, 6));
+        close.setTextColor(0xffeff2e5);
         close.setOnClickListener(view -> endProbe());
         root.addView(close, new LinearLayout.LayoutParams(-1, dp(54)));
         setContentView(root);
@@ -243,12 +260,12 @@ public final class XboxAuthProbeActivity extends Activity {
     private Button authButton(String title) {
         Button button = new Button(this);
         button.setText(title);
-        button.setTextColor(Color.WHITE);
+        button.setTextColor(0xff182414);
         button.setTextSize(15);
         button.setAllCaps(false);
         button.setTypeface(null, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
-        button.setBackground(rounded(PURPLE, 14));
+        button.setBackground(rounded(GRASS, 6));
         return button;
     }
 
