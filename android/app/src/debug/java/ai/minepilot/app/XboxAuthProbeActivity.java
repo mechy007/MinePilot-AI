@@ -1,6 +1,10 @@
 package ai.minepilot.app;
 
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -9,6 +13,7 @@ import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -50,6 +55,9 @@ public final class XboxAuthProbeActivity extends Activity {
     private Button copyCode;
     private boolean browserOpened;
     private String currentCode;
+    private boolean notifyOnAccountSave;
+    private static final String SIGN_IN_CHANNEL = "minepilot_sign_in";
+    private static final int SIGN_IN_NOTIFICATION = 6201;
     private static final int BG = Color.rgb(10, 12, 23);
     private static final int PANEL = Color.rgb(23, 27, 45);
     private static final int PURPLE = Color.rgb(157, 103, 255);
@@ -115,7 +123,9 @@ public final class XboxAuthProbeActivity extends Activity {
         close.setOnClickListener(view -> endProbe());
         root.addView(close, new LinearLayout.LayoutParams(-1, dp(54)));
         setContentView(root);
-        if (getIntent().getBooleanExtra("switch_account", false)) BotAccount.forget(this);
+        boolean switchingAccount = getIntent().getBooleanExtra("switch_account", false);
+        notifyOnAccountSave = !BotAccount.saved(this) || switchingAccount;
+        if (switchingAccount) BotAccount.forget(this);
         startProbe();
     }
 
@@ -264,6 +274,38 @@ public final class XboxAuthProbeActivity extends Activity {
     private void persistAccount(java.io.ByteArrayOutputStream bytes) throws Exception {
         if (bytes.size() == 0) return;
         BotAccount.save(this, new JSONObject(bytes.toString("UTF-8")));
+        if (notifyOnAccountSave) {
+            notifyOnAccountSave = false;
+            showSignInCompleteNotification();
+        }
+    }
+
+    private void showSignInCompleteNotification() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(new NotificationChannel(
+                    SIGN_IN_CHANNEL, "Xbox sign-in", NotificationManager.IMPORTANCE_LOW));
+        }
+        Intent dashboard = new Intent(this, DashboardActivity.class)
+                .putExtra("open_tab", "Xbox")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent returnToApp = PendingIntent.getActivity(this, SIGN_IN_NOTIFICATION, dashboard,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification.Builder notification = Build.VERSION.SDK_INT >= 26
+                ? new Notification.Builder(this, SIGN_IN_CHANNEL)
+                : new Notification.Builder(this);
+        notification.setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setContentTitle("Microsoft sign-in complete")
+                .setContentText("Tap to return to MinePilot and continue.")
+                .setContentIntent(returnToApp)
+                .setAutoCancel(true)
+                .setPriority(Notification.PRIORITY_LOW);
+        manager.notify(SIGN_IN_NOTIFICATION, notification.build());
     }
 
     private void saveActiveNetworkAddresses(Path directory) throws IOException {
