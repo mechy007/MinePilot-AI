@@ -19,6 +19,8 @@ export type BedrockClientFactory = (options: {
   version: string;
   profilesFolder?: string | false;
   onMsaCode?: (code: { user_code?: string; verification_uri?: string; verification_uri_complete?: string; message?: string }) => void;
+  /** A signed-in prismarine-auth Authflow. When set, bedrock-protocol reuses it instead of starting its own login. */
+  authflow?: unknown;
   world: { pickSession: (sessions: WorldSessionCandidate[]) => WorldSessionCandidate };
 }) => BedrockClientLike;
 
@@ -59,7 +61,7 @@ export class PrismarineWorldClient {
     private readonly username: string,
     private readonly ownerXuid: string,
     private readonly createClient: BedrockClientFactory = loadBedrockClient,
-    private readonly auth?: { profilesFolder?: string | false; onMsaCode?: Parameters<BedrockClientFactory>[0]['onMsaCode'] }
+    private readonly auth?: { profilesFolder?: string | false; onMsaCode?: Parameters<BedrockClientFactory>[0]['onMsaCode']; authflow?: unknown }
   ) {}
   async connectAndSpawn(signal: AbortSignal, timeoutMs = 45000): Promise<void> {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 300000) throw new RangeError('Invalid join timeout');
