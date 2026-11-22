@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { deviceCodeStatus, verifyXbox } = require('./android-xbox-auth-probe.cjs');
+const { connectXboxAccount, deviceCodeStatus, verifyXbox } = require('./android-xbox-auth-probe.cjs');
 
 test('accepts official verification links and strips query parameters', () => {
   assert.deepEqual(deviceCodeStatus({
@@ -100,4 +100,29 @@ test('waits for interactive Xbox authorization before requesting the profile', a
   finishSignIn();
   await assert.rejects(result, /authentication probe failed/);
   assert.equal(profileRequested, true);
+});
+
+test('connects and hands off a verified Xbox account without requesting Bedrock', async () => {
+  const events = [];
+  const refreshToken = 'synthetic-refresh-token';
+  class Authflow {
+    constructor(username, cacheFactory) {
+      this.cache = cacheFactory({ cacheName: 'live' });
+    }
+    async getMsaToken() {
+      events.push('microsoft');
+      await this.cache.setCached({ token: { refresh_token: refreshToken } });
+    }
+    async getXboxToken() { events.push('xbox'); }
+  }
+  class XboxClient {
+    async getProfile() { return { xuid: '42', gamertag: 'TestBot' }; }
+  }
+  await connectXboxAccount({ Authflow, XboxClient, Titles: {} },
+    status => events.push(status.phase),
+    account => {
+      assert.deepEqual(account, { refreshToken, xuid: '42', gamertag: 'TestBot' });
+      events.push('save');
+    });
+  assert.deepEqual(events, ['microsoft', 'microsoft_approved', 'xbox', 'save']);
 });
