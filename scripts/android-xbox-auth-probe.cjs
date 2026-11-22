@@ -26,7 +26,7 @@ function deviceCodeStatus({ verification_uri, user_code }) {
 }
 
 async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount = null) {
-  let stage = 'microsoft_xbox';
+  let stage = 'microsoft_token';
   try {
     const initialCache = refreshToken
       ? { token: { access_token: '', refresh_token: refreshToken, expires_in: 0, obtainedOn: 0 } }
@@ -39,12 +39,14 @@ async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publis
     }, code => publish(deviceCodeStatus(code)));
     // Wait for interactive sign-in before the Xbox profile request starts its deadline.
     await auth.getXboxToken('http://xboxlive.com');
+    stage = 'xbox_profile';
     const xbox = new XboxClient(auth);
     const profile = await xbox.getProfile('me');
     if (typeof profile.xuid !== 'string' || !/^\d{1,20}$/.test(profile.xuid) || typeof profile.gamertag !== 'string' || !profile.gamertag) {
       throw new Error('Xbox profile identity missing');
     }
 
+    stage = 'account_save';
     // Save the approved Xbox account before Bedrock-specific checks. A Bedrock
     // entitlement or credential failure must not discard a valid Xbox login.
     if (saveAccount) {
