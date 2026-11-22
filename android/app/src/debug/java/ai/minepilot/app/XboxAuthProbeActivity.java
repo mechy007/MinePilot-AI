@@ -58,9 +58,9 @@ public final class XboxAuthProbeActivity extends Activity {
 
         owner = new EditText(this);
         owner.setText(getSharedPreferences("DashboardActivity", MODE_PRIVATE).getString("owner_xuid", ""));
-        owner.setHint("Friend’s Xbox ID (XUID), optional");
-        owner.setInputType(InputType.TYPE_CLASS_NUMBER);
-        owner.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(20) });
+        owner.setHint("Friend’s Xbox gamertag or numeric XUID");
+        owner.setInputType(InputType.TYPE_CLASS_TEXT);
+        owner.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(32) });
         layout.addView(owner);
 
         start = new Button(this);
@@ -136,7 +136,7 @@ public final class XboxAuthProbeActivity extends Activity {
     private void startProbe() {
         if (started) return;
         String ownerXuid = owner.getText().toString().trim();
-        if (!ownerXuid.isEmpty()) {
+        if (!ownerXuid.isEmpty() && ownerXuid.matches("[0-9]+")) {
             try {
                 if (!ownerXuid.matches("[1-9][0-9]{0,19}")) throw new NumberFormatException();
                 Long.parseUnsignedLong(ownerXuid);
@@ -146,7 +146,11 @@ public final class XboxAuthProbeActivity extends Activity {
             }
         }
         if (joinRequested && ownerXuid.isEmpty()) {
-            owner.setError("Enter your friend’s numeric XUID before joining.");
+            owner.setError("Enter your friend’s gamertag or XUID.");
+            return;
+        }
+        if (joinRequested && !ownerXuid.matches("[0-9]+")) {
+            owner.setError("Gamertag lookup is not connected yet. Enter the numeric XUID to join for now.");
             return;
         }
         joining = joinRequested;
