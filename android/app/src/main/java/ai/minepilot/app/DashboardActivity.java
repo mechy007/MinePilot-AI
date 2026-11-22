@@ -134,6 +134,8 @@ public final class DashboardActivity extends Activity {
         if (state != null) {
             currentTab = state.getString("tab", "Home");
             xuidDraft = state.getString("xuid_draft");
+        } else if ("Xbox".equals(getIntent().getStringExtra("open_tab"))) {
+            currentTab = "Xbox";
         }
         show(currentTab);
     }
