@@ -157,7 +157,7 @@ async function loadFriends(xbox, owner) {
       { contractVersion: '5' });
     if (!Array.isArray(page?.people)) throw new Error('Xbox people response missing');
     for (const person of page.people) {
-      if (person.isFriend === true && typeof person.xuid === 'string' && /^\d{1,20}$/.test(person.xuid)) {
+      if ((person.isFriend ?? person.isFollowingCaller) === true && typeof person.xuid === 'string' && /^\d{1,20}$/.test(person.xuid)) {
         ids.add(person.xuid);
       }
     }
@@ -182,10 +182,11 @@ async function loadFriends(xbox, owner) {
       [String(record.xuid), record]));
     for (const xuid of batch) {
       const record = states.get(xuid);
-      const state = ['Online', 'Away', 'Offline'].includes(record?.state) ? record.state : 'Unknown';
+      const rawState = typeof record?.state === 'string' ? record.state.toLowerCase() : '';
+      const state = ({ online: 'Online', away: 'Away', offline: 'Offline' })[rawState] ?? 'Unknown';
       const minecraft = (state === 'Online' || state === 'Away') &&
         (record.devices ?? []).some(device => (device.titles ?? []).some(title =>
-          title.state === 'Active' && title.name === 'Minecraft'));
+          String(title.state).toLowerCase() === 'active' && title.name === 'Minecraft'));
       const gamertag = names.get(xuid);
       friends.push({ xuid, gamertag: typeof gamertag === 'string' ? gamertag.slice(0, 32) : '', state, minecraft });
     }
