@@ -184,8 +184,13 @@ public final class DashboardActivity extends Activity {
     }
 
     private void launchBotFlow(String host, boolean switchAccount) {
+        launchBotFlow(host, switchAccount, false);
+    }
+
+    private void launchBotFlow(String host, boolean switchAccount, boolean friends) {
         Intent runtime = new Intent().setClassName(this, "ai.minepilot.app.XboxAuthProbeActivity");
         if (host != null) runtime.putExtra("host", host);
+        if (friends) runtime.putExtra("friends", true);
         if (getPackageManager().resolveActivity(runtime, 0) == null) {
             status.setText("Install the ARM64 runtime-enabled APK to sign in and connect.");
             return;
@@ -198,6 +203,46 @@ public final class DashboardActivity extends Activity {
             status.setText("The Xbox sign-in runtime is unavailable in this build.");
         }
     }
+    private void showXboxFriends() {
+        label("XBOX FRIENDS", 14);
+        button("Refresh friends", () -> launchBotFlow(null, false, true));
+        button("Send or accept requests on Xbox", () -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://play.xbox.com/")));
+            } catch (android.content.ActivityNotFoundException unavailable) {
+                status.setText("Open the Xbox app to manage friend requests.");
+            }
+        });
+        org.json.JSONObject snapshot = XboxSignInReceiver.latestFriends(this);
+        if (snapshot == null) return;
+        org.json.JSONArray friends = snapshot.optJSONArray("friends");
+        if (friends == null) return;
+        long updated = snapshot.optLong("updatedAt");
+        label((friends.length() == 0 ? "No Xbox friends found" : friends.length() + " Xbox friends")
+                + (snapshot.optBoolean("truncated") ? " (partial list)" : "")
+                + " · Updated " + java.text.DateFormat.getDateTimeInstance(
+                        java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(new java.util.Date(updated)), 14);
+        for (int i = 0; i < friends.length(); i++) {
+            org.json.JSONObject friend = friends.optJSONObject(i);
+            if (friend == null) continue;
+            String xuid = friend.optString("xuid");
+            if (!xuid.matches("[0-9]{1,20}")) continue;
+            String gamertag = friend.optString("gamertag");
+            String name = gamertag.isEmpty() ? "Xbox player " + xuid : gamertag;
+            String presence = friend.optString("state");
+            String state = switch (presence) {
+                case "Online", "Offline", "Away" -> presence;
+                default -> "Status unavailable";
+            };
+            if (friend.optBoolean("minecraft")) {
+                label(name + " · " + state + " · Playing Minecraft", 14);
+                button("Check and join " + name, () -> openBotFlow(xuid, false));
+            } else {
+                label(name + " · " + state, 14);
+            }
+        }
+    }
+
     private void show(String tab) {
         if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
         xuidInput = null;
@@ -259,9 +304,11 @@ public final class DashboardActivity extends Activity {
                         () -> openBotFlow(null, savedBot));
                 if (savedBot) button("Forget saved account", () -> {
                     BotAccount.forget(this);
+                    XboxSignInReceiver.clearFriends(this);
                     XboxSignInReceiver.record(this, "");
                     show("Xbox");
                 });
+                if (savedBot) showXboxFriends();
                 label("FRIEND’S WORLD", 14);
                 EditText xuid = new EditText(this);
                 xuid.setTextColor(Color.WHITE);

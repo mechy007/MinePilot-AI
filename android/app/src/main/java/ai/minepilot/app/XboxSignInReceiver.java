@@ -14,7 +14,30 @@ final class XboxSignInReceiver {
     }
 
     static void record(Context context, String message) {
-        AtomicFile file = resultFile(context);
+        write(resultFile(context), message);
+    }
+
+    private static AtomicFile friendsFile(Context context) {
+        return new AtomicFile(new File(context.getNoBackupFilesDir(), "xbox-friends"));
+    }
+
+    static void recordFriends(Context context, org.json.JSONObject snapshot) {
+        write(friendsFile(context), snapshot.toString());
+    }
+
+    static void clearFriends(Context context) { friendsFile(context).delete(); }
+
+    static org.json.JSONObject latestFriends(Context context) {
+        try {
+            org.json.JSONObject result = new org.json.JSONObject(new String(
+                    friendsFile(context).readFully(), StandardCharsets.UTF_8));
+            return BotAccount.xuid(context).equals(result.getString("owner")) ? result : null;
+        } catch (IOException | org.json.JSONException unavailable) {
+            return null;
+        }
+    }
+
+    private static void write(AtomicFile file, String message) {
         FileOutputStream output = null;
         try {
             output = file.startWrite();
