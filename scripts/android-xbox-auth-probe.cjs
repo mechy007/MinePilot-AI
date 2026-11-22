@@ -45,6 +45,17 @@ async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publis
       throw new Error('Xbox profile identity missing');
     }
 
+    // Save the approved Xbox account before Bedrock-specific checks. A Bedrock
+    // entitlement or credential failure must not discard a valid Xbox login.
+    if (saveAccount) {
+      const cached = auth.msa?.cache ? await auth.msa.cache.getCached() : {};
+      const savedRefreshToken = cached.token?.refresh_token ?? refreshToken;
+      if (typeof savedRefreshToken !== 'string' || savedRefreshToken.length < 20) {
+        throw new Error('Microsoft refresh token missing');
+      }
+      await saveAccount({ refreshToken: savedRefreshToken, gamertag: profile.gamertag, xuid: profile.xuid });
+    }
+
     stage = 'bedrock_credentials';
     publish({ phase: 'bedrock_credentials' });
     const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'secp384r1' });
@@ -55,14 +66,6 @@ async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publis
     }
     const identity = JSON.parse(Buffer.from(chain[1].split('.')[1], 'base64url').toString('utf8'));
     if (identity.extraData?.XUID !== profile.xuid) throw new Error('Bedrock and Xbox identities differ');
-    if (saveAccount) {
-      const cached = auth.msa?.cache ? await auth.msa.cache.getCached() : {};
-      const savedRefreshToken = cached.token?.refresh_token ?? refreshToken;
-      if (typeof savedRefreshToken !== 'string' || savedRefreshToken.length < 20) {
-        throw new Error('Microsoft refresh token missing');
-      }
-      await saveAccount({ refreshToken: savedRefreshToken, gamertag: profile.gamertag, xuid: profile.xuid });
-    }
     publish({ phase: 'verified', gamertag: profile.gamertag, xuid: profile.xuid });
     return { auth, profile };
   } catch {
