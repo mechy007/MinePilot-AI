@@ -28,6 +28,9 @@ public final class DashboardActivity extends Activity {
     private int udpDiagnosticGeneration;
     private EditText xuidInput;
     private String xuidDraft;
+    private String pendingAuthHost;
+    private boolean pendingAuthSwitch;
+    private boolean pendingBotFlow;
     private static final int NOTIFICATION_REQUEST = 101;
     private static final int BG = Color.rgb(10, 12, 23);
     private static final int PANEL = Color.rgb(23, 27, 45);
@@ -131,6 +134,8 @@ public final class DashboardActivity extends Activity {
         if (state != null) {
             currentTab = state.getString("tab", "Home");
             xuidDraft = state.getString("xuid_draft");
+        } else if ("Xbox".equals(getIntent().getStringExtra("open_tab"))) {
+            currentTab = "Xbox";
         }
         show(currentTab);
     }
@@ -144,7 +149,27 @@ public final class DashboardActivity extends Activity {
         if ("Xbox".equals(currentTab)) show("Xbox");
     }
 
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String requestedTab = intent.getStringExtra("open_tab");
+        if ("Xbox".equals(requestedTab)) show("Xbox");
+    }
+
     private void openBotFlow(String host, boolean switchAccount) {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            pendingAuthHost = host;
+            pendingAuthSwitch = switchAccount;
+            pendingBotFlow = true;
+            status.setText("Allow notifications so MinePilot can alert you when sign-in is complete.");
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_REQUEST);
+            return;
+        }
+        launchBotFlow(host, switchAccount);
+    }
+
+    private void launchBotFlow(String host, boolean switchAccount) {
         Intent runtime = new Intent().setClassName(this, "ai.minepilot.app.XboxAuthProbeActivity");
         if (host != null) runtime.putExtra("host", host);
         if (getPackageManager().resolveActivity(runtime, 0) == null) {
@@ -338,8 +363,17 @@ public final class DashboardActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == NOTIFICATION_REQUEST && (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED)) {
-            status.setText("Notifications denied. Diagnostic service may still run, but its notification may be hidden.");
+        if (requestCode != NOTIFICATION_REQUEST) return;
+        boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        if (pendingBotFlow) {
+            String host = pendingAuthHost;
+            boolean switchAccount = pendingAuthSwitch;
+            pendingBotFlow = false;
+            pendingAuthHost = null;
+            if (!granted) status.setText("Sign-in will continue. Return to MinePilot manually after Microsoft approval.");
+            launchBotFlow(host, switchAccount);
+        } else if (!granted) {
+            status.setText("Notifications are off. Return to MinePilot manually after Microsoft approval.");
         }
     }
 }
