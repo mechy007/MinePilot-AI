@@ -11,14 +11,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <activity android:name=".XboxSignInActivity" android:exported="true" android:launchMode="singleTop">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="minepilot" android:host="oauth"/>
-            </intent-filter>
-        </activity>
         <activity android:name=".MainActivity" android:exported="false"/>
         <provider android:name=".BotSessionProvider" android:authorities="${applicationId}.bot-session" android:exported="false"/>
         <service android:name=".MinePilotService" android:exported="false" android:foregroundServiceType="dataSync"/>

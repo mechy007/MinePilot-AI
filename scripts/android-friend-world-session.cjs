@@ -88,12 +88,12 @@ async function observeSession(client, publish, signal, getStage) {
   await client._nethernetCleanup;
 }
 
-async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld }) {
+async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld, saveAccount }) {
   let stage = 'owner';
   try {
     if (!ownerXuid || ownerXuid.length > 32) throw new Error();
     stage = 'auth';
-    const { auth, profile } = await verifyXbox(authDependencies, publish);
+    const { auth, profile } = await verifyXbox(authDependencies, publish, saveAccount);
     signal.throwIfAborted();
     stage = 'owner';
     if (!/^\d+$/.test(ownerXuid)) {
@@ -109,7 +109,7 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
       username: profile.gamertag,
       offline: false,
       version: '1.26.60',
-      authTitle: authDependencies.browserSession?.clientId ?? authDependencies.Titles.MinecraftAndroid,
+      authTitle: authDependencies.Titles.MinecraftAndroid,
       deviceType: 'Android',
       authflow: auth,
       nethernet: { webrtcBackend: 'werift' },
@@ -156,13 +156,18 @@ if (require.main === module) {
     const { XboxClient } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
     const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
-    const config = JSON.parse(readFileSync(path.join(__dirname, 'browser-session.json'), 'utf8'));
-    const browserSession = { clientId: config.clientId, access: readFileSync(config.fd, 'utf8') };
+    const configPath = path.join(__dirname, 'device-session.json');
+    const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
+    const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
+    const saveAccount = Number.isInteger(config.saveFd)
+      ? account => writeSync(config.saveFd, JSON.stringify(account) + "\n")
+      : null;
     await run({
       ownerXuid: readFileSync(path.join(__dirname, 'owner-xuid'), 'utf8'),
       publish,
       signal: controller.signal,
-      authDependencies: { Authflow, Titles, XboxClient, browserSession },
+      authDependencies: { Authflow, Titles, XboxClient, refreshToken },
+      saveAccount,
       createClient,
       pickOwnerWorld
     });

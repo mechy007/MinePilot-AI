@@ -14,14 +14,23 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
-/** Called only from the dashboard process. Only the refresh token survives a restart. */
+/** Stores the bot identity and refresh token in Android Keystore-backed encrypted storage. */
 final class BotAccount {
     private static final String ALIAS = "minepilot.bot.refresh.v1";
     private static AtomicFile file(Context context) {
         return new AtomicFile(new File(context.getNoBackupFilesDir(), "bot-account"));
     }
     static boolean saved(Context context) { return file(context).getBaseFile().exists(); }
-    static synchronized void forget(Context context) { file(context).delete(); }
+    static synchronized void forget(Context context) {
+        file(context).delete();
+        try {
+            KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+            store.load(null);
+            store.deleteEntry(ALIAS);
+        } catch (Exception ignored) {
+            // No account remains available even if key cleanup is deferred.
+        }
+    }
 
     private static SecretKey key(boolean create) throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore");
@@ -35,13 +44,14 @@ final class BotAccount {
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());
         return generator.generateKey();
     }
-    static synchronized void save(Context context, String refresh) throws Exception {
-        if (refresh.isEmpty()) throw new IllegalArgumentException();
+    static synchronized void save(Context context, org.json.JSONObject account) throws Exception {
+        String refresh = account.getString("refreshToken");
+        if (refresh.length() < 20 || account.optString("gamertag").isEmpty()) throw new IllegalArgumentException();
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, key(true));
         byte[] iv = cipher.getIV();
         if (iv.length != 12) throw new IllegalStateException();
-        byte[] ciphertext = cipher.doFinal(refresh.getBytes(StandardCharsets.UTF_8));
+        byte[] ciphertext = cipher.doFinal(account.toString().getBytes(StandardCharsets.UTF_8));
         AtomicFile target = file(context);
         FileOutputStream out = target.startWrite();
         try {
@@ -53,14 +63,23 @@ final class BotAccount {
             throw error;
         }
     }
-    static synchronized String accessToken(Context context) throws Exception {
+    static synchronized org.json.JSONObject read(Context context) throws Exception {
         byte[] sealed = file(context).readFully();
+        if (sealed.length <= 12) throw new IllegalStateException("Stored bot account is invalid");
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.DECRYPT_MODE, key(false), new GCMParameterSpec(128, Arrays.copyOf(sealed, 12)));
-        String refresh = new String(cipher.doFinal(sealed, 12, sealed.length - 12), StandardCharsets.UTF_8);
-        org.json.JSONObject response = XboxSignInActivity.refresh(refresh);
-        String access = response.getString("access_token");
-        if (response.has("refresh_token")) save(context, response.getString("refresh_token"));
-        return access;
+        return new org.json.JSONObject(new String(
+                cipher.doFinal(sealed, 12, sealed.length - 12), StandardCharsets.UTF_8));
+    }
+    static synchronized String refreshToken(Context context) throws Exception {
+        return read(context).getString("refreshToken");
+    }
+    static String gamertag(Context context) {
+        try { return read(context).optString("gamertag", "Xbox account"); }
+        catch (Exception error) { return "Account needs sign-in"; }
+    }
+    static String xuid(Context context) {
+        try { return read(context).optString("xuid", ""); }
+        catch (Exception error) { return ""; }
     }
 }

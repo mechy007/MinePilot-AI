@@ -90,13 +90,12 @@ test('hands the verified account to the friend-world SDK with exact owner select
     ownerXuid: 'Friend',
     publish: snapshot => snapshots.push(snapshot),
     signal: new AbortController().signal,
-    authDependencies: { Authflow, XboxClient, browserSession: { clientId: 'bot-app', access: 'fixture' } },
+    authDependencies: { Authflow, XboxClient, Titles: { MinecraftAndroid: 'android' } },
     pickOwnerWorld,
     createClient(options) {
       queueMicrotask(async () => {
         assert.equal(options.authflow, auth);
-        assert.equal(options.authTitle, 'bot-app');
-        assert.equal(await options.authflow.getMsaToken(), 'fixture');
+        assert.equal(options.authTitle, 'android');
         assert.equal(options.offline, false);
         const session = { sessionRef: { name: 'target' }, customProperties: { ownerId: '84', protocol: 2225 } };
         assert.equal(options.world.pickSession([

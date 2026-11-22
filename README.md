@@ -8,11 +8,11 @@ MinePilot-AI aims to run an independent Minecraft Bedrock player from an Android
 
 ## Using a dedicated Xbox bot account on Android
 
-In the runtime-enabled ARM64 debug build, open **Xbox → Sign in with Xbox Live** and choose the personal Microsoft account that should appear in Minecraft as the bot. Return to Xbox, enter the host’s gamertag or numeric XUID and tap **Join friend’s world** while the host has multiplayer open and allows that account to join. **Switch bot account** replaces the saved login after successful sign-in. **Forget bot account** clears the locally saved credential.
+In the runtime-enabled ARM64 debug build, open **Xbox → Sign in with Microsoft** and choose the personal Microsoft account that should appear in Minecraft as the bot. Return to Xbox, enter the host’s gamertag or numeric XUID and tap **Join friend’s world** while the host has multiplayer open and allows that account to join. **Switch Xbox account** starts a new approval flow for another account. **Forget bot account** clears the locally saved credential.
 
-The build requires MinePilot’s authorized public-client application ID and registered redirect `minepilot://oauth`. The Android Node Runtime Probe workflow reads the repository Actions variable `MINEPILOT_XBOX_CLIENT_ID`. The local Gradle property is `minepilotXboxClientId`. An app registration and an Xbox player account serve different purposes.
+MinePilot uses Microsoft device-code sign-in. No Entra application ID or payment card is needed.
 
-This implementation supersedes the PR #59 status notes below for sign-in, credential storage, gamertag lookup and the Android runtime handoff. The app encrypts the refresh token using Android Keystore, obtains a fresh access token before joining and passes it through an app-private pipe. The runner checks the Xbox and Bedrock identities, resolves the host and attempts the existing NetherNet join. A successful live spawn still requires device and host verification.
+The account session is encrypted with Android Keystore-backed storage. Tokens pass to Android through a private pipe for encryption. The runner checks the Xbox and Bedrock identities, resolves the host and attempts the existing NetherNet join. A successful live spawn still requires device and host verification.
 
 ## Project at a glance
 
@@ -34,12 +34,12 @@ The status descriptions below distinguish repository code from verified device f
 
 | Area | Current state | Verification / limitation |
 | --- | --- | --- |
-| Android dashboard | Implemented; redesign in [PR #59](https://github.com/mechy007/MinePilot-AI/pull/59) | APK build and on-device UX are separate checks |
+| Android dashboard | Implemented; Xbox sign-in and join flow in PR #61 | APK build and on-device UX are separate checks |
 | ARM64 Node.js packaging | Implemented diagnostic build path | CI packaging/smoke tests; live device runtime needs validation |
 | Bedrock SDK integration | Packaged experimental SDK and transport dependencies | Does not establish a successful friend-world join |
-| Microsoft/Xbox login | Existing device-code diagnostic on older builds; browser-based OAuth + PKCE **in PR #59** | New flow requires an authorized app registration and real-account validation |
-| Xbox Live / XSTS exchange | Experimental code in PR #59 | Not yet confirmed end-to-end on device |
-| Friend identification | Numeric host XUID supported by diagnostic; gamertag field added in PR #59 | Gamertag-to-XUID lookup not implemented |
+| Microsoft/Xbox login | Device-code sign-in in the runtime-enabled build | User approval and real-account validation required |
+| Xbox Live / XSTS exchange | Packaged experimental authentication runtime | Not yet confirmed end-to-end on device |
+| Friend identification | Gamertag or numeric host XUID accepted | Requires live Xbox account verification |
 | Friend activity / world discovery | Experimental SDK join path | Real Xbox presence and permissions unverified |
 | NetherNet / WebRTC transport | Bundled diagnostic dependencies | Real host interoperability unverified |
 | Spawn and sustained connection | Instrumentation / test scaffolding | Requires host-observed live join, chunks and duration |
@@ -51,63 +51,25 @@ The status descriptions below distinguish repository code from verified device f
 ### Intended end-user experience
 
 1. Install MinePilot on Android.
-2. Tap **Sign in with Xbox Live** and authenticate the bot's own Xbox account using Microsoft's official browser login.
-3. Select or search for the friend hosting a joinable Bedrock world **by gamertag**.
-4. Choose the world, connect the bot, and see clear connection stages and errors.
+2. Tap **Sign in with Microsoft** and approve the bot’s separate Xbox account on Microsoft’s sign-in page.
+3. Enter the friend’s gamertag or Xbox XUID.
+4. Tap **Join friend’s world**. MinePilot discovers the friend’s open world and reports connection stages.
 5. Keep the bot connected in the background and issue gameplay tasks.
 6. Stop the bot, disconnect, switch accounts or sign out securely.
 
-**This is the product goal, not a description of a currently working end-to-end flow.**
+**This is the product goal. A real Android friend-world join still needs host-confirmed testing.**
 
-## Xbox Live sign-in: architecture and configuration
+## Xbox sign-in and bot account
 
-### Requested authentication UX
+MinePilot uses Microsoft’s device-code sign-in through its packaged Xbox authentication library. A new user taps **Sign in with Microsoft** or **Join friend’s world**. MinePilot automatically opens Microsoft’s official sign-in page with the approval code filled in, displays the code in the app, and waits for the user to approve the account. Xbox authentication and the friend-world attempt then continue automatically. No Entra application ID or payment card is required.
 
-The intended user-facing login is **browser-based Xbox/Microsoft sign-in, not device-code entry**. PR #59 adds an Android `XboxSignInActivity` with an OAuth 2.0 authorization-code + PKCE flow and an Android deep-link callback, and removes the older device-code diagnostic activity from the debug manifest. Older code, guides and existing APKs can still contain the previous diagnostic flow.
+Microsoft approval is still required. MinePilot never asks for the Microsoft password. After successful Xbox and Bedrock identity checks, MinePilot encrypts the account refresh token and gamertag with Android Keystore-backed storage. Later joins attempt to refresh the saved session automatically. **Switch Xbox account** clears the saved identity and starts a fresh sign-in. **Forget saved account** deletes the encrypted account data.
 
-Microsoft authentication uses the bot account's Microsoft credentials **on Microsoft's sign-in page**. MinePilot must not ask for or store the account password. OAuth and Xbox credentials must be handled as secrets.
-
-### Experimental implementation in PR #59
-
-| Item | Current code / configuration |
-| --- | --- |
-| Build property | `minepilotXboxClientId` |
-| Authority | `https://login.microsoftonline.com/consumers` |
-| Authorization type | Authorization code + PKCE (S256) |
-| Requested scope | `XboxLive.signin offline_access` |
-| Redirect URI in code | `minepilot://oauth` |
-| Token exchange | Microsoft OAuth token → Xbox Live → XSTS |
-| Client secret | Not used; a mobile public client must not embed one |
-| Persistence | Not implemented |
-| Bedrock engine handoff | Not implemented |
-
-The client ID is configured at build time, for example:
-
-```bash
-cd android
-gradle -PminepilotXboxClientId=YOUR_AUTHORIZED_CLIENT_ID :app:assembleDebug
-```
-
-This example is **configuration syntax**, not proof that the redirect URI or OAuth permissions are accepted. A valid Microsoft application registration, compatible redirect URI, allowed scopes, and real-device tests are still required. The app displays a configuration message if no client ID was supplied. **Do not commit secrets or account tokens.**
-
-### Microsoft Entra / Azure registration issue
-
-A personal Xbox account is not itself an OAuth application registration. Microsoft Entra administration access may require a tenant, and some Azure account signup flows ask for a debit or credit card. If you cannot register an application without a payment card, that is an **unresolved configuration blocker**, not a reason to bypass OAuth registration.
-
-Investigate eligible tenant registration or an **authorized** existing integration. Do not copy unrelated applications' client IDs, evade Microsoft's account or API rules, or ask users to supply passwords to MinePilot. The desired sign-in experience remains browser-based; **no device-code fallback is planned for the new UI**.
-
-### Security work remaining
-
-- Verify authorization state and PKCE callback behavior, including cancellation and process recreation.
-- Validate Xbox/XSTS responses and errors with a real account.
-- Implement Android encrypted credential storage, token renewal, sign-out and account switching.
-- Limit logging and prevent access/refresh tokens from appearing in logs or crash reports.
-- Connect authenticated credentials to the embedded Bedrock client without exposing them to other apps.
-- Test session expiry, revoked permissions, no network, and multiplayer eligibility.
+The interactive flow is available in the runtime-enabled ARM64 debug APK. Standard shell builds without the embedded Node runtime cannot complete Xbox sign-in or join a world. Authentication success does not by itself prove a live world join. The host must be online, allow multiplayer, and permit the bot account to join.
 
 ## Friend discovery and joining
 
-A **gamertag** is a human-readable Xbox account name. An **XUID** is the numeric Xbox account identifier. The current experimental join diagnostic identifies a specific world host using an XUID; the newer UI accepts gamertag text, but **does not yet resolve names to verified XUIDs**. A gamertag must never be passed to an API that requires a numeric XUID.
+A **gamertag** is a human-readable Xbox account name. An **XUID** is the numeric Xbox account identifier. The join flow accepts a gamertag or XUID and resolves a gamertag to its Xbox XUID before searching for the friend’s world.
 
 For an eventual join, the bot account must be permitted to play multiplayer and access the host's session. The friend must have the target Bedrock world open with multiplayer enabled. Discovery depends on Xbox activity/presence availability and any applicable platform or service permissions.
 
@@ -128,7 +90,7 @@ The existing [friend-world integration guide](docs/friend-world-live-join.md) do
 
 ## Android app, UI and background operation
 
-The project targets a standalone Android interface with account, friend/world, commands, tasks, settings and diagnostic views. The dashboard and premium launcher design are being developed in PR #59. The packaged runtime diagnostic executes in an isolated Android process.
+The project targets a standalone Android interface with account, friend/world, commands, tasks, settings and diagnostic views. The dashboard includes a bot account card, account switching, friend entry and a prominent join action. The packaged runtime diagnostic executes in an isolated Android process.
 
 Long-running operation requires lifecycle-safe foreground service behavior, a user-visible ongoing notification, explicit stop controls, network/battery handling, recovery after interruption, and secure session cleanup. These are acceptance requirements, **not verified features**.
 
@@ -161,7 +123,7 @@ Read the [detailed roadmap](docs/ROADMAP.md). Features such as automatic mining,
 4. Extract the ZIP and install the contained APK on a compatible ARM64 Android phone.
 5. Record the workflow run, commit SHA and app behavior when reporting an issue.
 
-The artifact is a **debug/test APK**, not a production release. GitHub may require sign-in to download artifacts. An older build may still show the device-code test; the newer OAuth UI in PR #59 requires its own successful build **and a configured authorized client ID**. Do not assume the latest successful build includes every unmerged change.
+The artifact is a **debug/test APK**, not a production release. GitHub may require sign-in to download artifacts. Confirm the workflow SHA before installing because a successful build may not contain an unmerged pull request.
 
 ## Build and test locally
 
@@ -203,9 +165,9 @@ CI checks can validate builds, packaging, code and synthetic SDK behavior. **The
 ```text
 Android dashboard / account UI
            |
-           +--> Browser OAuth + PKCE (experimental PR #59)
+           +--> Microsoft device-code sign-in
            |         |
-           |         +--> Microsoft OAuth --> Xbox Live --> XSTS
+           |         +--> Microsoft account --> Xbox Live --> XSTS
            |
            +--> Android service / lifecycle (partial)
                        |
@@ -218,37 +180,37 @@ Android dashboard / account UI
                                    +--> Gameplay engine and task planner
 ```
 
-The diagram describes the **intended integration boundaries**, not a fully connected production pipeline. In particular, the new OAuth sign-in is **not yet wired into** the Bedrock runtime.
+The diagram describes the intended integration boundaries. Real-account joining and sustained Android connection still require live device and host verification.
 
 ## Troubleshooting
 
 | Symptom | Meaning / next action |
 | --- | --- |
-| “OAuth is not configured” | No authorized `minepilotXboxClientId` was supplied at build time |
-| Microsoft redirect rejected | App registration and redirect URI are not compatible; validate the registered mobile redirect |
-| Azure / Entra signup requests a card | Application registration access remains unresolved; don't bypass identity requirements |
-| Gamertag cannot join | Gamertag-to-XUID lookup is not implemented; diagnostic joining still requires a numeric XUID |
+Use the runtime-enabled ARM64 APK and tap **Sign in with Microsoft**.
+| Microsoft page does not open | Return to MinePilot and tap **Open Microsoft sign-in**. The code can also be copied. |
+| Saved account stops authenticating | Use **Switch Xbox account** to approve the bot account again. |
+| Gamertag cannot join | Check the spelling and Xbox visibility of the friend’s gamertag. |
 | Friend/world not found | Check host online status, multiplayer settings, bot account permissions, and Xbox presence visibility |
 | SDK smoke tests pass but bot does not join | Packaging tests do not establish live transport interoperability |
 | App disconnects when backgrounded | Background session lifecycle and battery/notification behavior still require implementation and testing |
-| Old APK displays device code | It was built from an older commit; verify the workflow SHA before installing |
+| Sign-in does not finish | Keep MinePilot open until Microsoft approval completes, then check the account’s multiplayer permissions |
 
-For deeper diagnostics see [Android app test guide](docs/ANDROID-APP-STATUS.md) and [desktop integration guide](docs/friend-world-live-join.md). Some linked documents describe the **older device-code diagnostic**; this README distinguishes that legacy test from the new browser-login direction.
+For deeper diagnostics see [Android app test guide](docs/ANDROID-APP-STATUS.md) and [desktop integration guide](docs/friend-world-live-join.md). The linked desktop integration guide describes a workstation test, not a verified Android release.
 
 ## Security, privacy and responsible testing
 
 - Sign in only through Microsoft's official authentication page.
 - Never send Microsoft passwords, access tokens, refresh tokens or device codes to maintainers or issue trackers.
-- Never hardcode OAuth client secrets into a mobile APK.
+- MinePilot does not require an app-registration ID or client secret for device-code sign-in.
 - Test only with Xbox accounts and friend-hosted worlds you are authorized to access.
 - Do not interpret a mock identity, CI pass or client-side “connected” message as proof that a host accepted the bot.
 - Treat debug artifacts as experimental and avoid using valuable accounts until account/session handling is validated.
 
 ## Known blockers and next engineering priorities
 
-1. **OAuth registration and redirect compatibility:** obtain an authorized client ID without requiring users to share secrets or register their own app.
+1. **Live Xbox verification:** validate sign-in, account refresh and friend-world joining on the target Android device.
 2. **Authenticated runtime handoff:** implement a secure Xbox credential bridge to the Bedrock SDK and protected token lifecycle.
-3. **Friend lookup:** implement verified gamertag-to-XUID resolution using permitted APIs.
+3. **Friend-world interoperability:** verify friend lookup, NetherNet connection, Bedrock login, spawn and world updates.
 4. **Live interoperability:** test friend activity, NetherNet connection, Bedrock login, spawn and world packet processing.
 5. **Android reliability:** foreground service, notification, cancellation, reconnect, and memory/battery testing.
 6. **Gameplay and AI:** connect world state and verified actions to the planner, then test increasingly complex tasks.

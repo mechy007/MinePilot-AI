@@ -64,6 +64,42 @@ public final class DashboardActivity extends Activity {
         lp.setMargins(0, 0, 0, dp(10)); body.addView(b, lp);
         b.setOnClickListener(v -> callback.run());
     }
+    private void primaryButton(String name, Runnable callback) {
+        Button b = new Button(this);
+        b.setText(name);
+        b.setTextSize(15);
+        b.setTextColor(Color.WHITE);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(dp(18), dp(15), dp(18), dp(15));
+        GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.rgb(129, 81, 245), Color.rgb(91, 74, 220)});
+        background.setCornerRadius(dp(15));
+        b.setBackground(background);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(10));
+        body.addView(b, lp);
+        b.setOnClickListener(v -> callback.run());
+    }
+    private void accountCard(boolean signedIn) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        card.setBackground(surface(PANEL, 18));
+        TextView eyebrow = text("BOT ACCOUNT", 11, PURPLE, true);
+        card.addView(eyebrow);
+        TextView title = text(signedIn ? BotAccount.gamertag(this) : "No account connected", 19, Color.WHITE, true);
+        title.setPadding(0, dp(8), 0, dp(4));
+        card.addView(title);
+        String xuid = signedIn ? BotAccount.xuid(this) : "";
+        TextView detail = text(signedIn ? "Xbox account ready" + (xuid.isEmpty() ? "" : "  ·  XUID " + xuid)
+                : "Sign in with a separate Microsoft account for your bot.", 13, MUTED, false);
+        card.addView(detail);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(14));
+        body.addView(card, lp);
+    }
     private void hero(String eyebrow, String headline, String detail) {
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(20), dp(22), dp(20), dp(22));
@@ -108,17 +144,19 @@ public final class DashboardActivity extends Activity {
         if ("Xbox".equals(currentTab)) show("Xbox");
     }
 
-    private void joinFriend(String host) {
+    private void openBotFlow(String host, boolean switchAccount) {
         Intent runtime = new Intent().setClassName(this, "ai.minepilot.app.XboxAuthProbeActivity");
+        if (host != null) runtime.putExtra("host", host);
         if (getPackageManager().resolveActivity(runtime, 0) == null) {
-            status.setText("Install the ARM64 runtime-enabled APK to join a world.");
+            status.setText("Install the ARM64 runtime-enabled APK to sign in and connect.");
             return;
         }
-        if (!BotAccount.saved(this)) {
-            startActivity(new Intent(this, XboxSignInActivity.class));
-            return;
+        if (switchAccount) runtime.putExtra("switch_account", true);
+        try {
+            startActivity(runtime);
+        } catch (android.content.ActivityNotFoundException | SecurityException error) {
+            status.setText("The Xbox sign-in runtime is unavailable in this build.");
         }
-        startActivity(runtime.putExtra("host", host));
     }
     private void show(String tab) {
         if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
@@ -172,32 +210,39 @@ public final class DashboardActivity extends Activity {
         root.addView(nav); setContentView(root);
         switch (tab) {
             case "Xbox":
-                hero("ACCOUNT & MULTIPLAYER", "Xbox Live", "Secure browser sign-in • OAuth PKCE");
+                hero("ACCOUNT & MULTIPLAYER", "Xbox connection", "Sign in once, then connect your bot to a friend’s world.");
                 boolean savedBot = BotAccount.saved(this);
-                label(savedBot ? "Bot account saved on this device." : "Choose a dedicated Microsoft account for your bot.", 16);
-                button(savedBot ? "Switch bot account" : "Sign in with Xbox Live",
-                        () -> startActivity(new Intent(this, XboxSignInActivity.class)));
-                if (savedBot) button("Forget bot account", () -> {
+                accountCard(savedBot);
+                primaryButton(savedBot ? "Switch Xbox account" : "Sign in with Microsoft",
+                        () -> openBotFlow(null, savedBot));
+                if (savedBot) button("Forget saved account", () -> {
                     BotAccount.forget(this);
                     show("Xbox");
                 });
+                label("FRIEND’S WORLD", 14);
                 EditText xuid = new EditText(this);
                 xuid.setTextColor(Color.WHITE);
-                xuid.setHintTextColor(Color.LTGRAY);
-                xuid.setHint("Friend’s gamertag or numeric XUID");
+                xuid.setHintTextColor(MUTED);
+                xuid.setHint("Friend’s gamertag or Xbox XUID");
+                xuid.setSingleLine(true);
                 xuid.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+                xuid.setPadding(dp(16), dp(12), dp(16), dp(12));
+                xuid.setBackground(surface(PANEL, 14));
                 xuid.setText(xuidDraft != null ? xuidDraft : getPreferences(MODE_PRIVATE).getString("owner_xuid", ""));
                 xuidInput = xuid;
-                body.addView(xuid);
-                button("Join friend’s world", () -> {
+                LinearLayout.LayoutParams inputLayout = new LinearLayout.LayoutParams(-1, -2);
+                inputLayout.setMargins(0, 0, 0, dp(12));
+                body.addView(xuid, inputLayout);
+                primaryButton("Join friend’s world", () -> {
                     String host = xuid.getText().toString().trim();
                     if (host.isEmpty() || host.length() > 32) {
-                        xuid.setError("Enter your friend’s gamertag or XUID.");
+                        xuid.setError("Enter your friend’s gamertag or Xbox XUID.");
                         return;
                     }
                     getPreferences(MODE_PRIVATE).edit().putString("owner_xuid", host).apply();
-                    joinFriend(host);
+                    openBotFlow(host, false);
                 });
+                label("First sign-in opens Microsoft and pre-fills your approval code. MinePilot waits for approval and saves the bot account securely on this phone.", 14);
                 break;
             case "Commands":
                 hero("AI COMMAND CENTER", "Bot commands", "Offline plans only • Live execution unavailable");
@@ -276,20 +321,15 @@ public final class DashboardActivity extends Activity {
                 label("No authenticated Xbox or live Bedrock session has been verified.", 16);
                 break;
             default:
-                hero("●  BOT OFFLINE", "Your world. Your AI.", "Connect a separate Xbox bot account to explore friend-world joining.");
-                label("CONNECTION OVERVIEW", 19);
-                label("Connection: DISCONNECTED", 21);
-                label("Xbox account: see Xbox tab\nFriend world discovery: unavailable\nSpawn: unavailable", 16);
-                button("Connect bot (unavailable)", () -> disabled("Connect"));
-                button("Start diagnostic service", () -> {
-                    try {
-                        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_REQUEST);
-                        }
-                        startForegroundService(new Intent(this, MinePilotService.class));
-                        status.setText("Diagnostic service requested; bot remains offline.");
-                    } catch (RuntimeException e) { status.setText("Service start failed: " + e.getClass().getSimpleName()); }
-                });
+                boolean savedAccount = BotAccount.saved(this);
+                hero("MINEPILOT CONTROL CENTER", "Your bot is " + (savedAccount ? "ready" : "offline"),
+                        savedAccount ? "Signed in as " + BotAccount.gamertag(this) + " • Bedrock disconnected"
+                                : "Connect a dedicated Xbox account to start.");
+                accountCard(savedAccount);
+                label("WORLD CONNECTION", 17);
+                label("No active Minecraft session", 14);
+                primaryButton(savedAccount ? "Open Xbox connection" : "Connect your Xbox account",
+                        () -> show("Xbox"));
                 button("EMERGENCY STOP", () -> {
                     stopService(new Intent(this, MinePilotService.class));
                     status.setText("Stopped; no Minecraft connection.");

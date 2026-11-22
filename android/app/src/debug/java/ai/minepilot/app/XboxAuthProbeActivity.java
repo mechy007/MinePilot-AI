@@ -2,6 +2,8 @@ package ai.minepilot.app;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
@@ -13,8 +15,13 @@ import android.os.Looper;
 import android.os.Process;
 import android.text.InputType;
 import android.view.View;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ScrollView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -39,23 +46,76 @@ public final class XboxAuthProbeActivity extends Activity {
     private final Runnable poll = this::refreshStatus;
     private TextView status;
     private Button close;
+    private Button openMicrosoft;
+    private Button copyCode;
+    private boolean browserOpened;
+    private String currentCode;
+    private static final int BG = Color.rgb(10, 12, 23);
+    private static final int PANEL = Color.rgb(23, 27, 45);
+    private static final int PURPLE = Color.rgb(157, 103, 255);
+    private int dp(int value) { return (int) (getResources().getDisplayMetrics().density * value + .5f); }
 
     @Override public void onCreate(Bundle savedState) {
         super.onCreate(savedState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BG);
+        root.setPadding(dp(20), dp(18), dp(20), dp(18));
+        TextView brand = new TextView(this);
+        brand.setText("◆  MINEPILOT");
+        brand.setTextColor(Color.WHITE);
+        brand.setTextSize(20);
+        brand.setTypeface(null, Typeface.BOLD);
+        root.addView(brand, new LinearLayout.LayoutParams(-1, dp(52)));
+
+        ScrollView scroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(24, 24, 24, 24);
-        status = new TextView(this);
-        status.setTextSize(18);
-        status.setText("Preparing bot account…");
-        layout.addView(status);
+        layout.setPadding(0, dp(8), 0, dp(18));
+        scroll.addView(layout);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        close = new Button(this);
-        close.setText("End session");
+        TextView title = new TextView(this);
+        title.setText(joiningIntent() ? "Connect to your friend" : "Connect your Xbox account");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(26);
+        title.setTypeface(null, Typeface.BOLD);
+        layout.addView(title);
+        TextView description = new TextView(this);
+        description.setText("MinePilot will open Microsoft sign-in. Approve the bot account there, then return here while MinePilot finishes automatically.");
+        description.setTextColor(Color.rgb(166, 174, 197));
+        description.setTextSize(15);
+        description.setPadding(0, dp(8), 0, dp(18));
+        layout.addView(description);
+
+        LinearLayout accountCard = new LinearLayout(this);
+        accountCard.setOrientation(LinearLayout.VERTICAL);
+        accountCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        accountCard.setBackground(rounded(PANEL, 18));
+        status = new TextView(this);
+        status.setTextSize(16);
+        status.setTextColor(Color.WHITE);
+        status.setText("Preparing secure Microsoft sign-in…");
+        accountCard.addView(status);
+
+        openMicrosoft = authButton("Open Microsoft sign-in");
+        openMicrosoft.setVisibility(View.GONE);
+        openMicrosoft.setOnClickListener(view -> openVerification());
+        accountCard.addView(openMicrosoft);
+
+        copyCode = authButton("Copy sign-in code");
+        copyCode.setVisibility(View.GONE);
+        copyCode.setOnClickListener(view -> copyCode());
+        accountCard.addView(copyCode);
+        layout.addView(accountCard);
+
+        close = authButton(joiningIntent() ? "Stop connection" : "Cancel sign-in");
+        close.setBackground(rounded(Color.rgb(39, 45, 66), 14));
         close.setOnClickListener(view -> endProbe());
-        layout.addView(close);
-        setContentView(layout);
+        root.addView(close, new LinearLayout.LayoutParams(-1, dp(54)));
+        setContentView(root);
+        if (getIntent().getBooleanExtra("switch_account", false)) BotAccount.forget(this);
         startProbe();
     }
 
@@ -111,12 +171,14 @@ public final class XboxAuthProbeActivity extends Activity {
     private void startProbe() {
         if (started) return;
         String host = getIntent().getStringExtra("host");
-        if (host == null || host.isEmpty() || host.length() > 32) { finish(); return; }
-        joining = true;
+        if (host != null && (host.isEmpty() || host.length() > 32)) { finish(); return; }
+        joining = host != null;
         started = true;
         refreshStatus();
         new Thread(() -> {
             Path directory = null;
+            android.os.ParcelFileDescriptor[] savePipe = null;
+            Thread accountWriter = null;
             try {
                 Path cache = getCodeCacheDir().toPath();
                 try (var stale = Files.newDirectoryStream(cache, "xbox-auth-probe-*")) {
@@ -124,29 +186,82 @@ public final class XboxAuthProbeActivity extends Activity {
                 }
                 directory = Files.createTempDirectory(cache, "xbox-auth-probe-");
                 NodeSmokeActivity.unpackSdk(this, directory);
-                Files.write(directory.resolve("owner-xuid"), host.getBytes(StandardCharsets.UTF_8));
+                if (joining) Files.write(directory.resolve("owner-xuid"), host.getBytes(StandardCharsets.UTF_8));
                 saveActiveNetworkAddresses(directory);
                 statusPath = directory.resolve("auth-status.json");
                 System.loadLibrary("minepilot_node_smoke");
+                savePipe = android.os.ParcelFileDescriptor.createPipe();
+                android.os.ParcelFileDescriptor accountSink = savePipe[0];
+                accountWriter = new Thread(() -> readAndSaveAccount(accountSink), "minepilot-save-account");
+                accountWriter.start();
                 int exitCode;
-                Uri source = Uri.parse("content://" + getPackageName() + ".bot-session/access");
-                try (android.os.ParcelFileDescriptor account = getContentResolver().openFileDescriptor(source, "r")) {
-                    if (account == null) throw new IOException("Account unavailable");
-                    JSONObject config = new JSONObject().put("fd", account.getFd())
-                            .put("clientId", BuildConfig.XBOX_CLIENT_ID);
-                    Files.write(directory.resolve("browser-session.json"), config.toString().getBytes(StandardCharsets.UTF_8));
-                    exitCode = NodeSmokeActivity.runNode(directory.resolve("friend-world-session.cjs").toString());
+                JSONObject sessionConfig = new JSONObject().put("saveFd", savePipe[1].getFd());
+                if (joining) {
+                    android.os.ParcelFileDescriptor account = BotAccount.saved(this)
+                            ? getContentResolver().openFileDescriptor(
+                                    Uri.parse("content://" + getPackageName() + ".bot-session/refresh"), "r")
+                            : null;
+                    try {
+                        if (account != null) sessionConfig.put("fd", account.getFd());
+                        Files.write(directory.resolve("device-session.json"),
+                                sessionConfig.toString().getBytes(StandardCharsets.UTF_8));
+                        exitCode = NodeSmokeActivity.runNode(directory.resolve("friend-world-session.cjs").toString());
+                    } finally {
+                        if (account != null) account.close();
+                    }
+                } else {
+                    Files.write(directory.resolve("device-session.json"),
+                            sessionConfig.toString().getBytes(StandardCharsets.UTF_8));
+                    exitCode = NodeSmokeActivity.runNode(directory.resolve("xbox-auth-probe.cjs").toString());
                 }
+                savePipe[1].close();
+                accountWriter.join(5000);
                 JSONObject last = readStatus();
                 completedMessage = last == null
                         ? "FAIL. The sign-in runtime exited with code " + exitCode + "."
                         : finalMessage(last, exitCode);
             } catch (IOException | JSONException | UnsatisfiedLinkError | SecurityException failure) {
                 completedMessage = "FAIL. The Android sign-in runtime could not start.";
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                completedMessage = "Sign-in was interrupted. Try again.";
             } finally {
+                if (savePipe != null) {
+                    try { savePipe[1].close(); } catch (IOException ignored) {}
+                }
+                if (accountWriter != null && accountWriter.isAlive()) {
+                    try { accountWriter.join(1500); } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
             }
         }, "minepilot-xbox-auth-probe").start();
+    }
+
+    private void readAndSaveAccount(android.os.ParcelFileDescriptor source) {
+        try (java.io.InputStream in = new android.os.ParcelFileDescriptor.AutoCloseInputStream(source);
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[2048];
+            for (int count; (count = in.read(buffer)) != -1;) {
+                for (int i = 0; i < count; i++) {
+                    if (buffer[i] == '\n') {
+                        persistAccount(bytes);
+                        return;
+                    }
+                }
+                bytes.write(buffer, 0, count);
+            }
+            persistAccount(bytes);
+        } catch (Exception error) {
+            runOnUiThread(() -> status.setText(
+                    "Sign-in finished, but MinePilot could not save the Xbox account securely."));
+        }
+    }
+
+    private void persistAccount(java.io.ByteArrayOutputStream bytes) throws Exception {
+        if (bytes.size() == 0) return;
+        BotAccount.save(this, new JSONObject(bytes.toString("UTF-8")));
     }
 
     private void saveActiveNetworkAddresses(Path directory) throws IOException {
@@ -173,7 +288,8 @@ public final class XboxAuthProbeActivity extends Activity {
     private void refreshStatus() {
         handler.removeCallbacks(poll);
         if (!started) return;
-        close.setText(stopping && completedMessage == null ? "Force close" : "End session");
+        close.setText(stopping && completedMessage == null ? "Force close"
+                : joining ? "Stop connection" : "Cancel sign-in");
         if (completedMessage != null) {
             status.setText(completedMessage);
             return;
@@ -181,9 +297,23 @@ public final class XboxAuthProbeActivity extends Activity {
 
         JSONObject current = readStatus();
         String phase = current == null ? "" : current.optString("phase");
-        if (stopping) {
+        if (!"device_code".equals(phase)) {
+            openMicrosoft.setVisibility(View.GONE);
+            copyCode.setVisibility(View.GONE);
+        }
+        if ("device_code".equals(phase)) {
+            currentCode = current.optString("code");
+            status.setText("1  Open Microsoft and sign in\n\n2  Approve MinePilot\n\nYour code\n" + currentCode);
+            openMicrosoft.setVisibility(View.VISIBLE);
+            copyCode.setVisibility(View.VISIBLE);
+            if (!browserOpened) openVerification();
+        } else if (stopping) {
+            openMicrosoft.setVisibility(View.GONE);
+            copyCode.setVisibility(View.GONE);
             status.setText("Closing the friend-world session…");
         } else if ("bedrock_credentials".equals(phase)) {
+            openMicrosoft.setVisibility(View.GONE);
+            copyCode.setVisibility(View.GONE);
             status.setText("Xbox profile verified. Requesting Minecraft Bedrock credentials…");
         } else if ("discovery".equals(phase)) {
             status.setText("Signed in as " + current.optString("gamertag") + ". Looking for your friend’s world…");
@@ -199,6 +329,53 @@ public final class XboxAuthProbeActivity extends Activity {
             status.setText("Starting Microsoft sign-in…");
         }
         handler.postDelayed(poll, 350);
+    }
+
+    private boolean joiningIntent() {
+        return getIntent() != null && getIntent().hasExtra("host");
+    }
+
+    private GradientDrawable rounded(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dp(radius));
+        return drawable;
+    }
+
+    private Button authButton(String title) {
+        Button button = new Button(this);
+        button.setText(title);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(15);
+        button.setAllCaps(false);
+        button.setTypeface(null, Typeface.BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(rounded(PURPLE, 14));
+        return button;
+    }
+
+    private void openVerification() {
+        JSONObject current = readStatus();
+        if (current == null) return;
+        Uri base = Uri.parse(current.optString("url"));
+        if (!"https".equals(base.getScheme()) || !"microsoft.com".equals(base.getHost())
+                && !"www.microsoft.com".equals(base.getHost())) return;
+        Uri target = base.buildUpon().appendQueryParameter("otc", currentCode).build();
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, target));
+            browserOpened = true;
+        } catch (ActivityNotFoundException unavailable) {
+            status.setText("Open microsoft.com/link and enter code " + currentCode + ".");
+        }
+    }
+
+    private void copyCode() {
+        if (currentCode == null) return;
+        ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(ClipData.newPlainText("MinePilot sign-in code", currentCode));
+            status.setText("Code copied. Approve MinePilot on Microsoft’s sign-in page.");
+        }
     }
 
     private static JSONObject readStatus() {

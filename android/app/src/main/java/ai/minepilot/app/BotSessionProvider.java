@@ -13,10 +13,10 @@ import java.nio.charset.StandardCharsets;
 public final class BotSessionProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-        if (!"r".equals(mode) || !"/access".equals(uri.getPath())) throw new FileNotFoundException();
+        if (!"r".equals(mode) || !"/refresh".equals(uri.getPath())) throw new FileNotFoundException();
         return openPipeHelper(uri, "application/octet-stream", null, null, (fd, u, mime, opts, args) -> {
             try (OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(fd)) {
-                out.write(BotAccount.accessToken(getContext()).getBytes(StandardCharsets.UTF_8));
+                out.write(BotAccount.refreshToken(getContext()).getBytes(StandardCharsets.UTF_8));
             } catch (Exception ignored) {
                 // The runtime treats an empty pipe as a sign-in failure.
             }
