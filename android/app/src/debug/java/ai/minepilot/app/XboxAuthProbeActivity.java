@@ -55,7 +55,7 @@ public final class XboxAuthProbeActivity extends Activity {
     private Button copyCode;
     private boolean browserOpened;
     private String currentCode;
-    private boolean notifyOnAccountSave;
+    private volatile boolean notifyOnAccountSave;
     private static final String SIGN_IN_CHANNEL = "minepilot_sign_in";
     private static final int SIGN_IN_NOTIFICATION = 6201;
     private static final int BG = Color.rgb(10, 12, 23);
@@ -245,6 +245,10 @@ public final class XboxAuthProbeActivity extends Activity {
                     }
                 }
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
+                if (!joining && notifyOnAccountSave) {
+                    notifyOnAccountSave = false;
+                    showSignInCompleteNotification(BotAccount.saved(this));
+                }
             }
         }, "minepilot-xbox-auth-probe").start();
     }
@@ -276,11 +280,11 @@ public final class XboxAuthProbeActivity extends Activity {
         BotAccount.save(this, new JSONObject(bytes.toString("UTF-8")));
         if (notifyOnAccountSave) {
             notifyOnAccountSave = false;
-            showSignInCompleteNotification();
+            showSignInCompleteNotification(true);
         }
     }
 
-    private void showSignInCompleteNotification() {
+    private void showSignInCompleteNotification(boolean accountSaved) {
         if (Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
@@ -292,6 +296,7 @@ public final class XboxAuthProbeActivity extends Activity {
         }
         Intent dashboard = new Intent(this, DashboardActivity.class)
                 .putExtra("open_tab", "Xbox")
+                .putExtra("sign_in_saved", accountSaved)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent returnToApp = PendingIntent.getActivity(this, SIGN_IN_NOTIFICATION, dashboard,
@@ -300,8 +305,9 @@ public final class XboxAuthProbeActivity extends Activity {
                 ? new Notification.Builder(this, SIGN_IN_CHANNEL)
                 : new Notification.Builder(this);
         notification.setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setContentTitle("Microsoft sign-in complete")
-                .setContentText("Tap to return to MinePilot and continue.")
+                .setContentTitle(accountSaved ? "Xbox account connected" : "Sign-in needs attention")
+                .setContentText(accountSaved ? "Tap to return to MinePilot and continue."
+                        : "Tap to return and review the sign-in result.")
                 .setContentIntent(returnToApp)
                 .setAutoCancel(true)
                 .setPriority(Notification.PRIORITY_LOW);
