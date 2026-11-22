@@ -150,7 +150,8 @@ public final class DashboardActivity extends Activity {
         root.addView(nav); setContentView(root);
         switch (tab) {
             case "Xbox":
-                hero("ACCOUNT & MULTIPLAYER", "Friend world", "Sign-in and join diagnostics • Experimental");
+                hero("ACCOUNT & MULTIPLAYER", "Xbox Live", "Secure browser sign-in • OAuth PKCE");
+                button("Sign in with Xbox Live", () -> startActivity(new Intent(this, XboxSignInActivity.class)));
                 label("Sign in with your own Xbox account when authentication is available. Enter your FRIEND'S world-owner XUID below, not your own Xbox ID. Never enter Microsoft credentials here.", 16);
                 label(FriendWorldJoinReadiness.summary(new BedrockEngine.Unavailable()), 14);
                 EditText xuid = new EditText(this);
@@ -181,7 +182,7 @@ public final class DashboardActivity extends Activity {
                             + (FriendWorldJoinReadiness.canAttemptJoin(engine, owner)
                             ? " / Ready to attempt join" : " / No join attempted"));
                 });
-                button("Open Microsoft / Xbox sign-in", () -> launchDiagnostic("ai.minepilot.app.XboxAuthProbeActivity"));
+                label("Friend-world joining will be enabled after the new Xbox session is connected to the Bedrock runtime.", 14);
                 break;
             case "Commands":
                 hero("AI COMMAND CENTER", "Bot commands", "Offline plans only • Live execution unavailable");
