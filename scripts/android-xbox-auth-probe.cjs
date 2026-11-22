@@ -25,18 +25,24 @@ function deviceCodeStatus({ verification_uri, user_code }) {
   return { phase: 'device_code', url: url.origin + url.pathname, code: user_code };
 }
 
-async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount = null) {
+async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount = null) {
   let stage = 'microsoft_token';
   try {
     const initialCache = refreshToken
       ? { token: { access_token: '', refresh_token: refreshToken, expires_in: 0, obtainedOn: 0 } }
       : {};
+    const microsoftCache = createMemoryCache(initialCache);
     const auth = new Authflow('minepilot-bot', options =>
-      createMemoryCache(options?.cacheName === 'live' ? initialCache : {}), {
+      options?.cacheName === 'live' ? microsoftCache : createMemoryCache(), {
       flow: 'live',
       authTitle: Titles.MinecraftAndroid,
       deviceType: 'Android'
     }, code => publish(deviceCodeStatus(code)));
+    if (saveAccount) {
+      await auth.getMsaToken();
+      publish({ phase: 'microsoft_approved' });
+      stage = 'xbox_token';
+    }
     // Wait for interactive sign-in before the Xbox profile request starts its deadline.
     await auth.getXboxToken('http://xboxlive.com');
     stage = 'xbox_profile';
@@ -50,7 +56,7 @@ async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publis
     // Save the approved Xbox account before Bedrock-specific checks. A Bedrock
     // entitlement or credential failure must not discard a valid Xbox login.
     if (saveAccount) {
-      const cached = auth.msa?.cache ? await auth.msa.cache.getCached() : {};
+      const cached = await microsoftCache.getCached();
       const savedRefreshToken = cached.token?.refresh_token ?? refreshToken;
       if (typeof savedRefreshToken !== 'string' || savedRefreshToken.length < 20) {
         throw new Error('Microsoft refresh token missing');
@@ -58,7 +64,16 @@ async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publis
       await saveAccount({ refreshToken: savedRefreshToken, gamertag: profile.gamertag, xuid: profile.xuid });
     }
 
-    stage = 'bedrock_credentials';
+    return { auth, profile };
+  } catch {
+    publish({ phase: 'failed', stage });
+    throw new Error('Xbox authentication probe failed');
+  }
+}
+
+async function verifyXbox(dependencies, publish, saveAccount = null) {
+  const { auth, profile } = await connectXboxAccount(dependencies, publish, saveAccount);
+  try {
     publish({ phase: 'bedrock_credentials' });
     const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'secp384r1' });
     const key = publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
@@ -71,7 +86,7 @@ async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publis
     publish({ phase: 'verified', gamertag: profile.gamertag, xuid: profile.xuid });
     return { auth, profile };
   } catch {
-    publish({ phase: 'failed', stage });
+    publish({ phase: 'failed', stage: 'bedrock_credentials' });
     throw new Error('Xbox authentication probe failed');
   }
 }
@@ -94,8 +109,9 @@ if (require.main === module) {
   const saveAccount = Number.isInteger(session.saveFd)
     ? account => fs.writeSync(session.saveFd, JSON.stringify(account) + "\n")
     : null;
-  verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount)
+  connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount)
+    .then(() => publish({ phase: 'account_sent' }))
     .catch(() => { process.exitCode = 1; });
 }
 
-module.exports = { deviceCodeStatus, verifyXbox };
+module.exports = { connectXboxAccount, deviceCodeStatus, verifyXbox };

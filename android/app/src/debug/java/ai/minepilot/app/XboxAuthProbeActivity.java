@@ -56,6 +56,7 @@ public final class XboxAuthProbeActivity extends Activity {
     private boolean browserOpened;
     private String currentCode;
     private volatile boolean notifyOnAccountSave;
+    private volatile boolean accountReadBack;
     private static final String SIGN_IN_CHANNEL = "minepilot_sign_in";
     private static final int SIGN_IN_NOTIFICATION = 6201;
     private static final int BG = Color.rgb(10, 12, 23);
@@ -227,7 +228,9 @@ public final class XboxAuthProbeActivity extends Activity {
                 savePipe[1].close();
                 accountWriter.join(5000);
                 JSONObject last = readStatus();
-                completedMessage = last == null
+                completedMessage = !joining && accountReadBack
+                        ? "Xbox account verified and saved on this phone."
+                        : last == null
                         ? "FAIL. The sign-in runtime exited with code " + exitCode + "."
                         : finalMessage(last, exitCode);
             } catch (IOException | JSONException | UnsatisfiedLinkError | SecurityException failure) {
@@ -247,7 +250,7 @@ public final class XboxAuthProbeActivity extends Activity {
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
                 if (!joining && notifyOnAccountSave) {
                     notifyOnAccountSave = false;
-                    boolean accountSaved = BotAccount.saved(this);
+                    boolean accountSaved = accountReadBack;
                     if (!accountSaved && completedMessage != null && completedMessage.startsWith("PASS.")) {
                         completedMessage = "Xbox and Minecraft verification passed, but MinePilot could not save the account securely.";
                     }
@@ -283,10 +286,15 @@ public final class XboxAuthProbeActivity extends Activity {
 
     private void persistAccount(java.io.ByteArrayOutputStream bytes) throws Exception {
         if (bytes.size() == 0) return;
-        BotAccount.save(this, new JSONObject(bytes.toString("UTF-8")));
+        JSONObject account = new JSONObject(bytes.toString("UTF-8"));
+        BotAccount.save(this, account);
+        if (!account.getString("xuid").equals(BotAccount.read(this).getString("xuid"))) {
+            throw new IOException("Saved Xbox identity does not match");
+        }
+        accountReadBack = true;
         if (notifyOnAccountSave) {
             notifyOnAccountSave = false;
-            showSignInCompleteNotification(true, "Xbox profile verified. Bedrock verification is continuing.");
+            showSignInCompleteNotification(true, "Xbox account verified and saved on this phone.");
         }
     }
 
@@ -368,6 +376,8 @@ public final class XboxAuthProbeActivity extends Activity {
             openMicrosoft.setVisibility(View.GONE);
             copyCode.setVisibility(View.GONE);
             status.setText("Closing the friend-world session…");
+        } else if ("microsoft_approved".equals(phase)) {
+            status.setText("Microsoft approved sign-in. Connecting to Xbox…");
         } else if ("bedrock_credentials".equals(phase)) {
             openMicrosoft.setVisibility(View.GONE);
             copyCode.setVisibility(View.GONE);
@@ -452,7 +462,11 @@ public final class XboxAuthProbeActivity extends Activity {
         }
         if ("disconnected".equals(snapshot.optString("phase"))) return "The friend-world connection closed.";
         if ("stopped".equals(snapshot.optString("phase"))) return "Friend-world test ended.";
+        if ("account_sent".equals(snapshot.optString("phase"))) {
+            return "Xbox verified the account, but MinePilot could not read it back from secure storage.";
+        }
         switch (snapshot.optString("stage")) {
+            case "xbox_token": return "Microsoft approved sign-in, but Xbox did not issue a session.";
             case "microsoft_token": return "Microsoft approval or token exchange did not complete. Start a fresh sign-in code.";
             case "xbox_profile": return "Microsoft approval succeeded, but the Xbox profile could not be loaded. Check that this account has an Xbox gamertag.";
             case "account_save": return "Xbox profile was verified, but MinePilot could not save the account securely.";
