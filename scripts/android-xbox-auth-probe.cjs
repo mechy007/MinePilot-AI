@@ -65,8 +65,17 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
     }
 
     return { auth, profile };
-  } catch {
-    publish({ phase: 'failed', stage });
+  } catch (error) {
+    const result = { phase: 'failed', stage };
+    if (stage === 'xbox_token') {
+      // Publish only a numeric Xbox status. Error messages and bodies can contain secrets.
+      const code = String(error?.errorCode ?? error?.data?.XErr ?? '');
+      const fallback = typeof error?.message === 'string'
+        ? /\bXErr:\s*(214\d{7})\b/.exec(error.message)?.[1] : undefined;
+      const xboxCode = /^214\d{7}$/.test(code) ? code : fallback;
+      if (xboxCode) result.xboxCode = xboxCode;
+    }
+    publish(result);
     throw new Error('Xbox authentication probe failed');
   }
 }
