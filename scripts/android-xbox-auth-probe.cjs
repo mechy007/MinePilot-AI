@@ -183,7 +183,7 @@ async function loadFriends(xbox, owner) {
     for (const xuid of batch) {
       const record = states.get(xuid);
       const rawState = typeof record?.state === 'string' ? record.state.toLowerCase() : '';
-      const state = ({ online: 'Online', away: 'Away', offline: 'Offline' })[rawState] ?? 'Unknown';
+      const state = ['Online', 'Away', 'Offline'].find(state => state.toLowerCase() === rawState) ?? 'Unknown';
       const minecraft = (state === 'Online' || state === 'Away') &&
         (record.devices ?? []).some(device => (device.titles ?? []).some(title =>
           String(title.state).toLowerCase() === 'active' && title.name === 'Minecraft'));
@@ -238,4 +238,4 @@ if (require.main === module) {
     .catch(() => { process.exitCode = 1; });
 }
 
-module.exports = { connectXboxAccount, deviceCodeStatus, verifyXbox };
+module.exports = { connectXboxAccount, deviceCodeStatus, loadFriends, verifyXbox };
