@@ -58,6 +58,7 @@ function observeXboxExchange(auth, failures) {
   observe(auth.xbl, 'getDeviceToken', 'Xbox device token');
   observe(auth.xbl, 'getTitleToken', 'Xbox title token');
   observe(auth.xbl, 'getXSTSToken', 'Xbox session token');
+  observe(auth.xbl, 'doSisuAuth', 'Xbox session token');
 }
 
 async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount = null) {
@@ -69,8 +70,9 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
       : {};
     const microsoftCache = createMemoryCache(initialCache);
     const auth = new Authflow('minepilot-bot', options =>
-      options?.cacheName === 'live' ? microsoftCache : createMemoryCache(), {
-      flow: 'live',
+      options?.cacheName === 'sisu' ? microsoftCache : createMemoryCache(), {
+      // Use the SDK's mobile Xbox exchange with the same Android title and account.
+      flow: 'sisu',
       authTitle: Titles.MinecraftAndroid,
       deviceType: 'Android'
     }, code => publish(deviceCodeStatus(code)));
