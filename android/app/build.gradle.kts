@@ -13,7 +13,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        buildConfigField("String", "XBOX_CLIENT_ID", "\\\"" + xboxClientId.replace("\\", "\\\\").replace("\\"", "\\\\"") + "\\\"")
+        buildConfigField("String", "XBOX_CLIENT_ID", "\\\"$xboxClientId\\\"")
         ndk { abiFilters += listOf("arm64-v8a") }
     }
     if (nodeSmoke) {
