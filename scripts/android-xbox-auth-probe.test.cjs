@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { connectXboxAccount, deviceCodeStatus, verifyXbox } = require('./android-xbox-auth-probe.cjs');
+const { connectXboxAccount, deviceCodeStatus, loadFriends, verifyXbox } = require('./android-xbox-auth-probe.cjs');
 
 test('accepts official verification links and strips query parameters', () => {
   assert.deepEqual(deviceCodeStatus({
@@ -154,4 +154,34 @@ test('keeps the Xbox step when a retry masks the first failure', async () => {
     stage: 'xbox_token',
     exchangeFailures: ['Xbox device token: HTTP 403']
   });
+});
+
+test('lists mutual Xbox friends and keeps hidden presence unknown', async () => {
+  const playing = '2533274791381930';
+  const hidden = '2533274791381931';
+  const xbox = {
+    async request(method, url, options) {
+      switch (new URL(url).hostname) {
+        case 'social.xboxlive.com':
+          assert.equal(method, 'GET');
+          return { totalCount: 3, people: [
+            { xuid: playing, isFriend: true },
+            { xuid: hidden, isFollowingCaller: true },
+            { xuid: '2533274791381932', isFriend: false }
+          ] };
+        case 'profile.xboxlive.com':
+          assert.deepEqual(options.data.userIds, [playing, hidden]);
+          return { profileUsers: [{ id: playing, settings: [{ id: 'Gamertag', value: 'Friend' }] }] };
+        case 'userpresence.xboxlive.com':
+          assert.deepEqual(options.data.users, [playing, hidden]);
+          return [{ xuid: playing, state: 'online', devices: [{ titles: [{ name: 'Minecraft', state: 'active' }] }] }];
+        default: assert.fail('Unexpected service');
+      }
+    }
+  };
+  const result = await loadFriends(xbox, '1');
+  assert.deepEqual(result.friends, [
+    { xuid: playing, gamertag: 'Friend', state: 'Online', minecraft: true },
+    { xuid: hidden, gamertag: '', state: 'Unknown', minecraft: false }
+  ]);
 });
