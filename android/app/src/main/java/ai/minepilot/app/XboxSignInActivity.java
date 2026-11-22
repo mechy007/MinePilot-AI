@@ -34,7 +34,12 @@ public final class XboxSignInActivity extends Activity {
     private static String read(HttpURLConnection c) throws Exception {
         InputStream stream = c.getResponseCode() < 400 ? c.getInputStream() : c.getErrorStream();
         if (stream == null) throw new IllegalStateException("Empty authentication response");
-        try (InputStream in = stream) { return new String(in.readAllBytes(), StandardCharsets.UTF_8); }
+        try (InputStream in = stream; java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = in.read(buffer)) != -1) bytes.write(buffer, 0, count);
+            return bytes.toString("UTF-8");
+        }
     }
     private static JSONObject post(String url, String data, String bearer) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -55,7 +60,7 @@ public final class XboxSignInActivity extends Activity {
         LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(28, 48, 28, 28); layout.setBackgroundColor(Color.rgb(10, 12, 23));
         message = new TextView(this); message.setTextColor(Color.WHITE); message.setTextSize(18);
-        message.setText("Sign in with your Xbox / Microsoft account. MinePilot never receives your password.");
+        message.setText("Choose the Microsoft account you want MinePilot to use as its player. MinePilot never receives your password.");
         layout.addView(message);
         Button login = new Button(this); login.setText("Continue with Xbox");
         login.setOnClickListener(v -> begin()); layout.addView(login);
@@ -87,12 +92,17 @@ public final class XboxSignInActivity extends Activity {
             String uri = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"
                 + "?client_id=" + enc(BuildConfig.XBOX_CLIENT_ID)
                 + "&response_type=code&redirect_uri=" + enc(REDIRECT)
-                + "&response_mode=query&scope=" + enc("XboxLive.signin offline_access")
+                + "&prompt=select_account&response_mode=query&scope=" + enc("XboxLive.signin offline_access")
                 + "&code_challenge_method=S256&code_challenge=" + enc(challenge)
                 + "&state=" + enc(state);
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(uri)));
             message.setText("Complete sign-in in your browser. MinePilot will return here automatically.");
         } catch (Exception e) { message.setText("Could not open secure Microsoft sign-in."); }
+    }
+    static JSONObject refresh(String token) throws Exception {
+        return post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+                "client_id=" + enc(BuildConfig.XBOX_CLIENT_ID)
+                + "&grant_type=refresh_token&refresh_token=" + enc(token), null);
     }
     private void handle(Uri uri) {
         if (!"minepilot".equals(uri.getScheme()) || !"oauth".equals(uri.getHost())) return;
@@ -120,14 +130,9 @@ public final class XboxSignInActivity extends Activity {
                         .put("SiteName", "user.auth.xboxlive.com").put("RpsTicket", "d=" + access))
                         .put("RelyingParty", "http://auth.xboxlive.com").put("TokenType", "JWT").toString(), "");
                 String xboxToken = xbl.getString("Token");
-                String uhs = xbl.getJSONObject("DisplayClaims").getJSONArray("xui").getJSONObject(0).getString("uhs");
-                JSONObject xsts = post("https://xsts.auth.xboxlive.com/xsts/authorize",
-                    new JSONObject().put("Properties", new JSONObject().put("SandboxId", "RETAIL")
-                        .put("UserTokens", new org.json.JSONArray().put(xboxToken)))
-                        .put("RelyingParty", "rp://api.minecraftservices.com/").put("TokenType", "JWT").toString(), "");
-                result = "Xbox Live authentication successful. Xbox user hash: "
-                    + uhs + ". Minecraft XSTS token received. Session is not yet connected to the Bedrock engine.";
-                // Intentionally do not persist access or refresh tokens until encrypted storage is implemented.
+                if (xboxToken.isEmpty()) throw new IllegalStateException();
+                BotAccount.save(this, oauth.getString("refresh_token"));
+                result = "Bot account saved on this device. Return to Xbox and enter the friend hosting your world.";
             } catch (Exception e) {
                 result = "Xbox authentication could not be completed. Check app registration, account permissions, and network connection.";
             }

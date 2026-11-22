@@ -103,6 +103,23 @@ public final class DashboardActivity extends Activity {
         if (xuidInput != null) state.putString("xuid_draft", xuidInput.getText().toString());
         super.onSaveInstanceState(state);
     }
+    @Override protected void onResume() {
+        super.onResume();
+        if ("Xbox".equals(currentTab)) show("Xbox");
+    }
+
+    private void joinFriend(String host) {
+        Intent runtime = new Intent().setClassName(this, "ai.minepilot.app.XboxAuthProbeActivity");
+        if (getPackageManager().resolveActivity(runtime, 0) == null) {
+            status.setText("Install the ARM64 runtime-enabled APK to join a world.");
+            return;
+        }
+        if (!BotAccount.saved(this)) {
+            startActivity(new Intent(this, XboxSignInActivity.class));
+            return;
+        }
+        startActivity(runtime.putExtra("host", host));
+    }
     private void show(String tab) {
         if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
         xuidInput = null;
@@ -156,9 +173,14 @@ public final class DashboardActivity extends Activity {
         switch (tab) {
             case "Xbox":
                 hero("ACCOUNT & MULTIPLAYER", "Xbox Live", "Secure browser sign-in • OAuth PKCE");
-                button("Sign in with Xbox Live", () -> startActivity(new Intent(this, XboxSignInActivity.class)));
-                label("Sign in with your own Xbox account when authentication is available. Enter your FRIEND'S world-owner XUID below, not your own Xbox ID. Never enter Microsoft credentials here.", 16);
-                label(FriendWorldJoinReadiness.summary(new BedrockEngine.Unavailable()), 14);
+                boolean savedBot = BotAccount.saved(this);
+                label(savedBot ? "Bot account saved on this device." : "Choose a dedicated Microsoft account for your bot.", 16);
+                button(savedBot ? "Switch bot account" : "Sign in with Xbox Live",
+                        () -> startActivity(new Intent(this, XboxSignInActivity.class)));
+                if (savedBot) button("Forget bot account", () -> {
+                    BotAccount.forget(this);
+                    show("Xbox");
+                });
                 EditText xuid = new EditText(this);
                 xuid.setTextColor(Color.WHITE);
                 xuid.setHintTextColor(Color.LTGRAY);
@@ -167,27 +189,15 @@ public final class DashboardActivity extends Activity {
                 xuid.setText(xuidDraft != null ? xuidDraft : getPreferences(MODE_PRIVATE).getString("owner_xuid", ""));
                 xuidInput = xuid;
                 body.addView(xuid);
-                button("Save friend account", () -> {
-                    String value = xuid.getText().toString().trim();
-                    try {
-                        if (!value.matches("[0-9]{1,20}")) {
-                            status.setText("Gamertag lookup is not connected yet. Use a numeric XUID for live join tests.");
-                            return;
-                        }
-                        Long.parseUnsignedLong(value);
-                        getPreferences(MODE_PRIVATE).edit().putString("owner_xuid", value).apply();
-                        xuidDraft = value;
-                        status.setText("Saved locally. No login attempted.");
-                    } catch (NumberFormatException e) { status.setText("Invalid unsigned 64-bit XUID."); }
+                button("Join friend’s world", () -> {
+                    String host = xuid.getText().toString().trim();
+                    if (host.isEmpty() || host.length() > 32) {
+                        xuid.setError("Enter your friend’s gamertag or XUID.");
+                        return;
+                    }
+                    getPreferences(MODE_PRIVATE).edit().putString("owner_xuid", host).apply();
+                    joinFriend(host);
                 });
-                button("Check friend-world join readiness", () -> {
-                    BedrockEngine engine = new BedrockEngine.Unavailable();
-                    String owner = xuid.getText().toString().trim();
-                    status.setText(FriendWorldJoinReadiness.summary(engine)
-                            + (FriendWorldJoinReadiness.canAttemptJoin(engine, owner)
-                            ? " / Ready to attempt join" : " / No join attempted"));
-                });
-                label("Friend-world joining will be enabled after the new Xbox session is connected to the Bedrock runtime.", 14);
                 break;
             case "Commands":
                 hero("AI COMMAND CENTER", "Bot commands", "Offline plans only • Live execution unavailable");
@@ -269,7 +279,7 @@ public final class DashboardActivity extends Activity {
                 hero("●  BOT OFFLINE", "Your world. Your AI.", "Connect a separate Xbox bot account to explore friend-world joining.");
                 label("CONNECTION OVERVIEW", 19);
                 label("Connection: DISCONNECTED", 21);
-                label("Xbox auth: unavailable\nFriend world discovery: unavailable\nSpawn: unavailable", 16);
+                label("Xbox account: see Xbox tab\nFriend world discovery: unavailable\nSpawn: unavailable", 16);
                 button("Connect bot (unavailable)", () -> disabled("Connect"));
                 button("Start diagnostic service", () -> {
                     try {

@@ -25,14 +25,22 @@ function deviceCodeStatus({ verification_uri, user_code }) {
   return { phase: 'device_code', url: url.origin + url.pathname, code: user_code };
 }
 
-async function verifyXbox({ Authflow, Titles, XboxClient }, publish) {
+async function verifyXbox({ Authflow, Titles, XboxClient, browserSession }, publish) {
   let stage = 'microsoft_xbox';
   try {
-    const auth = new Authflow('minepilot-android-probe', createMemoryCache, {
-      flow: 'live',
-      authTitle: Titles.MinecraftAndroid,
-      deviceType: 'Android'
-    }, code => publish(deviceCodeStatus(code)));
+    let auth;
+    if (browserSession) {
+      if (!browserSession.access || !browserSession.clientId) throw new Error('Sign in again');
+      auth = new Authflow('minepilot-bot', createMemoryCache, {
+        flow: 'msal', authTitle: browserSession.clientId, deviceType: 'Android'
+      });
+      // Android owns interactive sign-in and refresh. SDK exchanges use this account only.
+      auth.getMsaToken = async () => browserSession.access;
+    } else {
+      auth = new Authflow('minepilot-android-probe', createMemoryCache, {
+        flow: 'live', authTitle: Titles.MinecraftAndroid, deviceType: 'Android'
+      }, code => publish(deviceCodeStatus(code)));
+    }
     // Wait for interactive sign-in before the Xbox profile request starts its deadline.
     await auth.getXboxToken('http://xboxlive.com');
     const xbox = new XboxClient(auth);
@@ -71,7 +79,7 @@ if (require.main === module) {
   console.info = console.warn = console.error = console.log = () => {};
   const { Authflow, Titles } = require('prismarine-auth');
   const { XboxClient } = require('prismarine-xbox-services');
-  verifyXbox({ Authflow, Titles, XboxClient }, publish).catch(() => { process.exitCode = 1; });
+  verifyXbox({ Authflow, Titles, XboxClient, browserSession }, publish).catch(() => { process.exitCode = 1; });
 }
 
 module.exports = { deviceCodeStatus, verifyXbox };

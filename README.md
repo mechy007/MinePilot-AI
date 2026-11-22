@@ -6,6 +6,14 @@ MinePilot-AI aims to run an independent Minecraft Bedrock player from an Android
 
 > **Project maturity: experimental.** The repository includes an Android shell, a packaged Node/Bedrock SDK diagnostic path, gameplay-planning foundations, and work-in-progress Xbox authentication. **A successfully built APK is not evidence of successful Xbox login, world join, spawn, or autonomous gameplay.** No end-to-end live Android friend-world join has been verified.
 
+## Using a dedicated Xbox bot account on Android
+
+In the runtime-enabled ARM64 debug build, open **Xbox → Sign in with Xbox Live** and choose the personal Microsoft account that should appear in Minecraft as the bot. Return to Xbox, enter the host’s gamertag or numeric XUID and tap **Join friend’s world** while the host has multiplayer open and allows that account to join. **Switch bot account** replaces the saved login after successful sign-in. **Forget bot account** clears the locally saved credential.
+
+The build requires MinePilot’s authorized public-client application ID and registered redirect `minepilot://oauth`. The Android Node Runtime Probe workflow reads the repository Actions variable `MINEPILOT_XBOX_CLIENT_ID`. The local Gradle property is `minepilotXboxClientId`. An app registration and an Xbox player account serve different purposes.
+
+This implementation supersedes the PR #59 status notes below for sign-in, credential storage, gamertag lookup and the Android runtime handoff. The app encrypts the refresh token using Android Keystore, obtains a fresh access token before joining and passes it through an app-private pipe. The runner checks the Xbox and Bedrock identities, resolves the host and attempts the existing NetherNet join. A successful live spawn still requires device and host verification.
+
 ## Project at a glance
 
 | Property | Target / current scope |

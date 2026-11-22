@@ -91,19 +91,25 @@ async function observeSession(client, publish, signal, getStage) {
 async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld }) {
   let stage = 'owner';
   try {
-    validateOwner(ownerXuid);
+    if (!ownerXuid || ownerXuid.length > 32) throw new Error();
     stage = 'auth';
     const { auth, profile } = await verifyXbox(authDependencies, publish);
     signal.throwIfAborted();
     stage = 'owner';
+    if (!/^\d+$/.test(ownerXuid)) {
+      const xbox = new authDependencies.XboxClient(auth);
+      const friend = await xbox.getProfile({ gamertag: ownerXuid });
+      ownerXuid = friend.xuid;
+      signal.throwIfAborted();
+    }
     validateOwner(ownerXuid, profile.xuid);
     stage = 'discovery';
-    publish({ phase: 'discovery' });
+    publish({ phase: 'discovery', gamertag: profile.gamertag });
     const client = createClient({
       username: profile.gamertag,
       offline: false,
       version: '1.26.60',
-      authTitle: authDependencies.Titles.MinecraftAndroid,
+      authTitle: authDependencies.browserSession?.clientId ?? authDependencies.Titles.MinecraftAndroid,
       deviceType: 'Android',
       authflow: auth,
       nethernet: { webrtcBackend: 'werift' },
@@ -150,11 +156,13 @@ if (require.main === module) {
     const { XboxClient } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
     const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
+    const config = JSON.parse(readFileSync(path.join(__dirname, 'browser-session.json'), 'utf8'));
+    const browserSession = { clientId: config.clientId, access: readFileSync(config.fd, 'utf8') };
     await run({
       ownerXuid: readFileSync(path.join(__dirname, 'owner-xuid'), 'utf8'),
       publish,
       signal: controller.signal,
-      authDependencies: { Authflow, Titles, XboxClient },
+      authDependencies: { Authflow, Titles, XboxClient, browserSession },
       createClient,
       pickOwnerWorld
     });

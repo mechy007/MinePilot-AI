@@ -80,18 +80,23 @@ test('hands the verified account to the friend-world SDK with exact owner select
     }
   }
   class XboxClient {
-    async getProfile() { return { xuid: '42', gamertag: 'Bot' }; }
+    async getProfile(identifier) {
+      if (identifier === 'me') return { xuid: '42', gamertag: 'Bot' };
+      assert.deepEqual(identifier, { gamertag: 'Friend' });
+      return { xuid: '84', gamertag: 'Friend' };
+    }
   }
   await run({
-    ownerXuid: '84',
+    ownerXuid: 'Friend',
     publish: snapshot => snapshots.push(snapshot),
     signal: new AbortController().signal,
-    authDependencies: { Authflow, XboxClient, Titles: { MinecraftAndroid: 'android' } },
+    authDependencies: { Authflow, XboxClient, browserSession: { clientId: 'bot-app', access: 'fixture' } },
     pickOwnerWorld,
     createClient(options) {
-      queueMicrotask(() => {
+      queueMicrotask(async () => {
         assert.equal(options.authflow, auth);
-        assert.equal(options.authTitle, 'android');
+        assert.equal(options.authTitle, 'bot-app');
+        assert.equal(await options.authflow.getMsaToken(), 'fixture');
         assert.equal(options.offline, false);
         const session = { sessionRef: { name: 'target' }, customProperties: { ownerId: '84', protocol: 2225 } };
         assert.equal(options.world.pickSession([
