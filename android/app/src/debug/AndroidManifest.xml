@@ -7,11 +7,5 @@
             android:label="MinePilot Node Runtime Test"
             android:process=":node_smoke">
         </activity>
-        <activity android:name=".XboxAuthProbeActivity"
-            android:enabled="${minepilotNodeSmoke}"
-            android:exported="${minepilotNodeSmoke}"
-            android:label="MinePilot Friend World Test"
-            android:process=":xbox_auth_probe">
-        </activity>
     </application>
 </manifest>
