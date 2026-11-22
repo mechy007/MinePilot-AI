@@ -74,6 +74,14 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
         ? /\bXErr:\s*(214\d{7})\b/.exec(error.message)?.[1] : undefined;
       const xboxCode = /^214\d{7}$/.test(code) ? code : fallback;
       if (xboxCode) result.xboxCode = xboxCode;
+      const status = error?.response?.status ?? error?.status ?? error?.cause?.response?.status;
+      if (Number.isInteger(status) && status >= 400 && status <= 599) result.httpStatus = status;
+      const transport = error?.cause?.code ?? error?.code;
+      if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT',
+        'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'CERT_HAS_EXPIRED',
+        'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'ERR_TLS_CERT_ALTNAME_INVALID'].includes(transport)) {
+        result.transport = transport;
+      }
     }
     publish(result);
     throw new Error('Xbox authentication probe failed');
