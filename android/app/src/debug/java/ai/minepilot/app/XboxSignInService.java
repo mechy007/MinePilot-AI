@@ -252,7 +252,13 @@ public final class XboxSignInService extends Service {
             return "Xbox verified the account, but MinePilot could not read it back from secure storage.";
         }
         switch (snapshot.optString("stage")) {
-            case "xbox_token": return "Microsoft approved sign-in, but Xbox did not issue a session.";
+            case "xbox_token":
+                String xboxCode = snapshot.optString("xboxCode");
+                if ("2148916233".equals(xboxCode)) {
+                    return "Xbox could not find a profile for this Microsoft account (2148916233). Sign in at xbox.com and finish setting up your Xbox profile.";
+                }
+                return "Microsoft approved sign-in, but Xbox did not issue a session"
+                        + (xboxCode.matches("214[0-9]{7}") ? " (Xbox error " + xboxCode + ")." : ".");
             case "microsoft_token": return "Microsoft approval or token exchange did not complete. Start a fresh sign-in code.";
             case "xbox_profile": return "Microsoft approval succeeded, but the Xbox profile could not be loaded. Check that this account has an Xbox gamertag.";
             case "account_save": return "Xbox profile was verified, but MinePilot could not save the account securely.";
