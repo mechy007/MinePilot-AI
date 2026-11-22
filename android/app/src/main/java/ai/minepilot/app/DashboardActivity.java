@@ -51,7 +51,12 @@ public final class DashboardActivity extends Activity {
         t.setBackground(surface(PANEL, 16)); body.addView(t, lp);
     }
     private void button(String name, Runnable callback) {
-        TextView b = text(name + "   ›", 15, Color.WHITE, true);
+        Button b = new Button(this);
+        b.setText(name);
+        b.setTextSize(15);
+        b.setTextColor(Color.WHITE);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         b.setGravity(Gravity.CENTER_VERTICAL);
         b.setPadding(dp(18), dp(17), dp(18), dp(17));
         b.setBackground(surface(PANEL, 14));
