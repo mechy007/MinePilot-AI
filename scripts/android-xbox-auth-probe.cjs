@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { generateKeyPairSync } = require('node:crypto');
 
-function createMemoryCache() {
-  let values = {};
+function createMemoryCache(initial = {}) {
+  let values = initial;
   return {
     async reset() { values = {}; },
     async getCached() { return values; },
@@ -25,10 +25,14 @@ function deviceCodeStatus({ verification_uri, user_code }) {
   return { phase: 'device_code', url: url.origin + url.pathname, code: user_code };
 }
 
-async function verifyXbox({ Authflow, Titles, XboxClient }, publish) {
+async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount = null) {
   let stage = 'microsoft_xbox';
   try {
-    const auth = new Authflow('minepilot-android-probe', createMemoryCache, {
+    const initialCache = refreshToken
+      ? { token: { access_token: '', refresh_token: refreshToken, expires_in: 0, obtainedOn: 0 } }
+      : {};
+    const auth = new Authflow('minepilot-bot', options =>
+      createMemoryCache(options?.cacheName === 'live' ? initialCache : {}), {
       flow: 'live',
       authTitle: Titles.MinecraftAndroid,
       deviceType: 'Android'
@@ -51,6 +55,14 @@ async function verifyXbox({ Authflow, Titles, XboxClient }, publish) {
     }
     const identity = JSON.parse(Buffer.from(chain[1].split('.')[1], 'base64url').toString('utf8'));
     if (identity.extraData?.XUID !== profile.xuid) throw new Error('Bedrock and Xbox identities differ');
+    if (saveAccount) {
+      const cached = auth.msa?.cache ? await auth.msa.cache.getCached() : {};
+      const savedRefreshToken = cached.token?.refresh_token ?? refreshToken;
+      if (typeof savedRefreshToken !== 'string' || savedRefreshToken.length < 20) {
+        throw new Error('Microsoft refresh token missing');
+      }
+      await saveAccount({ refreshToken: savedRefreshToken, gamertag: profile.gamertag, xuid: profile.xuid });
+    }
     publish({ phase: 'verified', gamertag: profile.gamertag, xuid: profile.xuid });
     return { auth, profile };
   } catch {
@@ -68,10 +80,17 @@ if (require.main === module) {
   };
   // This probe publishes only allowlisted fields. Upstream diagnostic output can include auth responses.
   require('debug').disable();
-  console.info = console.warn = console.error = console.log = () => {};
+  console.info = console.warn = console.error = console.log = console.debug = () => {};
   const { Authflow, Titles } = require('prismarine-auth');
   const { XboxClient } = require('prismarine-xbox-services');
-  verifyXbox({ Authflow, Titles, XboxClient }, publish).catch(() => { process.exitCode = 1; });
+  const sessionPath = path.join(__dirname, 'device-session.json');
+  const session = fs.existsSync(sessionPath) ? JSON.parse(fs.readFileSync(sessionPath, 'utf8')) : {};
+  const refreshToken = Number.isInteger(session.fd) ? fs.readFileSync(session.fd, 'utf8') : undefined;
+  const saveAccount = Number.isInteger(session.saveFd)
+    ? account => fs.writeSync(session.saveFd, JSON.stringify(account) + "\n")
+    : null;
+  verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount)
+    .catch(() => { process.exitCode = 1; });
 }
 
 module.exports = { deviceCodeStatus, verifyXbox };

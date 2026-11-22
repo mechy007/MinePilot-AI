@@ -88,17 +88,23 @@ async function observeSession(client, publish, signal, getStage) {
   await client._nethernetCleanup;
 }
 
-async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld }) {
+async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld, saveAccount }) {
   let stage = 'owner';
   try {
-    validateOwner(ownerXuid);
+    if (!ownerXuid || ownerXuid.length > 32) throw new Error();
     stage = 'auth';
-    const { auth, profile } = await verifyXbox(authDependencies, publish);
+    const { auth, profile } = await verifyXbox(authDependencies, publish, saveAccount);
     signal.throwIfAborted();
     stage = 'owner';
+    if (!/^\d+$/.test(ownerXuid)) {
+      const xbox = new authDependencies.XboxClient(auth);
+      const friend = await xbox.getProfile({ gamertag: ownerXuid });
+      ownerXuid = friend.xuid;
+      signal.throwIfAborted();
+    }
     validateOwner(ownerXuid, profile.xuid);
     stage = 'discovery';
-    publish({ phase: 'discovery' });
+    publish({ phase: 'discovery', gamertag: profile.gamertag });
     const client = createClient({
       username: profile.gamertag,
       offline: false,
@@ -150,11 +156,18 @@ if (require.main === module) {
     const { XboxClient } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
     const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
+    const configPath = path.join(__dirname, 'device-session.json');
+    const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
+    const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
+    const saveAccount = Number.isInteger(config.saveFd)
+      ? account => writeSync(config.saveFd, JSON.stringify(account) + "\n")
+      : null;
     await run({
       ownerXuid: readFileSync(path.join(__dirname, 'owner-xuid'), 'utf8'),
       publish,
       signal: controller.signal,
-      authDependencies: { Authflow, Titles, XboxClient },
+      authDependencies: { Authflow, Titles, XboxClient, refreshToken },
+      saveAccount,
       createClient,
       pickOwnerWorld
     });
