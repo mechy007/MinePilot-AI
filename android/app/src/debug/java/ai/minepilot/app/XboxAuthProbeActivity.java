@@ -53,10 +53,10 @@ public final class XboxAuthProbeActivity extends Activity {
     private Button close;
     private Button openMicrosoft;
     private Button copyCode;
-    private boolean browserOpened;
+    private static boolean browserOpened;
     private String currentCode;
-    private volatile boolean notifyOnAccountSave;
-    private volatile boolean accountReadBack;
+    private static volatile boolean notifyOnAccountSave;
+    private static volatile boolean accountReadBack;
     private static final String SIGN_IN_CHANNEL = "minepilot_sign_in";
     private static final int SIGN_IN_NOTIFICATION = 6201;
     private static final int BG = Color.rgb(10, 12, 23);
@@ -125,9 +125,10 @@ public final class XboxAuthProbeActivity extends Activity {
         root.addView(close, new LinearLayout.LayoutParams(-1, dp(54)));
         setContentView(root);
         boolean switchingAccount = getIntent().getBooleanExtra("switch_account", false);
-        notifyOnAccountSave = !BotAccount.saved(this) || switchingAccount;
-        if (switchingAccount) BotAccount.forget(this);
-        startProbe();
+        if (!started) {
+            notifyOnAccountSave = !joiningIntent() || !BotAccount.saved(this) || switchingAccount;
+            startProbe();
+        }
     }
 
     @Override protected void onStart() {
@@ -184,6 +185,7 @@ public final class XboxAuthProbeActivity extends Activity {
         String host = getIntent().getStringExtra("host");
         if (host != null && (host.isEmpty() || host.length() > 32)) { finish(); return; }
         joining = host != null;
+        if (!joining) BotAccount.recordSignInResult(this, "");
         started = true;
         refreshStatus();
         new Thread(() -> {
@@ -246,6 +248,9 @@ public final class XboxAuthProbeActivity extends Activity {
                     try { accountWriter.join(1500); } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
                     }
+                }
+                if (!joining && completedMessage != null) {
+                    BotAccount.recordSignInResult(this, completedMessage);
                 }
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
                 if (!joining && notifyOnAccountSave) {
@@ -356,6 +361,9 @@ public final class XboxAuthProbeActivity extends Activity {
         close.setText(stopping && completedMessage == null ? "Force close"
                 : joining ? "Stop connection" : "Cancel sign-in");
         if (completedMessage != null) {
+            openMicrosoft.setVisibility(View.GONE);
+            copyCode.setVisibility(View.GONE);
+            close.setText("Return to dashboard");
             status.setText(completedMessage);
             return;
         }
