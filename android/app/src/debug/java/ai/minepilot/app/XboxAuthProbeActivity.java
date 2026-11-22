@@ -66,13 +66,14 @@ public final class XboxAuthProbeActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         TextView title = new TextView(this);
-        title.setText(joiningIntent() ? "Connect to your friend" : "Connect your Xbox account");
+        title.setText(friendsIntent() ? "Refresh Xbox friends" : joiningIntent() ? "Connect to your friend" : "Connect your Xbox account");
         title.setTextColor(Color.WHITE);
         title.setTextSize(26);
         title.setTypeface(null, Typeface.BOLD);
         layout.addView(title);
         TextView description = new TextView(this);
-        description.setText("MinePilot will open Microsoft sign-in. Approve the bot account there, then return here while MinePilot finishes automatically.");
+        description.setText(friendsIntent() ? "MinePilot is checking your saved Xbox account for friends and presence."
+                : "MinePilot will open Microsoft sign-in. Approve the bot account there, then return here while MinePilot finishes automatically.");
         description.setTextColor(Color.rgb(166, 174, 197));
         description.setTextSize(15);
         description.setPadding(0, dp(8), 0, dp(18));
@@ -110,7 +111,8 @@ public final class XboxAuthProbeActivity extends Activity {
                 finish();
                 return;
             }
-            startForegroundService(new Intent(this, XboxSignInService.class).putExtra("host", host));
+            startForegroundService(new Intent(this, XboxSignInService.class).putExtra("host", host)
+                    .putExtra("friends", friendsIntent()));
         }
     }
 
@@ -162,7 +164,7 @@ public final class XboxAuthProbeActivity extends Activity {
                 // Fall back to closing the isolated runtime process.
             }
         }
-        if (!XboxSignInService.joining && XboxSignInService.completedMessage == null) {
+        if (!friendsIntent() && !XboxSignInService.joining && XboxSignInService.completedMessage == null) {
             XboxSignInReceiver.record(this, "Sign-in cancelled. Start a new attempt when ready.");
         }
         explicitlyClosed = true;
@@ -176,7 +178,7 @@ public final class XboxAuthProbeActivity extends Activity {
             return;
         }
         close.setText(stopping && XboxSignInService.completedMessage == null ? "Force close"
-                : XboxSignInService.joining ? "Stop connection" : "Cancel sign-in");
+                : XboxSignInService.joining ? "Stop connection" : friendsIntent() ? "Cancel refresh" : "Cancel sign-in");
         if (XboxSignInService.completedMessage != null) {
             openMicrosoft.setVisibility(View.GONE);
             copyCode.setVisibility(View.GONE);
@@ -221,6 +223,10 @@ public final class XboxAuthProbeActivity extends Activity {
             status.setText("Starting Microsoft sign-in…");
         }
         handler.postDelayed(poll, 350);
+    }
+
+    private boolean friendsIntent() {
+        return getIntent() != null && getIntent().getBooleanExtra("friends", false);
     }
 
     private boolean joiningIntent() {
