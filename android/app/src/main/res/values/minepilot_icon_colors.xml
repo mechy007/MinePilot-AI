@@ -1,2 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources><color name="minepilot_icon_background">#0B0A1E</color></resources>
+<resources>
+    <color name="minepilot_icon_background">#233226</color>
+    <style name="MinePilotTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#A8D67D</item>
+        <item name="android:windowBackground">#151B15</item>
+        <item name="android:statusBarColor">#151B15</item>
+        <item name="android:navigationBarColor">#151B15</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>
