@@ -31,8 +31,8 @@ async function verifyXbox({ Authflow, Titles, XboxClient, refreshToken }, publis
     const initialCache = refreshToken
       ? { token: { access_token: '', refresh_token: refreshToken, expires_in: 0, obtainedOn: 0 } }
       : {};
-    const auth = new Authflow('minepilot-bot', ({ cacheName }) =>
-      createMemoryCache(cacheName === 'live' ? initialCache : {}), {
+    const auth = new Authflow('minepilot-bot', options =>
+      createMemoryCache(options?.cacheName === 'live' ? initialCache : {}), {
       flow: 'live',
       authTitle: Titles.MinecraftAndroid,
       deviceType: 'Android'
