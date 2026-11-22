@@ -148,6 +148,54 @@ async function verifyXbox(dependencies, publish, saveAccount = null) {
   }
 }
 
+async function loadFriends(xbox, owner) {
+  const ids = new Set();
+  let truncated = false;
+  for (let start = 0; start < 1000;) {
+    const page = await xbox.request('GET',
+      `https://social.xboxlive.com/users/me/people?startIndex=${start}&maxItems=100`,
+      { contractVersion: '5' });
+    if (!Array.isArray(page?.people)) throw new Error('Xbox people response missing');
+    for (const person of page.people) {
+      if (person.isFriend === true && typeof person.xuid === 'string' && /^\d{1,20}$/.test(person.xuid)) {
+        ids.add(person.xuid);
+      }
+    }
+    start += page.people.length;
+    if (!page.people.length || (Number.isInteger(page.totalCount) && start >= page.totalCount)) break;
+    if (start >= 1000) truncated = true;
+  }
+
+  const friends = [];
+  const xuids = [...ids];
+  for (let offset = 0; offset < xuids.length; offset += 100) {
+    const batch = xuids.slice(offset, offset + 100);
+    const [profiles, presence] = await Promise.allSettled([
+      xbox.request('POST', 'https://profile.xboxlive.com/users/batch/profile/settings',
+        { contractVersion: '2', data: { userIds: batch, settings: ['Gamertag'] } }),
+      xbox.request('POST', 'https://userpresence.xboxlive.com/users/batch',
+        { contractVersion: '3', data: { users: batch, level: 'all' } })
+    ]);
+    const names = new Map((profiles.value?.profileUsers ?? []).map(profile =>
+      [String(profile.id), profile.settings?.find(setting => setting.id === 'Gamertag')?.value]));
+    const states = new Map((Array.isArray(presence.value) ? presence.value : []).map(record =>
+      [String(record.xuid), record]));
+    for (const xuid of batch) {
+      const record = states.get(xuid);
+      const state = ['Online', 'Away', 'Offline'].includes(record?.state) ? record.state : 'Unknown';
+      const minecraft = (state === 'Online' || state === 'Away') &&
+        (record.devices ?? []).some(device => (device.titles ?? []).some(title =>
+          title.state === 'Active' && title.name === 'Minecraft'));
+      const gamertag = names.get(xuid);
+      friends.push({ xuid, gamertag: typeof gamertag === 'string' ? gamertag.slice(0, 32) : '', state, minecraft });
+    }
+  }
+  const order = { Online: 0, Away: 1, Unknown: 2, Offline: 3 };
+  friends.sort((a, b) => Number(b.minecraft) - Number(a.minecraft) ||
+    order[a.state] - order[b.state] || a.gamertag.localeCompare(b.gamertag));
+  return { phase: 'friends_loaded', owner, friends, truncated };
+}
+
 if (require.main === module) {
   process.env.HOME ??= __dirname;
   const status = path.join(__dirname, 'auth-status.json');
@@ -166,8 +214,26 @@ if (require.main === module) {
   const saveAccount = Number.isInteger(session.saveFd)
     ? account => fs.writeSync(session.saveFd, JSON.stringify(account) + "\n")
     : null;
-  connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount)
-    .then(() => publish({ phase: 'account_sent' }))
+  const friendsOwner = session.friendsOwner;
+  const publishAuth = snapshot => {
+    if (friendsOwner && snapshot.phase === 'device_code') throw new Error('Account needs sign-in');
+    publish(snapshot);
+  };
+  const save = friendsOwner && saveAccount ? account => {
+    if (account.xuid !== friendsOwner) throw new Error('Xbox account changed');
+    return saveAccount(account);
+  } : saveAccount;
+  connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }, publishAuth, save)
+    .then(async ({ auth, profile }) => {
+      if (!friendsOwner) return publish({ phase: 'account_sent' });
+      if (profile.xuid !== friendsOwner) throw new Error('Xbox account changed');
+      try {
+        publish(await loadFriends(new XboxClient(auth), profile.xuid));
+      } catch (error) {
+        publish({ phase: 'failed', stage: 'friends', httpStatus: readHttpStatus(error) });
+        process.exitCode = 1;
+      }
+    })
     .catch(() => { process.exitCode = 1; });
 }
 
