@@ -126,3 +126,31 @@ test('connects and hands off a verified Xbox account without requesting Bedrock'
     });
   assert.deepEqual(events, ['microsoft', 'microsoft_approved', 'xbox', 'save']);
 });
+
+test('keeps the Xbox step when a retry masks the first failure', async () => {
+  const snapshots = [];
+  class Authflow {
+    constructor() {
+      this.xbl = {
+        getDeviceToken: async () => {
+          throw Object.assign(new Error('private response'), { status: 403 });
+        }
+      };
+    }
+    async getMsaToken() {}
+    async getXboxToken() {
+      try {
+        await this.xbl.getDeviceToken();
+      } catch {
+        throw new TypeError('private retry failure');
+      }
+    }
+  }
+  await assert.rejects(connectXboxAccount({ Authflow, Titles: {} },
+    snapshot => snapshots.push(snapshot), () => {}), /probe failed/);
+  assert.deepEqual(snapshots.at(-1), {
+    phase: 'failed',
+    stage: 'xbox_token',
+    exchangeFailures: ['Xbox device token: HTTP 403']
+  });
+});

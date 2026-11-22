@@ -268,7 +268,18 @@ public final class XboxSignInService extends Service {
                 if (httpStatus >= 400 && httpStatus <= 599) {
                     return "Xbox session request failed (HTTP " + httpStatus + ").";
                 }
-                return "Xbox session request failed without an Xbox code, HTTP status or known network error.";
+                JSONArray failures = snapshot.optJSONArray("exchangeFailures");
+                if (failures != null && failures.length() > 0) {
+                    StringBuilder detail = new StringBuilder("Xbox exchange failed");
+                    for (int i = 0; i < Math.min(failures.length(), 4); i++) {
+                        String step = failures.optString(i);
+                        if (step.matches("(Microsoft token refresh|Xbox (user|device|title|session) token): (HTTP [45][0-9]{2}|Error|TypeError|RangeError|SyntaxError|URIError|AbortError)")) {
+                            detail.append(i == 0 ? ". " : " → ").append(step);
+                        }
+                    }
+                    return detail.append(".").toString();
+                }
+                return "Xbox session request failed before an exchange step could be identified.";
             case "microsoft_token": return "Microsoft approval or token exchange did not complete. Start a fresh sign-in code.";
             case "xbox_profile": return "Microsoft approval succeeded, but the Xbox profile could not be loaded. Check that this account has an Xbox gamertag.";
             case "account_save": return "Xbox profile was verified, but MinePilot could not save the account securely.";

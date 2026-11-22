@@ -25,8 +25,35 @@ function deviceCodeStatus({ verification_uri, user_code }) {
   return { phase: 'device_code', url: url.origin + url.pathname, code: user_code };
 }
 
+// Observe the dependency's individual steps, including errors it retries internally.
+function observeXboxExchange(auth, failures) {
+  function observe(target, method, label) {
+    const original = target?.[method];
+    if (typeof original !== 'function') return;
+    target[method] = async function (...args) {
+      try {
+        return await original.apply(this, args);
+      } catch (error) {
+        const type = ['TypeError', 'RangeError', 'SyntaxError', 'URIError', 'AbortError']
+          .includes(error?.name) ? error.name : 'Error';
+        const status = error?.response?.status ?? error?.status;
+        const detail = Number.isInteger(status) && status >= 400 && status <= 599
+          ? `HTTP ${status}` : type;
+        if (failures.length < 4) failures.push(`${label}: ${detail}`);
+        throw error;
+      }
+    };
+  }
+  observe(auth, 'getMsaToken', 'Microsoft token refresh');
+  observe(auth.xbl, 'getUserToken', 'Xbox user token');
+  observe(auth.xbl, 'getDeviceToken', 'Xbox device token');
+  observe(auth.xbl, 'getTitleToken', 'Xbox title token');
+  observe(auth.xbl, 'getXSTSToken', 'Xbox session token');
+}
+
 async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }, publish, saveAccount = null) {
   let stage = 'microsoft_token';
+  const failures = [];
   try {
     const initialCache = refreshToken
       ? { token: { access_token: '', refresh_token: refreshToken, expires_in: 0, obtainedOn: 0 } }
@@ -42,6 +69,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
       await auth.getMsaToken();
       publish({ phase: 'microsoft_approved' });
       stage = 'xbox_token';
+      observeXboxExchange(auth, failures);
     }
     // Wait for interactive sign-in before the Xbox profile request starts its deadline.
     await auth.getXboxToken('http://xboxlive.com');
@@ -68,6 +96,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
   } catch (error) {
     const result = { phase: 'failed', stage };
     if (stage === 'xbox_token') {
+      if (failures.length) result.exchangeFailures = failures;
       // Publish only a numeric Xbox status. Error messages and bodies can contain secrets.
       const code = String(error?.errorCode ?? error?.data?.XErr ?? '');
       const fallback = typeof error?.message === 'string'
