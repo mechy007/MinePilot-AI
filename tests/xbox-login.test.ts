@@ -27,7 +27,7 @@ test('saved tokens: signs in silently without showing a code', async () => {
   const dir = await makeDir();
   const flow = { getXboxToken: async () => ({ userXUID: '1' }) };
   const { login, events } = service(() => flow, dir);
-  const result = await login.signIn();
+  const result = await login.signIn({ interactive: true });
   assert.equal(result, flow);
   assert.equal(login.authflow, flow);
   assert.equal(login.state, 'signed_in');
@@ -45,7 +45,7 @@ test('device code is reported, then sign-in completes', async () => {
     }
   });
   const { login, events } = service(factory, dir);
-  await login.signIn();
+  await login.signIn({ interactive: true });
   assert.deepEqual(events.map(e => e.phase), ['signing_in', 'awaiting_code', 'signed_in']);
   assert.equal(events[1].code?.userCode, 'ABCD1234');
   assert.equal(events[1].code?.verificationUri, 'https://www.microsoft.com/link');
@@ -85,7 +85,7 @@ test('Xbox errors become friendly, token-free messages', () => {
 test('a failed login reports failed with the error kind', async () => {
   const dir = await makeDir();
   const { login, events } = service(() => ({ getXboxToken: async () => { throw new Error('XErr 2148916238'); } }), dir);
-  await assert.rejects(login.signIn(), (e: unknown) => e instanceof LoginError && e.kind === 'child_account');
+  await assert.rejects(login.signIn({ interactive: true }), (e: unknown) => e instanceof LoginError && e.kind === 'child_account');
   assert.equal(login.state, 'failed');
   assert.equal(events.at(-1)?.errorKind, 'child_account');
 });
@@ -98,7 +98,7 @@ test('concurrent signIn calls share one login attempt', async () => {
     return { getXboxToken: async () => { await tick(); return {}; } };
   };
   const { login } = service(factory, dir);
-  const [a, b] = await Promise.all([login.signIn(), login.signIn()]);
+  const [a, b] = await Promise.all([login.signIn({ interactive: true }), login.signIn({ interactive: true })]);
   assert.equal(a, b);
   assert.equal(created, 1);
 });
@@ -122,7 +122,7 @@ test('signOut deletes saved tokens and clears the session', async () => {
   const dir = await makeDir();
   const flow = { getXboxToken: async () => ({}) };
   const { login } = service(() => flow, dir);
-  await login.signIn();
+  await login.signIn({ interactive: true });
   await writeFile(path.join(dir, 'token-cache.json'), '{}');
   await login.signOut();
   assert.equal(login.state, 'signed_out');
