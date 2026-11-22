@@ -160,7 +160,10 @@ public final class DashboardActivity extends Activity {
 
     private void showSignInReturnStatus(Intent intent) {
         if (intent == null || !intent.hasExtra("sign_in_saved")) return;
-        if (intent.getBooleanExtra("sign_in_saved", false)) {
+        String result = intent.getStringExtra("sign_in_message");
+        if (result != null && !result.isEmpty()) {
+            status.setText(result);
+        } else if (intent.getBooleanExtra("sign_in_saved", false)) {
             status.setText("Xbox account saved. MinePilot returned from Microsoft sign-in.");
         } else {
             status.setText("Microsoft sign-in ended without an Xbox account. Review the sign-in result and try again.");
