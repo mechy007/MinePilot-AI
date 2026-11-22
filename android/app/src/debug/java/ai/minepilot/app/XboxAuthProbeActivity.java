@@ -42,6 +42,7 @@ public final class XboxAuthProbeActivity extends Activity {
     private EditText owner;
     private Button openMicrosoft;
     private Button close;
+    private boolean joinRequested;
 
     @Override public void onCreate(Bundle savedState) {
         super.onCreate(savedState);
@@ -51,19 +52,24 @@ public final class XboxAuthProbeActivity extends Activity {
         layout.setPadding(24, 24, 24, 24);
         status = new TextView(this);
         status.setTextSize(18);
-        status.setText("Verify the Microsoft account MinePilot will use on this phone.");
+        status.setText("Secure Microsoft device-code sign-in. MinePilot never asks for your password. Use a separate Xbox account for the bot.");
         status.setTextIsSelectable(true);
         layout.addView(status);
 
         owner = new EditText(this);
-        owner.setHint("Friend’s Xbox ID (XUID), optional");
-        owner.setInputType(InputType.TYPE_CLASS_NUMBER);
-        owner.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(20) });
+        owner.setText(getSharedPreferences("DashboardActivity", MODE_PRIVATE).getString("owner_xuid", ""));
+        owner.setHint("Friend’s Xbox gamertag or numeric XUID");
+        owner.setInputType(InputType.TYPE_CLASS_TEXT);
+        owner.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(32) });
         layout.addView(owner);
 
         start = new Button(this);
-        start.setText("Start sign-in or join friend’s world");
-        start.setOnClickListener(view -> startProbe());
+        start.setText("Sign in with Microsoft");
+        start.setOnClickListener(view -> { joinRequested = false; startProbe(); });
+        Button join = new Button(this);
+        join.setText("Sign in and join friend’s world");
+        join.setOnClickListener(view -> { joinRequested = true; startProbe(); });
+        layout.addView(join);
         layout.addView(start);
 
         openMicrosoft = new Button(this);
@@ -130,7 +136,7 @@ public final class XboxAuthProbeActivity extends Activity {
     private void startProbe() {
         if (started) return;
         String ownerXuid = owner.getText().toString().trim();
-        if (!ownerXuid.isEmpty()) {
+        if (!ownerXuid.isEmpty() && ownerXuid.matches("[0-9]+")) {
             try {
                 if (!ownerXuid.matches("[1-9][0-9]{0,19}")) throw new NumberFormatException();
                 Long.parseUnsignedLong(ownerXuid);
@@ -139,7 +145,15 @@ public final class XboxAuthProbeActivity extends Activity {
                 return;
             }
         }
-        joining = !ownerXuid.isEmpty();
+        if (joinRequested && ownerXuid.isEmpty()) {
+            owner.setError("Enter your friend’s gamertag or XUID.");
+            return;
+        }
+        if (joinRequested && !ownerXuid.matches("[0-9]+")) {
+            owner.setError("Gamertag lookup is not connected yet. Enter the numeric XUID to join for now.");
+            return;
+        }
+        joining = joinRequested;
         started = true;
         refreshStatus();
         new Thread(() -> {
