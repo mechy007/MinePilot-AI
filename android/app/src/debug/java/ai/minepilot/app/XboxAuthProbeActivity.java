@@ -53,10 +53,10 @@ public final class XboxAuthProbeActivity extends Activity {
     private Button close;
     private Button openMicrosoft;
     private Button copyCode;
-    private boolean browserOpened;
+    private static boolean browserOpened;
     private String currentCode;
-    private volatile boolean notifyOnAccountSave;
-    private volatile boolean accountReadBack;
+    private static volatile boolean notifyOnAccountSave;
+    private static volatile boolean accountReadBack;
     private static final String SIGN_IN_CHANNEL = "minepilot_sign_in";
     private static final int SIGN_IN_NOTIFICATION = 6201;
     private static final int BG = Color.rgb(10, 12, 23);
@@ -125,9 +125,10 @@ public final class XboxAuthProbeActivity extends Activity {
         root.addView(close, new LinearLayout.LayoutParams(-1, dp(54)));
         setContentView(root);
         boolean switchingAccount = getIntent().getBooleanExtra("switch_account", false);
-        notifyOnAccountSave = !BotAccount.saved(this) || switchingAccount;
-        if (switchingAccount) BotAccount.forget(this);
-        startProbe();
+        if (!started) {
+            notifyOnAccountSave = !joiningIntent() || !BotAccount.saved(this) || switchingAccount;
+            startProbe();
+        }
     }
 
     @Override protected void onStart() {
@@ -176,6 +177,9 @@ public final class XboxAuthProbeActivity extends Activity {
                 // Fall back to closing the isolated runtime process.
             }
         }
+        if (!joining && completedMessage == null) {
+            XboxSignInReceiver.record(this, "Sign-in cancelled. Start a new attempt when ready.");
+        }
         finish();
     }
 
@@ -184,6 +188,7 @@ public final class XboxAuthProbeActivity extends Activity {
         String host = getIntent().getStringExtra("host");
         if (host != null && (host.isEmpty() || host.length() > 32)) { finish(); return; }
         joining = host != null;
+        if (!joining) XboxSignInReceiver.record(this, "");
         started = true;
         refreshStatus();
         new Thread(() -> {
@@ -247,6 +252,9 @@ public final class XboxAuthProbeActivity extends Activity {
                         Thread.currentThread().interrupt();
                     }
                 }
+                if (!joining && completedMessage != null) {
+                    XboxSignInReceiver.record(this, completedMessage);
+                }
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
                 if (!joining && notifyOnAccountSave) {
                     notifyOnAccountSave = false;
@@ -292,7 +300,7 @@ public final class XboxAuthProbeActivity extends Activity {
             throw new IOException("Saved Xbox identity does not match");
         }
         accountReadBack = true;
-        if (notifyOnAccountSave) {
+        if (joining && notifyOnAccountSave) {
             notifyOnAccountSave = false;
             showSignInCompleteNotification(true, "Xbox account verified and saved on this phone.");
         }
@@ -312,8 +320,8 @@ public final class XboxAuthProbeActivity extends Activity {
                 .putExtra("open_tab", "Xbox")
                 .putExtra("sign_in_saved", accountSaved)
                 .putExtra("sign_in_message", result)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        | (joining ? Intent.FLAG_ACTIVITY_REORDER_TO_FRONT : Intent.FLAG_ACTIVITY_CLEAR_TOP));
         PendingIntent returnToApp = PendingIntent.getActivity(this, SIGN_IN_NOTIFICATION, dashboard,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder notification = Build.VERSION.SDK_INT >= 26
@@ -356,6 +364,9 @@ public final class XboxAuthProbeActivity extends Activity {
         close.setText(stopping && completedMessage == null ? "Force close"
                 : joining ? "Stop connection" : "Cancel sign-in");
         if (completedMessage != null) {
+            openMicrosoft.setVisibility(View.GONE);
+            copyCode.setVisibility(View.GONE);
+            close.setText("Return to dashboard");
             status.setText(completedMessage);
             return;
         }
