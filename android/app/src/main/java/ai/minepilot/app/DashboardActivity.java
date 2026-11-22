@@ -191,6 +191,7 @@ public final class DashboardActivity extends Activity {
             return;
         }
         if (switchAccount) runtime.putExtra("switch_account", true);
+        runtime.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         try {
             startActivity(runtime);
         } catch (android.content.ActivityNotFoundException | SecurityException error) {
@@ -252,10 +253,13 @@ public final class DashboardActivity extends Activity {
                 hero("ACCOUNT & MULTIPLAYER", "Xbox connection", "Sign in once, then connect your bot to a friend’s world.");
                 boolean savedBot = BotAccount.saved(this);
                 accountCard(savedBot);
+                String lastSignIn = XboxSignInReceiver.latest(this);
+                if (!lastSignIn.isEmpty()) label(lastSignIn, 14);
                 primaryButton(savedBot ? "Switch Xbox account" : "Sign in with Microsoft",
                         () -> openBotFlow(null, savedBot));
                 if (savedBot) button("Forget saved account", () -> {
                     BotAccount.forget(this);
+                    XboxSignInReceiver.record(this, "");
                     show("Xbox");
                 });
                 label("FRIEND’S WORLD", 14);
