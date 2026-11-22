@@ -156,15 +156,18 @@ public final class DashboardActivity extends Activity {
                 EditText xuid = new EditText(this);
                 xuid.setTextColor(Color.WHITE);
                 xuid.setHintTextColor(Color.LTGRAY);
-                xuid.setHint("Friend world owner XUID (numeric)");
-                xuid.setInputType(2);
+                xuid.setHint("Friend’s gamertag or numeric XUID");
+                xuid.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
                 xuid.setText(xuidDraft != null ? xuidDraft : getPreferences(MODE_PRIVATE).getString("owner_xuid", ""));
                 xuidInput = xuid;
                 body.addView(xuid);
-                button("Save owner XUID locally", () -> {
+                button("Save friend account", () -> {
                     String value = xuid.getText().toString().trim();
                     try {
-                        if (!value.matches("[0-9]{1,20}")) throw new NumberFormatException();
+                        if (!value.matches("[0-9]{1,20}")) {
+                            status.setText("Gamertag lookup is not connected yet. Use a numeric XUID for live join tests.");
+                            return;
+                        }
                         Long.parseUnsignedLong(value);
                         getPreferences(MODE_PRIVATE).edit().putString("owner_xuid", value).apply();
                         xuidDraft = value;
