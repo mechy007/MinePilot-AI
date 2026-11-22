@@ -177,6 +177,9 @@ public final class XboxAuthProbeActivity extends Activity {
                 // Fall back to closing the isolated runtime process.
             }
         }
+        if (!joining && completedMessage == null) {
+            XboxSignInReceiver.record(this, "Sign-in cancelled. Start a new attempt when ready.");
+        }
         finish();
     }
 
@@ -185,7 +188,7 @@ public final class XboxAuthProbeActivity extends Activity {
         String host = getIntent().getStringExtra("host");
         if (host != null && (host.isEmpty() || host.length() > 32)) { finish(); return; }
         joining = host != null;
-        if (!joining) BotAccount.recordSignInResult(this, "");
+        if (!joining) XboxSignInReceiver.record(this, "");
         started = true;
         refreshStatus();
         new Thread(() -> {
@@ -250,7 +253,7 @@ public final class XboxAuthProbeActivity extends Activity {
                     }
                 }
                 if (!joining && completedMessage != null) {
-                    BotAccount.recordSignInResult(this, completedMessage);
+                    XboxSignInReceiver.record(this, completedMessage);
                 }
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
                 if (!joining && notifyOnAccountSave) {
@@ -297,7 +300,7 @@ public final class XboxAuthProbeActivity extends Activity {
             throw new IOException("Saved Xbox identity does not match");
         }
         accountReadBack = true;
-        if (notifyOnAccountSave) {
+        if (joining && notifyOnAccountSave) {
             notifyOnAccountSave = false;
             showSignInCompleteNotification(true, "Xbox account verified and saved on this phone.");
         }
@@ -317,8 +320,8 @@ public final class XboxAuthProbeActivity extends Activity {
                 .putExtra("open_tab", "Xbox")
                 .putExtra("sign_in_saved", accountSaved)
                 .putExtra("sign_in_message", result)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        | (joining ? Intent.FLAG_ACTIVITY_REORDER_TO_FRONT : Intent.FLAG_ACTIVITY_CLEAR_TOP));
         PendingIntent returnToApp = PendingIntent.getActivity(this, SIGN_IN_NOTIFICATION, dashboard,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder notification = Build.VERSION.SDK_INT >= 26
