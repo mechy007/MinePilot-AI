@@ -7,7 +7,19 @@ temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
 
 npm --prefix "$root" run build
-npm install --prefix "$temp" --no-save --ignore-scripts --omit=optional bedrock-protocol@3.61.0 minecraft-data@3.119.0
+npm install --prefix "$temp" --no-save --ignore-scripts --omit=optional bedrock-protocol@3.61.0 minecraft-data@3.119.0 prismarine-auth@3.1.1
+# Live responses report expires_in in seconds. In 3.1.1 the live cache adds
+# that value directly to Date.now(), which expires a one-hour token in 3.6 seconds.
+node - "$temp/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js" <<'JS'
+const fs = require('node:fs');
+const file = process.argv[2];
+const source = fs.readFileSync(file, 'utf8');
+const old = 'token.obtainedOn + token.expires_in';
+if (source.split(old).length !== 3) {
+  throw new Error('Review the live token lifetime patch for this SDK version');
+}
+fs.writeFileSync(file, source.replaceAll(old, 'token.obtainedOn + Number(token.expires_in) * 1000'));
+JS
 node "$root/scripts/stage-android-bedrock-sdk.mjs" "$temp" 1.26.60
 data_notice="$temp/node_modules/minecraft-data/minecraft-data/README.md"
 curl --fail --location --silent --show-error --retry 2 --max-time 45 \

@@ -25,6 +25,15 @@ function deviceCodeStatus({ verification_uri, user_code }) {
   return { phase: 'device_code', url: url.origin + url.pathname, code: user_code };
 }
 
+function readHttpStatus(error) {
+  const status = error?.response?.status ?? error?.status ?? error?.cause?.response?.status;
+  if (Number.isInteger(status) && status >= 400 && status <= 599) return status;
+  // prismarine-auth 3.1.1 prefixes errors with the status and appends the raw body.
+  // Extract only the status, never the message or body.
+  const legacy = typeof error?.message === 'string' && /^([45]\d{2})\s/.exec(error.message);
+  return legacy ? Number(legacy[1]) : undefined;
+}
+
 // Observe the dependency's individual steps, including errors it retries internally.
 function observeXboxExchange(auth, failures) {
   function observe(target, method, label) {
@@ -36,7 +45,7 @@ function observeXboxExchange(auth, failures) {
       } catch (error) {
         const type = ['TypeError', 'RangeError', 'SyntaxError', 'URIError', 'AbortError']
           .includes(error?.name) ? error.name : 'Error';
-        const status = error?.response?.status ?? error?.status;
+        const status = readHttpStatus(error);
         const detail = Number.isInteger(status) && status >= 400 && status <= 599
           ? `HTTP ${status}` : type;
         if (failures.length < 4) failures.push(`${label}: ${detail}`);
@@ -103,7 +112,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
         ? /\bXErr:\s*(214\d{7})\b/.exec(error.message)?.[1] : undefined;
       const xboxCode = /^214\d{7}$/.test(code) ? code : fallback;
       if (xboxCode) result.xboxCode = xboxCode;
-      const status = error?.response?.status ?? error?.status ?? error?.cause?.response?.status;
+      const status = readHttpStatus(error);
       if (Number.isInteger(status) && status >= 400 && status <= 599) result.httpStatus = status;
       const transport = error?.cause?.code ?? error?.code;
       if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT',
