@@ -178,7 +178,7 @@ public final class DashboardActivity extends Activity {
                             + (FriendWorldJoinReadiness.canAttemptJoin(engine, owner)
                             ? " / Ready to attempt join" : " / No join attempted"));
                 });
-                button("Sign in / Join friend\'s world", () -> launchDiagnostic("ai.minepilot.app.XboxAuthProbeActivity"));
+                button("Open Microsoft / Xbox sign-in", () -> launchDiagnostic("ai.minepilot.app.XboxAuthProbeActivity"));
                 break;
             case "Commands":
                 hero("AI COMMAND CENTER", "Bot commands", "Offline plans only • Live execution unavailable");
