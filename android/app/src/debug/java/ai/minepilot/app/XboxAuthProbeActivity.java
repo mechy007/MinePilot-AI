@@ -247,7 +247,13 @@ public final class XboxAuthProbeActivity extends Activity {
                 if (directory != null) NodeSmokeActivity.removeSdk(directory);
                 if (!joining && notifyOnAccountSave) {
                     notifyOnAccountSave = false;
-                    showSignInCompleteNotification(BotAccount.saved(this));
+                    boolean accountSaved = BotAccount.saved(this);
+                    if (!accountSaved && completedMessage != null && completedMessage.startsWith("PASS.")) {
+                        completedMessage = "Xbox and Minecraft verification passed, but MinePilot could not save the account securely.";
+                    }
+                    String result = completedMessage == null
+                            ? "Sign-in ended without a saved Xbox account." : completedMessage;
+                    showSignInCompleteNotification(accountSaved, result);
                 }
             }
         }, "minepilot-xbox-auth-probe").start();
@@ -280,11 +286,11 @@ public final class XboxAuthProbeActivity extends Activity {
         BotAccount.save(this, new JSONObject(bytes.toString("UTF-8")));
         if (notifyOnAccountSave) {
             notifyOnAccountSave = false;
-            showSignInCompleteNotification(true);
+            showSignInCompleteNotification(true, "Xbox profile verified. Bedrock verification is continuing.");
         }
     }
 
-    private void showSignInCompleteNotification(boolean accountSaved) {
+    private void showSignInCompleteNotification(boolean accountSaved, String result) {
         if (Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
@@ -297,6 +303,7 @@ public final class XboxAuthProbeActivity extends Activity {
         Intent dashboard = new Intent(this, DashboardActivity.class)
                 .putExtra("open_tab", "Xbox")
                 .putExtra("sign_in_saved", accountSaved)
+                .putExtra("sign_in_message", result)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent returnToApp = PendingIntent.getActivity(this, SIGN_IN_NOTIFICATION, dashboard,
@@ -446,6 +453,9 @@ public final class XboxAuthProbeActivity extends Activity {
         if ("disconnected".equals(snapshot.optString("phase"))) return "The friend-world connection closed.";
         if ("stopped".equals(snapshot.optString("phase"))) return "Friend-world test ended.";
         switch (snapshot.optString("stage")) {
+            case "microsoft_token": return "Microsoft approval or token exchange did not complete. Start a fresh sign-in code.";
+            case "xbox_profile": return "Microsoft approval succeeded, but the Xbox profile could not be loaded. Check that this account has an Xbox gamertag.";
+            case "account_save": return "Xbox profile was verified, but MinePilot could not save the account securely.";
             case "owner": return "Could not identify a separate host. Check your friend’s gamertag or XUID.";
             case "discovery": return "The selected owner’s compatible world could not be found on Xbox.";
             case "connection": return "The friend’s world was found, but the Bedrock session failed.";
