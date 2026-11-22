@@ -5,6 +5,8 @@ export interface FriendWorldJoinConfig {
   username: string;
   friendOwnerXuid: string;
   profilesFolder?: string | false;
+  /** A signed-in Authflow from XboxLoginService. When set, joining reuses it and never starts its own login. */
+  authflow?: unknown;
   timeoutMs?: number;
 }
 export interface FriendWorldJoinEvent {
@@ -32,7 +34,7 @@ export class FriendWorldJoinRunner {
     this.timeoutMs = config.timeoutMs ?? 45000;
     this.report = report;
     this.world = new PrismarineWorldClient(config.username, config.friendOwnerXuid, factory,
-      { profilesFolder: config.profilesFolder, onMsaCode });
+      { profilesFolder: config.profilesFolder, onMsaCode, ...(config.authflow ? { authflow: config.authflow } : {}) });
   }
   get state(): JoinPhase { return this.phase; }
   private emit(phase: JoinPhase, message: string): void {
