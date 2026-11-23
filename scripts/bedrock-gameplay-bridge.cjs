@@ -91,6 +91,8 @@ class BedrockGameplayBridge {
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
+    this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
+      actionRequests: 0, recovered: 0, error: null };
     this.watch = null;
     this.listeners = [];
   }
@@ -133,6 +135,8 @@ class BedrockGameplayBridge {
     this.bind('add_item_entity', p => this.layerThree?.observeDrop(p, this.dimension));
     this.bind('take_item_entity', p => this.layerThree?.observeTake(p, this.self));
     this.bind('update_attributes', p => this.attributes(p));
+    this.bind('set_health', p => this.observeHealth(p?.health));
+
     this.bind('add_player', p => this.addPlayer(p));
     this.bind('player_list', p => this.playerList(p));
     this.bind('mob_equipment', p => this.equipment(p));
@@ -170,6 +174,8 @@ class BedrockGameplayBridge {
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
+    this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
+      actionRequests: 0, recovered: 0, error: null };
     // Protocol 1.26.60 uses server-authoritative movement; the old
     // set_movement_authority packet was deprecated in 1.21.90.
     const authority = packet.movement_authority;
@@ -217,19 +223,101 @@ class BedrockGameplayBridge {
     const next = this.modeName(packet?.gamemode);
     if (next !== 'unknown') this.playerGameMode = next;
   }
+  observeHealth(health) {
+    if (this.closed || !Number.isFinite(health) || !this.self) return;
+    if (health <= 0) {
+      // Ignore duplicate zero-health updates and initial login fixtures.
+      if (!this.spawned || this.respawnRecovery.state !== 'alive') return;
+      this.respawnRecovery.state = 'dead_waiting_for_server';
+      this.respawnRecovery.deaths++;
+      this.spawned = false;
+      this.autonomy?.stop('player_died');
+      this.blockBreaker?.abort('player_died');
+      this.movement?.stopPresence?.('player_died');
+      this.movement?.stop?.('player_died', {silent:true});
+      this.layerTwo?.cancel?.();
+      this.addonNavigation?.emergencyStop?.();
+      return;
+    }
+    // Positive health after a confirmed death is the evidence of recovery,
+    // not merely seeing a ReadyToSpawn packet.
+    if (this.respawnRecovery.state !== 'alive') {
+      const recovering = this.respawnRecovery.state;
+      if (recovering === 'respawn_action_sent' ||
+          recovering === 'client_ready_sent' ||
+          recovering === 'dead_waiting_for_server') {
+        this.respawnRecovery.recovered++;
+        this.respawnRecovery.state = 'alive';
+        this.spawned = true;
+        this.movement?.startPresence?.(this);
+      }
+    }
+  }
   onRespawn(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.state)) return;
     const incomingId = ident(packet.runtime_entity_id);
     if (incomingId && this.self && incomingId !== this.self) return;
     this.spawnTrace.respawnSeen++;
     this.lastRespawnState = packet.state;
-    if (packet.state !== 1 || !this.self || typeof this.client.queue !== 'function') return;
-    // Bedrock respawn handshake: ack server state 1 with state 2.
-    // Never assume this proves that the host registered an active player.
+    if (!this.self || typeof this.client.queue !== 'function') return;
+    const recovery = this.respawnRecovery;
+    const position = finitePosition(packet.position) ? packet.position : this.position;
+    if (!finitePosition(position)) {
+      this.spawnTrace.handshakeErrors++;
+      recovery.error = 'server_respawn_position_unavailable';
+      return;
+    }
+    if (packet.state === 0 && recovery.state === 'dead_waiting_for_server') {
+      // Bedrock death handshake: do not reply before the server starts
+      // searching. A state-2 reply requests the server's respawn position.
+      try {
+        this.client.queue('respawn', {
+          state: 2, position, runtime_entity_id: BigInt(this.self)
+        });
+        recovery.requests++;
+        recovery.state = 'client_ready_sent';
+      } catch {
+        this.spawnTrace.handshakeErrors++;
+        recovery.error = 'client_ready_write_failed';
+      }
+      return;
+    }
+    if (packet.state !== 1) return;
+    // Keep existing spawn/join acknowledgement for non-death respawns.
+    // The additional player_action below is only for a confirmed death.
+    if (recovery.state === 'dead_waiting_for_server' ||
+        recovery.state === 'client_ready_sent') {
+      try {
+        if (recovery.state === 'dead_waiting_for_server') {
+          this.client.queue('respawn', {
+            state: 2, position, runtime_entity_id: BigInt(this.self)
+          });
+          recovery.requests++;
+        }
+        // Protocol 2225 uses the player_action respawn enum. Client-ready
+        // alone does not cause the server to revive the player.
+        const blockPos = {x:Math.floor(position.x), y:Math.floor(position.y),
+          z:Math.floor(position.z)};
+        this.client.queue('player_action', {
+          runtime_entity_id:BigInt(this.self), action:'respawn',
+          position:blockPos, result_position:blockPos, face:0
+        });
+        recovery.actionRequests++;
+        recovery.state = 'respawn_action_sent';
+        this.spawnTrace.respawnAcknowledged++;
+        this.position = safePoint(position);
+        this.lastServerPositionAt = this.clock();
+      } catch {
+        this.spawnTrace.handshakeErrors++;
+        recovery.error = 'respawn_action_write_failed';
+      }
+      return;
+    }
+    if (recovery.state !== 'alive') return;
     try {
-      this.client.queue('respawn', { state: 2,
-        position: finitePosition(packet.position) ? packet.position : this.position,
-        runtime_entity_id: BigInt(this.self) });
+      this.client.queue('respawn', {
+        state: 2, position, runtime_entity_id: BigInt(this.self)
+      });
       this.spawnTrace.respawnAcknowledged++;
       if (finitePosition(packet.position)) {
         this.position = safePoint(packet.position);
@@ -284,6 +372,7 @@ class BedrockGameplayBridge {
       if (attr.name === 'minecraft:player.max_health') values.maxHealth = attr.current;
       if (attr.name === 'minecraft:player.air_supply' || attr.name === 'minecraft:air_supply') values.air = attr.current;
     }
+    if (values.health !== undefined) this.observeHealth(values.health);
     const firstWarning = this.layerOne?.onVitals(values);
     const survival = this.layerFour?.observeVitals(values);
     if (firstWarning || survival?.becameCritical || this.layerFour?.critical) this.movement?.stop();
@@ -445,6 +534,8 @@ class BedrockGameplayBridge {
     this.autonomy?.stop('dimension_changed');
     this.blockBreaker?.abort('dimension_changed');
     this.playerNames.clear();
+    this.respawnRecovery.state = 'alive';
+    this.respawnRecovery.error = null;
   }
   updateAddonNavigation() {
     if (!this.addonNavigation) return null;
@@ -496,6 +587,7 @@ class BedrockGameplayBridge {
       worldGameMode: this.worldGameMode,
       difficulty: this.difficulty,
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
+      respawnRecovery: { ...this.respawnRecovery },
       movement: this.movement?.capability?.(this) ?? 'unavailable',
       ...(this.movement?.snapshot ? { motionDiagnostic: this.movement.snapshot() } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
