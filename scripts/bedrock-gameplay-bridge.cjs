@@ -129,10 +129,17 @@ class BedrockGameplayBridge {
       chunks: this.receivedChunks.size, safetyHold: this.layerOne?.snapshot()?.safetyHold ?? false };
   }
   playerList(packet) {
-    if (this.closed || !packet || !Array.isArray(packet.records ?? packet.entries)) return;
-    // Bedrock player_list can precede add_player. Only names and UUIDs are cached.
-    const entries = packet.records ?? packet.entries;
-    const removal = packet.action_type === 'remove' || packet.action_type === 1;
+    if (this.closed || !packet || typeof packet !== 'object') return;
+    // Bedrock PlayerRecords is sometimes a nested tagged union, not a flat array.
+    const payload = packet.records ?? packet.entries;
+    const entries = Array.isArray(payload) ? payload :
+      payload && typeof payload === 'object'
+        ? (Array.isArray(payload.records) ? payload.records : payload.entries)
+        : null;
+    if (!Array.isArray(entries)) return;
+    // Only sanitized player names and UUIDs are cached.
+    const action = packet.action_type ?? packet.action ?? payload?.type ?? payload?.action;
+    const removal = action === 'remove' || action === 1;
     for (const p of entries.slice(0, MAX_VISIBLE_PLAYERS)) {
       const uuid = typeof p.uuid === 'string' ? p.uuid : null;
       if (!uuid || uuid.length > 64) continue;
