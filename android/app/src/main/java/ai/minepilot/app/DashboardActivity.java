@@ -37,6 +37,9 @@ public final class DashboardActivity extends Activity {
     private TextView lastEvent;
     private TextView gameplayStatus;
     private Button probeStep;
+    private Button verifiedStep;
+    private Button autoFollow;
+    private Button autoStop;
     private Button stopMovement;
     private Button inspectWorld;
     private Button waitHere;
@@ -555,6 +558,18 @@ public final class DashboardActivity extends Activity {
         probeStep = actionButton("Experimental movement diagnostics", false, this::showMovementDiagnostics);
         probeStep.setVisibility(View.GONE);
         body.addView(probeStep, panelLayout(8));
+        verifiedStep = actionButton("Try one verified-terrain walking step", false,
+                this::showVerifiedStep);
+        verifiedStep.setVisibility(View.GONE);
+        body.addView(verifiedStep, panelLayout(8));
+        autoFollow = actionButton("Start bounded autonomous Follow/Return", false,
+                this::showAutonomyConfirmation);
+        autoFollow.setVisibility(View.GONE);
+        body.addView(autoFollow, panelLayout(8));
+        autoStop = actionButton("Stop autonomous Follow", false,
+                () -> requestGameplay("autonomy_stop", false));
+        autoStop.setVisibility(View.GONE);
+        body.addView(autoStop, panelLayout(8));
         boolean experimentEnabled = getSharedPreferences("minepilot_gameplay", MODE_PRIVATE)
                 .getBoolean("allow_experimental_movement", false);
         button(experimentEnabled ? "Disable movement probe for next join" : "Enable experimental movement for next join",
@@ -706,6 +721,9 @@ public final class DashboardActivity extends Activity {
         String workflowState = current.getString("workflow_state", "");
         String workflowNext = current.getString("workflow_next", "");
         String addonNavOwner = current.getString("addon_nav_owner", "none");
+        String terrainStatus = current.getString("terrain_route_status", "");
+        String terrainReason = current.getString("terrain_route_reason", "");
+        boolean autonomyActive = current.getBoolean("autonomy_active", false);
         String addonNavState = current.getString("addon_nav_state", "idle");
         String addonNavReason = current.getString("addon_nav_reason", "");
         String advisorModeText = current.getString("advisor_mode", "off");
@@ -751,6 +769,16 @@ public final class DashboardActivity extends Activity {
                             + (current.getBoolean("beta_ready", false) ? " · ready" : " · not device-verified")
                             + (betaPlanReason.isEmpty() ? "" : "\nPlanning gate: " + betaPlanReason)
                             + (betaBlockers.isEmpty() ? "" : "\nMissing verification: " + betaBlockers))
+                        + "\nDecoded sections: " + current.getInt("terrain_sections")
+                        + " · Registry ready: " + current.getBoolean("terrain_registry_ready", false)
+                        + " · Decode errors: " + current.getInt("terrain_decode_errors")
+                        + (terrainStatus.isEmpty() ? "" : "\nVerified route: " + terrainStatus
+                            + " · " + terrainReason + " · " + current.getInt("terrain_route_length") + " cells")
+                        + "\nAutonomous Follow: " + (autonomyActive ? "active" : "stopped")
+                        + " · Attempted: " + current.getInt("autonomy_attempted")
+                        + " · Server-confirmed: " + current.getInt("autonomy_verified")
+                        + (current.getString("autonomy_reason", "").isEmpty() ? ""
+                            : "\nAutonomy reason: " + current.getString("autonomy_reason"))
                         + "\nNavigation owner: " + addonNavOwner + " · " + addonNavState
                         + (addonNavReason.isEmpty() ? "" : "\nNavigation note: " + addonNavReason)
                         + "\nCompanion advisor: " + advisorModeText
@@ -825,6 +853,11 @@ public final class DashboardActivity extends Activity {
                 null, "suggestions".equals(advisorModeText) ? "off" : "suggestions", 0));
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
+        verifiedStep.setVisibility(playing && "experimental".equals(movement) && !autonomyActive
+                ? View.VISIBLE : View.GONE);
+        autoFollow.setVisibility(playing && "experimental".equals(movement) && !autonomyActive
+                ? View.VISIBLE : View.GONE);
+        autoStop.setVisibility(playing && autonomyActive ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
         stopWorld.setEnabled(canStop);
         joinFriend.setVisibility(playing || "connecting".equals(phase) || "stopping".equals(phase)
@@ -910,6 +943,26 @@ public final class DashboardActivity extends Activity {
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Plan follow", (dialog, which) ->
                         requestGameplay("plan_follow", false, target.getText().toString().trim()))
+                .show();
+    }
+
+    private void showVerifiedStep() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Verified-terrain movement step")
+                .setMessage("Attempt a short real Bedrock movement pulse toward the currently selected Follow/Return waypoint. Requires decoded and classified safe terrain. The host may reject it. No mining or combat occurs.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Attempt step", (dialog, which) ->
+                        requestGameplay("verified_step", true))
+                .show();
+    }
+
+    private void showAutonomyConfirmation() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Experimental autonomous Follow/Return")
+                .setMessage("Only use in a safe private world. The bot attempts up to 20 short walking segments over 30 seconds, on verified terrain only, and stops if server movement is not confirmed. Start by selecting a Follow or Return goal. Unknown terrain, health danger and missing authority block movement.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Start bounded Follow", (dialog, which) ->
+                        requestGameplay("autonomy_follow", true))
                 .show();
     }
 
