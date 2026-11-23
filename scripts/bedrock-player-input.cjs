@@ -53,6 +53,7 @@ class ExperimentalPlayerInput {
     // Neutral standing-still input is separate from opt-in physical movement.
     // Enabled only for the real authenticated Android session, never fixtures.
     this.presenceEnabled = options.presenceEnabled === true;
+    this.blockExecutor = options.blockExecutor ?? null;
     this.presenceTimer = null;
     this.presenceWorld = null;
     this.presenceFrames = 0;
@@ -110,13 +111,22 @@ class ExperimentalPlayerInput {
         const tick = this.lastTick + 1n;
         const yaw = Number.isFinite(current.yaw) ? current.yaw : this.lastYaw;
         const packet = buildInputPacket(current.position, yaw, tick, false);
+        // Bedrock's server-authoritative block break action is an optional
+        // field on the SAME movement tick. Never create a competing tick writer.
+        const blockAction = this.blockExecutor?.next?.(current);
+        if(blockAction) {
+          packet.input_data=[35];
+          packet.block_action=[blockAction];
+        }
         this.client.queue('player_auth_input', packet);
+        this.blockExecutor?.pulseTimeout?.();
         this.lastTick = tick;
         this.lastYaw = yaw;
         this.presenceFrames++;
       } catch {
         this.errors++;
         this.presenceError = 'presence_input_failed';
+        this.blockExecutor?.abort?.('packet_write_failed');
         this.stopPresence('packet_write_failed');
       }
     };
@@ -127,6 +137,7 @@ class ExperimentalPlayerInput {
     if (this.presenceTimer) this.clearInterval(this.presenceTimer);
     this.presenceTimer = null;
     this.presenceWorld = null;
+    this.blockExecutor?.abort?.('presence_stopped');
     if (reason === 'packet_write_failed') this.presenceError = reason;
   }
   capability(world) {
@@ -262,6 +273,7 @@ class ExperimentalPlayerInput {
   }
   /** Explicit stop emits one neutral frame, unless connection/world ended. */
   stop(reason = 'user_stopped', opts = {}) {
+    this.blockExecutor?.abort?.('movement_stopped');
     const active = this.timer != null;
     if (this.timer) this.clearInterval(this.timer);
     this.timer = null;
