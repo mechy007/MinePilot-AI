@@ -40,6 +40,24 @@ test('critical health preempts active tasks and blocks probe movement', () => {
   assert.equal(controller.snapshot().movementOwner, null);
 });
 
+test('manual stop does not clear critical health until fresh recovery data arrives', () => {
+  const controller = new LayerOneController(() => 1000);
+  controller.onVitals({ health: 3 });
+  controller.stop();
+  assert.equal(controller.snapshot().safetyHold, true);
+  assert.equal(controller.snapshot().movementOwner, 'survival');
+  assert.equal(controller.canProbe(world).reason, 'critical_health');
+  controller.onVitals({ health: 20 });
+  assert.equal(controller.snapshot().movementOwner, null);
+  assert.equal(controller.canProbe(world).allowed, true);
+});
+
+test('low hunger is flagged during an inspection without executing food actions', () => {
+  const controller = new LayerOneController(() => 1000);
+  controller.onVitals({ hunger: 4 });
+  assert.equal(controller.inspect(world).reason, 'inspection_safety_warning');
+});
+
 test('only a server-observed position change verifies a movement probe', () => {
   let now = 1000;
   const controller = new LayerOneController(() => now);
