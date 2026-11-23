@@ -61,7 +61,8 @@ test('server-confirmed pickup and inventory gain are both required for observed 
     { network_id: 5, count: 6 }, { network_id: 9, count: 4 }
   ] });
   assert.equal(p.snapshot(world).route.observed, 2);
-  assert.equal(p.snapshot(world).route.status, 'waiting_for_item');
+  assert.equal(p.snapshot(world).route.status, 'route_unverified',
+    'second observed drop remains a valid planning target');
   assert.equal(p.observeTake({ runtime_entity_id: 25n, target: 123n }, 123n), true);
   p.observeInventory({ window_id: 'inventory', input: [
     { network_id: 5, count: 7 }, { network_id: 9, count: 4 }
