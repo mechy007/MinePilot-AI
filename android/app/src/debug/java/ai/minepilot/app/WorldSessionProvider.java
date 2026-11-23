@@ -79,6 +79,23 @@ public final class WorldSessionProvider extends ContentProvider {
                 }
                 result.putInt("nearby_players", gameplay.optInt("visiblePlayers", 0));
                 result.putInt("corrections", gameplay.optInt("correctionCount", 0));
+                JSONObject layer = gameplay.optJSONObject("layerOne");
+                if (layer != null) {
+                    JSONObject task = layer.optJSONObject("task");
+                    if (task != null) {
+                        result.putString("gameplay_task", task.optString("type"));
+                        result.putString("gameplay_task_state", task.optString("state"));
+                        result.putString("gameplay_task_reason", task.optString("reason"));
+                    }
+                    result.putString("movement_owner", layer.optString("movementOwner", ""));
+                    result.putBoolean("safety_hold", layer.optBoolean("safetyHold"));
+                    JSONObject inventory = layer.optJSONObject("inventory");
+                    if (inventory != null) {
+                        result.putBoolean("inventory_known", inventory.optBoolean("known"));
+                        result.putInt("inventory_slots", inventory.optInt("slotCount"));
+                        result.putInt("inventory_occupied", inventory.optInt("occupiedSlots"));
+                    }
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
@@ -96,7 +113,8 @@ public final class WorldSessionProvider extends ContentProvider {
     private static void queueGameplay(Path directory, Bundle extras, Bundle result) {
         if (extras == null) return;
         String action = extras.getString("action", "");
-        if (!"status".equals(action) && !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
+        if (!"status".equals(action) && !"inspect".equals(action) && !"wait".equals(action) &&
+                !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if ("probe_step".equals(action) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
