@@ -210,6 +210,7 @@ cp "$root/dist/src/gameplay/companion-engine.js" "$temp/gameplay/companion-engin
 cp "$root/dist/src/gameplay/layer-one.js" "$temp/gameplay/layer-one.js"
 cp "$root/dist/src/gameplay/layer-two.js" "$temp/gameplay/layer-two.js"
 cp "$root/dist/src/gameplay/layer-three.js" "$temp/gameplay/layer-three.js"
+cp "$root/dist/src/gameplay/layer-four.js" "$temp/gameplay/layer-four.js"
 printf '{"type":"module"}\n' > "$temp/gameplay/package.json"
 cp "$root/dist/src/connection/prismarine-world-client.js" "$temp/prismarine-world-client.mjs"
 cp "$root/dist/src/core/bot-awareness.js" "$temp/bot-awareness.mjs"
