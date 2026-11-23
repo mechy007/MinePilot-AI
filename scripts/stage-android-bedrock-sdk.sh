@@ -238,6 +238,8 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs",
+        "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
+        "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
