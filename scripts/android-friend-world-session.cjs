@@ -85,7 +85,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true),
     layerOne: gameplayOptions.layerOneFactory?.() ?? null,
     layerTwo: gameplayOptions.layerTwoFactory?.() ?? null,
-    layerThree: gameplayOptions.layerThreeFactory?.() ?? null
+    layerThree: gameplayOptions.layerThreeFactory?.() ?? null,
+    layerFour: gameplayOptions.layerFourFactory?.() ?? null
   }).start() : null;
   let startGame = false;
   let spawn = false;
@@ -275,6 +276,7 @@ if (require.main === module) {
     const { LayerOneController } = await import('./gameplay/layer-one.js');
     const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
     const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+    const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
@@ -291,7 +293,8 @@ if (require.main === module) {
         experimentalMovement: config.experimentalMovement === true,
         layerOneFactory: () => new LayerOneController(),
         layerTwoFactory: () => new LayerTwoPlanner(),
-        layerThreeFactory: () => new LayerThreePlanner()
+        layerThreeFactory: () => new LayerThreePlanner(),
+        layerFourFactory: () => new LayerFourSupervisor()
       }
     });
   })().catch(() => publish({ phase: 'failed', stage: 'runtime' }))
