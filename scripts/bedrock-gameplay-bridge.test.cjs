@@ -788,3 +788,28 @@ test('server correction packet rotation updates yaw in the authenticated session
   assert.equal(bridge.yaw,135);
   bridge.stop();
 });
+
+
+test('Bedrock input ticks stay monotonic across separate diagnostic commands and restart only on fresh StartGame', () => {
+  const client=new Client();
+  let now=1000,pulse;
+  const movement=new ExperimentalPlayerInput(client,true,{
+    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  for(const id of ['first','second']){
+    assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:id,
+      action:'motion_diagnostic',mode:'forward',ticks:1,confirmed:true}).status,'accepted');
+    now+=50;pulse();now+=50;pulse();
+  }
+  assert.deepEqual(client.sent.map(x=>x.value.tick),[101n,102n,103n,104n]);
+  client.emit('start_game',{...start,current_tick:500n});
+  client.emit('spawn');
+  client.emit('level_chunk',{x:0,z:0,dimension:0});
+  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'fresh',
+    action:'motion_diagnostic',mode:'forward',ticks:1,confirmed:true}).status,'accepted');
+  now+=50;pulse();now+=50;pulse();
+  assert.deepEqual(client.sent.slice(-2).map(x=>x.value.tick),[501n,502n]);
+  bridge.stop();
+});
