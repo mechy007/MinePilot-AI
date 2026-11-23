@@ -285,8 +285,16 @@ class ExperimentalPlayerInput {
         finite3(world.position) && this.predicted && this.lastTick != null) {
       try {
         const neutralTick = this.lastTick + 1n;
-        this.client.queue('player_auth_input',
-          buildInputPacket(this.predicted, this.lastYaw, neutralTick, false));
+        // On stopping, never echo a speculative locomotion position back to the
+        // server. Prefer the latest authoritative world position (which may
+        // have been corrected during the diagnostic), then the observed
+        // position from the last server packet. Predicted coordinates are
+        // valid only while the bounded input probe is running.
+        const neutralPosition = finite3(world.position)
+          ? world.position : finite3(this.lastServerPosition)
+            ? this.lastServerPosition : null;
+        if (neutralPosition) this.client.queue('player_auth_input',
+          buildInputPacket(neutralPosition, this.lastYaw, neutralTick, false));
         this.lastTick = neutralTick;
       } catch { this.errors++; }
     }
