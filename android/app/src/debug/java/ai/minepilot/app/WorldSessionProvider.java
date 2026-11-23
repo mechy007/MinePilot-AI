@@ -113,7 +113,7 @@ public final class WorldSessionProvider extends ContentProvider {
                         StringBuilder namesPreview = new StringBuilder();
                         for (int i = 0; i < Math.min(names.length(), 8); i++) {
                             String name = names.optString(i, "");
-                            if (!name.matches("[a-zA-Z0-9_ -]{1,24}")) continue;
+                            if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) continue;
                             if (namesPreview.length() > 0) namesPreview.append(", ");
                             namesPreview.append(name);
                         }
@@ -159,7 +159,7 @@ public final class WorldSessionProvider extends ContentProvider {
                     .put("action", action);
             if ("plan_follow".equals(action)) {
                 String name = extras.getString("player_name", "");
-                if (!name.matches("[a-zA-Z0-9_ -]{1,24}")) return;
+                if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) return;
                 command.put("playerName", name);
             }
             if ("probe_step".equals(action)) {
