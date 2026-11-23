@@ -208,6 +208,7 @@ cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-1266
 cp "$root/scripts/bedrock-local-path.cjs" "$temp/bedrock-local-path.cjs"
 cp "$root/scripts/bedrock-autonomy-runner.cjs" "$temp/bedrock-autonomy-runner.cjs"
 cp "$root/scripts/bedrock-block-break.cjs" "$temp/bedrock-block-break.cjs"
+cp "$root/scripts/bedrock-life-senses.cjs" "$temp/bedrock-life-senses.cjs"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
 mkdir -p "$temp/gameplay"
@@ -243,7 +244,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
-        "bedrock-block-break.cjs",
+        "bedrock-block-break.cjs", "bedrock-life-senses.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
@@ -278,7 +279,8 @@ cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-autonomy-runtime.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-block-break.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-respawn-recovery.test.cjs" "$temp/verify/"
-node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs"
+cp "$root/scripts/bedrock-life-senses.test.cjs" "$temp/verify/"
+node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 du -h "$destination/bedrock-sdk.zip"
