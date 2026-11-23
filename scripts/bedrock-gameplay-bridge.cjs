@@ -11,7 +11,7 @@ const { randomUUID } = require('node:crypto');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'autonomy_stop', 'verified_step']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -65,6 +65,7 @@ class BedrockGameplayBridge {
     this.routePlanner = options.routePlanner ?? null;
     this.registryResolver = options.registryResolver ?? null;
     this.navigationRoute = null;
+    this.autonomy = options.autonomy ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -190,6 +191,7 @@ class BedrockGameplayBridge {
     this.layerSix?.reset();
     this.layerSeven?.reset();
     this.addonNavigation?.reset();
+    this.autonomy?.stop('world_reset');
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
@@ -437,6 +439,7 @@ class BedrockGameplayBridge {
     this.layerSix?.dimensionChanged();
     this.layerSeven?.reset();
     this.addonNavigation?.reset();
+    this.autonomy?.stop('dimension_changed');
     this.playerNames.clear();
   }
   updateAddonNavigation() {
@@ -478,6 +481,7 @@ class BedrockGameplayBridge {
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
       ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
+      ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
       serverPositionAgeMs: age,
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
@@ -520,6 +524,24 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: preflight.reason };
     }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if(raw.action === 'autonomy_stop') {
+      this.autonomy?.stop('user_stopped');
+      return {status:'ok',reason:'autonomy_stopped'};
+    }
+    if(raw.action === 'autonomy_follow') {
+      if(!this.autonomy)return {status:'rejected',reason:'autonomy_runner_unavailable'};
+      return this.autonomy.enable(this,{confirmed:raw.confirmed});
+    }
+    if(raw.action === 'verified_step') {
+      if(raw.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
+      if(this.autonomy?.snapshot().active)return {status:'rejected',reason:'autonomy_busy'};
+      if(this.gameplayWorld().safetyHold)return {status:'rejected',reason:'survival_safety_override'};
+      const route=this.autonomy?.route(this);
+      if(route?.status!=='ready')
+        return {status:'rejected',reason:route?.reason??'verified_path_unavailable'};
+      return this.movement?.runVerifiedStep?.(this,route.waypoint,8)
+        ?? {status:'rejected',reason:'movement_unavailable'};
+    }
     if (raw.action === 'inspect') {
       return this.layerOne?.inspect({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned })
         ?? { status: 'rejected', reason: 'layer_one_unavailable' };
@@ -641,6 +663,7 @@ class BedrockGameplayBridge {
       this.layerSix?.cancel();
       this.layerSeven?.setMode('off');
       this.addonNavigation?.emergencyStop();
+      this.autonomy?.stop('user_stop');
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
@@ -739,6 +762,7 @@ class BedrockGameplayBridge {
     this.closed = true;
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
+    this.autonomy?.stop('session_closed');
     this.movement?.stopPresence?.('session_closed');
     this.movement?.stop?.();
     this.layerOne?.stop('session_closed');
