@@ -149,7 +149,7 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
   assert.equal(activity.mock.calls[0].arguments[0], botXuid);
   assert.equal(membership.mock.callCount(), 1, JSON.stringify(snapshots));
   assert.equal(membership.mock.calls[0].arguments[0], 'expected');
-  assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'connection', httpStatus: 403 });
+  assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'xbox_membership', httpStatus: 403 });
 });
 
 
