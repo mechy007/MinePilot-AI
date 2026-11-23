@@ -11,8 +11,11 @@
 - Layer 3 PR #92: stacked **on PR #91**. Read-only item registry, item drops, inventory/pickup correlation, block updates and resource planning; no automatic mining or collecting.
 - Layer 4 PR #93: stacked **on PR #92**. Survival priorities, low-air and health emergency preemption, food inventory suggestions and safe task-plan recovery; no automatic eating or combat.
 - Layer 5 PR #94: stacked **on PR #93**. Bounded 23-block shelter proposal, server-inventory bill of materials, plank crafting estimates and no-execution Android plan controls.
+- Layer 6 PR #95: stacked **on PR #94**. Verified-grid-only A*, container occupancy, farming change observations and checkpoints; no walking or inventory transactions.
+- Layer 7 PR #96: stacked **on PR #95**. Opt-in offline suggestions and bounded in-session event journal; no autonomous execution.
+- Layer 8 PR #97: stacked **on PR #96**. Freshness gates, release-readiness blockers, Android status and consolidated regression tests; no playable beta release until host acceptance.
 
-PRs #89–#94 are staged changes on one Bedrock runtime, not four independent apps. Integrate and retarget the stacked changes in dependency order only when they pass review and the relevant host-observed acceptance gates; do not merge a stacked branch prematurely.
+PRs #89–#97 stage changes on the same authenticated Bedrock runtime, not nine independent apps. Integrate and retarget the stacked changes in dependency order only when they pass review and the relevant host-observed acceptance gates; do not merge a stacked branch prematurely.
 
 ## Cross-phase layers
 
@@ -23,9 +26,9 @@ PRs #89–#94 are staged changes on one Bedrock runtime, not four independent ap
 | 3 | Bounded item/drop and changed-block waypoint previews only | Observe item registry, item entities, block updates and inventory; no mining | Resource goals and server pickup/inventory correlation | Unit/integration observation checks; real collection still blocked |
 | 4 | Critical-vitals stop gating; hazard terrain avoidance deferred | Read-only food and air/time observations | Pause tasks and offer recovery-to-planning state, no automatic eating | Health/air/survival CI; real hazard handling deferred |
 | 5 | Fixed shelter waypoint proposals; collision unknown | Inventory-backed plank estimates and 23-block blueprint; no crafting or placing | Switch safely between shelter/crafting and prior goals | BOM tests and packed same-client tests; action verification deferred |
-| 6 | Better pathfinding, water modes, local replan | Farming and chest operations | Checkpoints, retries and task graph | Multistep task survives interruption |
-| 7 | Safe bounded exploration | Combine verified survival/gather/build skills | Persistent skill journal and optional model planning | Approved skill sequences with independently checked outcomes |
-| 8 | Movement and runtime profiling | Integrated regression across all verified interactions | Harden task planner, Android UI, diagnostics | Consolidated beta candidate; host and device acceptance |
+| 6 | Bounded A* over verified cells only; no actual voxel decoding | Read-only container occupancy and farm-update counts | Checkpointed farm/storage preview goals | CI planning tests; real path, farming and chest actions blocked |
+| 7 | Use existing safe navigation preview and safety holds | Combine read-only survival/resource/build signals | Offline opt-in advisor and 32-entry in-session decision journal | No gameplay packets emitted; model and autonomous skills deferred |
+| 8 | Stale-position refusal for new goal planning | Integrated unit/SDK/Android CI regression across layers | Honest beta readiness, UI status and blocked release gates | All CI required; host/gameplay acceptance still outstanding |
 
 All layers include tests; they do not each imply an APK release. The 8-layer breakdown is an engineering estimate and can evolve if protocol or OS changes force a different split.
 
@@ -50,4 +53,7 @@ World observations are bounded and not persisted as private raw protocol dumps. 
 5. Before enabling normal movement, host verifies a short movement and stop command in a private flat world, observes exact player coordinates, detects no significant rubber-banding or disconnect, and confirms input fixes. A compiled APK or successful packet queue **cannot replace** this.
 6. No phone installation is requested until a consolidated milestone is testable. Development can continue on GitHub; any remaining real-device blocker must be documented rather than silently bypassed.
 
-**Feature status:** Layers 1–5 implement observation and goal-planning infrastructure, not autonomous Minecraft gameplay. Their combined physical gameplay acceptance remains blocked on a verified server-authoritative movement driver, decoded voxel collision and actual block/item interaction. See docs/GAMEPLAY_LAYER_2.md and docs/GAMEPLAY_LAYER_3.md.
+**Feature status:** Layers 1–8 implement observation and goal-planning infrastructure, not autonomous Minecraft gameplay. Their combined physical gameplay acceptance remains blocked on a verified server-authoritative movement driver, decoded voxel collision and actual block/item interaction. See docs/GAMEPLAY_LAYER_2.md and docs/GAMEPLAY_LAYER_3.md.
+
+
+See docs/GAMEPLAY_LAYER_6.md, docs/GAMEPLAY_LAYER_7.md and docs/GAMEPLAY_CONSOLIDATED_BETA.md for accepted capabilities and remaining real-action blockers.
