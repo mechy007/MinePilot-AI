@@ -67,6 +67,7 @@ class BedrockGameplayBridge {
     this.navigationRoute = null;
     this.autonomy = options.autonomy ?? null;
     this.blockBreaker = options.blockBreaker ?? null;
+    this.lifeSenses = options.lifeSenses ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -138,6 +139,10 @@ class BedrockGameplayBridge {
     this.bind('set_health', p => this.observeHealth(p?.health));
 
     this.bind('add_player', p => this.addPlayer(p));
+    // Passive observation, never assume raw numeric entity types are hostile.
+    this.bind('add_actor', p => this.lifeSenses?.observeEntity(p));
+    this.bind('move_actor_absolute', p => this.lifeSenses?.moveEntity(p));
+    this.bind('move_actor_delta', p => this.lifeSenses?.moveEntity(p));
     this.bind('player_list', p => this.playerList(p));
     this.bind('mob_equipment', p => this.equipment(p));
     this.bind('remove_actor', p => this.removeActor(p));
@@ -203,6 +208,7 @@ class BedrockGameplayBridge {
     this.blockBreaker?.abort('world_reset');
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
+    this.lifeSenses?.reset(this.dimension);
     if (this.position) this.layerOne?.onServerPosition(this.position);
   }
   modeName(mode) {
@@ -372,6 +378,7 @@ class BedrockGameplayBridge {
       if (attr.name === 'minecraft:player.max_health') values.maxHealth = attr.current;
       if (attr.name === 'minecraft:player.air_supply' || attr.name === 'minecraft:air_supply') values.air = attr.current;
     }
+    this.lifeSenses?.observeVitals(values);
     if (values.health !== undefined) this.observeHealth(values.health);
     const firstWarning = this.layerOne?.onVitals(values);
     const survival = this.layerFour?.observeVitals(values);
@@ -467,6 +474,7 @@ class BedrockGameplayBridge {
     } else if (this.players.has(id)) {
       this.players.get(id).position = pos;
       this.players.get(id).seenAt = this.clock();
+      this.lifeSenses?.moveEntity(packet);
       this.layerTwo?.movePlayer(id, pos);
       this.layerThree?.moveDrop(id, pos);
     }
@@ -493,6 +501,7 @@ class BedrockGameplayBridge {
     const position = safePoint(packet.position);
     if (!position) return;
     this.players.set(id, { position, seenAt: this.clock() });
+    this.lifeSenses?.observePlayer(id,position);
     const uuid = typeof packet.uuid === 'string' ? packet.uuid : null;
     const name = typeof packet.username === 'string' ? packet.username : this.playerNames.get(uuid);
     this.layerTwo?.observePlayer(id, name, position, this.dimension);
@@ -502,6 +511,7 @@ class BedrockGameplayBridge {
     const id = ident(packet.entity_id_self ?? packet.entity_id ?? packet.runtime_entity_id ?? packet.runtime_id);
     if (id) {
       this.players.delete(id);
+      this.lifeSenses?.removeEntity(packet);
       this.layerTwo?.removePlayer(id);
       this.layerThree?.removeEntity(id);
     }
@@ -536,6 +546,7 @@ class BedrockGameplayBridge {
     this.playerNames.clear();
     this.respawnRecovery.state = 'alive';
     this.respawnRecovery.error = null;
+    this.lifeSenses?.reset(this.dimension);
   }
   updateAddonNavigation() {
     if (!this.addonNavigation) return null;
@@ -578,6 +589,11 @@ class BedrockGameplayBridge {
       ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
       ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
+      ...(this.lifeSenses ? { life: this.lifeSenses.snapshot({
+        position:this.position,dimension:this.dimension,spawned:this.spawned,
+        closed:this.closed,respawnState:this.respawnRecovery.state,
+        terrain:this.terrain
+      }) } : {}),
       serverPositionAgeMs: age,
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
@@ -901,6 +917,7 @@ class BedrockGameplayBridge {
     this.layerSeven?.reset();
     this.addonNavigation?.reset();
     this.terrain?.reset();
+    this.lifeSenses?.reset();
     this.navigationRoute=null;
     this.playerNames.clear();
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
