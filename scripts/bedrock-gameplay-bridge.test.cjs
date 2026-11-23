@@ -992,3 +992,42 @@ test('authority inferred from modern protocol, explicit rewind and new dimension
   assert.equal(bridge.movementAuthority,1);
   bridge.stop();
 });
+
+
+test('neutral presence packets serialize with pinned Bedrock 1.26.60 SDK, no movement flags',()=>{
+  const client=new Client();
+  let pulse;
+  const movement=new ExperimentalPlayerInput(client,false,{
+    presenceEnabled:true,clock:()=>1000,
+    setInterval:cb=>{pulse=cb;return 7;},clearInterval:()=>{}
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>1000}).start();
+  initialized(client,bridge);
+  pulse();
+  const frame=client.sent.at(-1);
+  assert.equal(frame.packet,'player_auth_input');
+  assert.deepEqual(frame.value.input_data,[]);
+  assert.deepEqual(frame.value.position,origin);
+  const {createSerializer}=require('bedrock-protocol/src/transforms/serializer');
+  const serializer=createSerializer('1.26.60');
+  const encoded=serializer.createPacketBuffer({name:frame.packet,params:frame.value});
+  assert.ok(Buffer.isBuffer(encoded)&&encoded.length>10);
+  bridge.stop();
+});
+
+test('neutral presence maintains bot input when idle spawn coordinates have no fresh self movement echo',()=>{
+  const client=new Client();
+  let now=1000,pulse;
+  const movement=new ExperimentalPlayerInput(client,true,{
+    presenceEnabled:true,clock:()=>now,
+    setInterval:cb=>{pulse=cb;return 7;},clearInterval:()=>{}
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  now+=31_000;
+  pulse();
+  assert.equal(movement.snapshot().presenceFrames,1);
+  assert.equal(movement.capability(bridge),'experimental');
+  assert.equal(movement.snapshot().movementVerified,false);
+  bridge.stop();
+});
