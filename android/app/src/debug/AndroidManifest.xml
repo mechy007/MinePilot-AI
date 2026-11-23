@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application>
+        <provider android:name=".WorldSessionProvider"
+            android:authorities="${applicationId}.world-session"
+            android:enabled="${minepilotNodeSmoke}" android:exported="false" android:process=":friend_world" />
         <service android:name=".XboxSignInService"
             android:enabled="${minepilotNodeSmoke}" android:exported="false"
             android:foregroundServiceType="dataSync" android:process=":friend_world" />
