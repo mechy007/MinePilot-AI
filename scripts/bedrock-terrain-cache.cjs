@@ -105,9 +105,11 @@ class BedrockTerrainCache {
     if (!(mapping instanceof Map) || mapping.size>131072) return false;
     this.registry=new Map();
     for (const [key,value] of mapping) {
-      if(Number.isInteger(key)&&key>=0&&key<0x100000000 &&
-        typeof value==='string' && /^minecraft:[a-z0-9_./-]{1,90}$/.test(value))
-        this.registry.set(key,value);
+      if(!Number.isInteger(key)||key<0||key>=0x100000000)continue;
+      const name=typeof value==='string'?value:value?.name;
+      const boundingBox=typeof value==='object'?value?.boundingBox:null;
+      if(typeof name==='string' && /^minecraft:[a-z0-9_./-]{1,90}$/.test(name))
+        this.registry.set(key,{name,boundingBox});
     }
     return this.registry.size>0;
   }
@@ -204,19 +206,23 @@ class BedrockTerrainCache {
   blockName(dim,x,y,z) {
     const id=this.blockId(dim,x,y,z);
     if(id===null)return null;
-    return this.registry?.get(id)??null;
+    return this.registry?.get(id)?.name??null;
   }
   // Returns null for any unknown or ambiguous partial block.
   kind(dim,x,y,z) {
-    const name=this.blockName(dim,x,y,z);
+    const id=this.blockId(dim,x,y,z);
+    const entry=id===null?null:this.registry?.get(id);
+    const name=entry?.name;
     if(!name)return null;
     if(['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name))return 'air';
     if(/^(minecraft:(water|flowing_water|lava|flowing_lava|fire|soul_fire|cactus))$/.test(name))
       return 'hazard';
-    if(/_(slab|stairs|fence|wall|door|trapdoor|pane|carpet|rail)$/.test(name)||
-      /minecraft:(vine|ladder|cobweb|powder_snow|sweet_berry_bush)/.test(name))
-      return null;
-    return 'solid';
+    // Only a full-cube collision shape is treated as walkable support.
+    // Partial/dynamic/honey/powder/unsupported shapes remain unknown.
+    if(entry.boundingBox==='block' &&
+      !/minecraft:(honey_block|slime|magma|powder_snow|soul_sand)$/.test(name))
+      return 'solid';
+    return null;
   }
   // No jump, parkour or multi-height navigation without voxel verification.
   tile(dim,x,y,z) {
