@@ -206,6 +206,7 @@ cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
 cp "$root/scripts/bedrock-local-path.cjs" "$temp/bedrock-local-path.cjs"
 cp "$root/scripts/bedrock-autonomy-runner.cjs" "$temp/bedrock-autonomy-runner.cjs"
+cp "$root/scripts/bedrock-block-break.cjs" "$temp/bedrock-block-break.cjs"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
 mkdir -p "$temp/gameplay"
@@ -240,6 +241,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
+        "bedrock-block-break.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
