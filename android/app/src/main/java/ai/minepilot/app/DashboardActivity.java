@@ -43,6 +43,8 @@ public final class DashboardActivity extends Activity {
     private Button planFollow;
     private Button planReturn;
     private Button markHome;
+    private Button planCollect;
+    private Button inspectUpdatedBlocks;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -504,6 +506,13 @@ public final class DashboardActivity extends Activity {
         planReturn = actionButton("Plan return home", false, () -> requestGameplay("plan_return", false));
         planReturn.setVisibility(View.GONE);
         body.addView(planReturn, panelLayout(8));
+        planCollect = actionButton("Plan collection of observed item", false, this::requestCollectionPlan);
+        planCollect.setVisibility(View.GONE);
+        body.addView(planCollect, panelLayout(8));
+        inspectUpdatedBlocks = actionButton("Inspect recent block updates", false,
+                () -> requestGameplay("inspect_block", false));
+        inspectUpdatedBlocks.setVisibility(View.GONE);
+        body.addView(inspectUpdatedBlocks, panelLayout(8));
 
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
@@ -549,6 +558,8 @@ public final class DashboardActivity extends Activity {
                 "Reads the bot’s health and hunger while connected and flags low vitals.");
         section("Planned skills");
         skillCard("Follow a player", "Planned", AMBER, "Track a selected player and maintain a follow distance.");
+        skillCard("Resource observations", "Experimental", AMBER,
+                "Read item registry, nearby drops and block updates; gathering remains planning-only.");
         skillCard("Survival and inventory", "Planned", AMBER, "Respond to low health, eat available food, and manage items.");
         skillCard("Gather and build", "Planned", AMBER, "Collect materials and carry out building tasks.");
     }
@@ -635,6 +646,13 @@ public final class DashboardActivity extends Activity {
         String followTarget = current.getString("follow_player", "");
         String followHeading = current.getString("follow_heading", "");
         String followDistance = current.getString("follow_distance", "");
+        String resourceStatus = current.getString("resource_state", "");
+        String resourceReason = current.getString("resource_reason", "");
+        String nearbyResources = current.getString("resource_nearby_items", "");
+        String resourceTarget = current.getString("resource_target_name", "");
+        int resourceRequested = current.getInt("resource_requested", 0);
+        int resourceObserved = current.getInt("resource_observed", 0);
+        String resourceDistance = current.getString("resource_distance", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -643,6 +661,17 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + "\nDrop actors: " + current.getInt("resource_drops")
+                        + " · Recent block updates: " + current.getInt("resource_blocks")
+                        + " · Registered item types: " + current.getInt("resource_items")
+                        + (nearbyResources.isEmpty() ? "" : "\nObserved items: " + nearbyResources)
+                        + (resourceStatus.isEmpty() || "idle".equals(resourceStatus) ? "" :
+                            "\nResource plan: " + resourceStatus
+                            + (resourceTarget.isEmpty() ? "" : " (" + resourceTarget + ")")
+                            + " · " + resourceReason
+                            + (resourceRequested <= 0 ? "" : "\nServer-observed count: "
+                                + resourceObserved + "/" + resourceRequested)
+                            + (resourceDistance.isEmpty() ? "" : " · Distance " + resourceDistance))
                         + (visibleNames.isEmpty() ? "" : "\nObserved players: " + visibleNames)
                         + (followGoal.isEmpty() ? "" : "\nNavigation plan: " + followGoal + " · " + followState
                             + (followTarget.isEmpty() ? "" : " (" + followTarget + ")")
@@ -661,6 +690,8 @@ public final class DashboardActivity extends Activity {
         markHome.setVisibility(playing ? View.VISIBLE : View.GONE);
         planReturn.setVisibility(playing && current.getBoolean("home_known", false)
                 ? View.VISIBLE : View.GONE);
+        planCollect.setVisibility(playing ? View.VISIBLE : View.GONE);
+        inspectUpdatedBlocks.setVisibility(playing ? View.VISIBLE : View.GONE);
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
@@ -712,17 +743,64 @@ public final class DashboardActivity extends Activity {
                 .show();
     }
 
+    private void requestCollectionPlan() {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        fields.setPadding(dp(16), dp(4), dp(16), dp(4));
+        EditText item = new EditText(this);
+        item.setSingleLine(true);
+        item.setHint("minecraft:oak_log");
+        item.setTextColor(INK);
+        item.setHintTextColor(MUTED);
+        fields.addView(item);
+        EditText count = new EditText(this);
+        count.setSingleLine(true);
+        count.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        count.setHint("Item count (1–64)");
+        count.setTextColor(INK);
+        count.setHintTextColor(MUTED);
+        fields.addView(count);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Plan resource collection")
+                .setMessage("Use an item name from the observed item registry. This creates a target plan, not automatic mining or pickup.")
+                .setView(fields)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Plan only", (dialog, which) -> {
+                    int requested;
+                    try { requested = Integer.parseInt(count.getText().toString().trim()); }
+                    catch (NumberFormatException invalid) {
+                        showStatus("Enter a valid quantity from 1 to 64.");
+                        return;
+                    }
+                    if (requested < 1 || requested > 64) {
+                        showStatus("Quantity must be between 1 and 64.");
+                        return;
+                    }
+                    requestGameplay("plan_collect", false, null,
+                            item.getText().toString().trim(), requested);
+                }).show();
+    }
+
     private void requestGameplay(String action, boolean confirmed) {
         requestGameplay(action, confirmed, null);
     }
 
     private void requestGameplay(String action, boolean confirmed, String playerName) {
+        requestGameplay(action, confirmed, playerName, null, 0);
+    }
+
+    private void requestGameplay(String action, boolean confirmed, String playerName,
+                                 String itemName, int itemCount) {
         String session = worldSessionId;
         if (session.isEmpty()) return;
         Bundle extras = new Bundle();
         extras.putString("action", action);
         extras.putBoolean("confirmed", confirmed);
         if (playerName != null) extras.putString("player_name", playerName);
+        if (itemName != null) {
+            extras.putString("item_name", itemName);
+            extras.putInt("item_count", itemCount);
+        }
         int generation = worldViewGeneration;
         worldReader.execute(() -> {
             Bundle receipt = worldRequest("gameplay", session, extras);
