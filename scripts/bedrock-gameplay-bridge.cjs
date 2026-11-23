@@ -88,6 +88,7 @@ class BedrockGameplayBridge {
     if (this.closed || this.watch || this.listeners.length) throw new Error('Bridge already used');
     this.bind('start_game', p => this.startGame(p));
     this.bind('spawn', () => { this.spawned = true; });
+    this.bind('set_movement_authority', p => this.authorityChange(p));
     this.bind('level_chunk', p => this.chunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
@@ -126,6 +127,10 @@ class BedrockGameplayBridge {
     if (!packet || typeof packet !== 'object') return;
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
     this.position = safePoint(packet.player_position);
+    const startRotation = packet.rotation;
+    this.pitch = Number.isFinite(startRotation?.x) ? startRotation.x : null;
+    this.yaw = Number.isFinite(startRotation?.z) ? startRotation.z :
+      Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
     const authority = packet.movement_authority;
@@ -147,6 +152,18 @@ class BedrockGameplayBridge {
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
+  }
+  authorityChange(packet) {
+    if (this.closed) return;
+    const authority = packet?.movement_authority;
+    const next = Number.isInteger(authority) && authority >= 0 && authority <= 2 ? authority :
+      ({ client: 0, server: 1, server_with_rewind: 2 })[authority] ?? null;
+    if (next === null) return;
+    if (this.movementAuthority !== next) {
+      // Changing movement prediction authority invalidates the active writer.
+      this.movement?.stop?.('movement_authority_changed', { silent: true });
+      this.movementAuthority = next;
+    }
   }
   attributes(packet) {
     const id = ident(packet?.runtime_entity_id ?? packet?.runtime_id);
@@ -259,6 +276,8 @@ class BedrockGameplayBridge {
     this.position = pos;
     this.lastServerPositionAt = this.clock();
     this.corrections++;
+    if (Number.isFinite(packet.rotation?.x)) this.pitch = packet.rotation.x;
+    if (Number.isFinite(packet.rotation?.z)) this.yaw = packet.rotation.z;
     this.layerOne?.onServerPosition(pos);
     const tick = validTick(packet.tick);
     if (tick !== null && (this.serverTick == null || tick > this.serverTick)) this.serverTick = tick;
