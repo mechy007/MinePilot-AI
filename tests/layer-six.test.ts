@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { LayerSixWorkflow, SafeGridPlanner } from '../src/gameplay/layer-six.js';
+const w = { position: { x: 4, y: 64, z: 4 }, dimension: 0, spawned: true,
+  chunks: 3, safetyHold: false };
+test('A* refuses unknown voxel states and cannot move the bot', () => {
+  const grid = new SafeGridPlanner();
+  grid.setOrigin({ x: 0, y: 64, z: 0 });
+  assert.equal(grid.findRoute({x:0,y:64,z:0},{x:2,y:64,z:0}).status,'unverified');
+  grid.setVerifiedCell(0,0,'walkable');
+  grid.setVerifiedCell(2,0,'walkable');
+  assert.equal(grid.findRoute({x:0,y:64,z:0},{x:2,y:64,z:0}).status,'blocked');
+  grid.setVerifiedCell(1,0,'hazard');
+  for (const [x,z] of [[0,1],[1,1],[2,1]]) grid.setVerifiedCell(x,z,'walkable');
+  const result=grid.findRoute({x:0,y:64,z:0},{x:2,y:64,z:0});
+  assert.equal(result.status,'route_found');
+  assert.deepEqual(result.path.map(p=>[p.x,p.z]),[[0,0],[0,1],[1,1],[2,1],[2,0]]);
+  assert.equal(result.executed,false);
+  assert.equal(grid.setVerifiedCell(55,55,'walkable'),false);
+  assert.equal(grid.findRoute({x:0,y:64,z:0},{x:2,y:65,z:0}).status,'invalid');
+  grid.reset();
+  assert.equal(grid.verifiedCells,0);
+});
+test('workflow preview enforces valid world, task count, and checkpoint evidence', () => {
+  const planner=new LayerSixWorkflow(()=>1000);
+  assert.equal(planner.plan('mine_ore',w).reason,'unknown_workflow');
+  assert.equal(planner.plan('farm_preview',{...w,chunks:0}).reason,'world_not_ready');
+  assert.equal(planner.plan('farm_preview',{...w,safetyHold:true}).reason,'survival_hold');
+  assert.equal(planner.plan('farm_preview',w).status,'accepted');
+  assert.equal(planner.snapshot(w).totalSteps,4);
+  assert.equal(planner.reviewCheckpoint('terrain',w).reason,'invalid_checkpoint');
+  assert.equal(planner.reviewCheckpoint('observe',w).status,'ok');
+  assert.equal(planner.reviewCheckpoint('inventory',w).status,'ok');
+  assert.equal(planner.reviewCheckpoint('terrain',w).status,'blocked');
+  assert.equal(planner.snapshot(w).nextStep,'review_terrain');
+  assert.equal(planner.snapshot(w).executed,false);
+  assert.equal(planner.reviewCheckpoint('terrain',{...w,safetyHold:true}).reason,'survival_hold');
+  planner.dimensionChanged();
+  assert.equal(planner.snapshot(w).state,'idle');
+});
+test('external container counts stay read-only, bounded and expire', () => {
+  let now=1000;
+  const planner=new LayerSixWorkflow(()=>now);
+  assert.equal(planner.observeContainer({window_id:0,input:[{count:10}]}),false);
+  assert.equal(planner.observeContainer({window_id:3,input:[{count:2},{count:0},{count:1}]}),true);
+  assert.equal(planner.snapshot(w).containersObserved,1);
+  assert.equal(planner.snapshot(w).containerOccupied,2);
+  assert.equal(planner.observeContainer({window_id:3,input:Array.from({length:200},()=>({count:1}))}),false);
+  now+=15001;
+  assert.equal(planner.snapshot(w).containersObserved,0);
+  planner.cancel();
+  assert.equal(planner.snapshot(w).kind,'none');
+});
+test('farm updates count changes without claiming crop readiness or harvesting', () => {
+  const planner=new LayerSixWorkflow(()=>1000);
+  assert.equal(planner.observeBlock({position:{x:0,y:64,z:0},layer:0},0),false);
+  planner.plan('farm_preview',w);
+  assert.equal(planner.observeBlock({position:{x:4,y:64,z:5},layer:0},0),true);
+  assert.equal(planner.observeBlock({position:{x:4,y:64,z:5},layer:0},0),true);
+  assert.equal(planner.observeBlock({position:{x:4,y:64,z:5},layer:0},1),false);
+  assert.equal(planner.snapshot(w).recentBlockUpdates,1);
+  assert.equal(planner.snapshot(w).routeExecutable,false);
+});

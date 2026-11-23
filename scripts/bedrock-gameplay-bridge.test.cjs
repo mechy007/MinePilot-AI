@@ -521,3 +521,42 @@ test('Layer 5 plans a shelter and crafting BOM from live inventory without emitt
   assert.equal(client.listenerCount('item_registry'), 0);
   assert.equal(client.listenerCount('update_block'), 0);
 });
+
+
+test('Layer 6 previews farming/storage, observes separate container and blocks without game actions', async () => {
+  const { LayerOneController } = await import('./gameplay/layer-one.js');
+  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
+  const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    layerOne: new LayerOneController(), layerThree: new LayerThreePlanner(),
+    layerFour: new LayerFourSupervisor(), layerSix: new LayerSixWorkflow()
+  }).start();
+  initialized(client, bridge);
+  const cmd = (id, action, more = {}) =>
+    bridge.execute({ version: 'minepilot.gameplay.v1', requestId: id, action, ...more });
+  client.emit('inventory_content', { window_id: 7, input: [
+    { count: 3, network_id: 1 }, { count: 0, network_id: 0 }
+  ] });
+  assert.equal(bridge.snapshot().layerSix.containersObserved, 1);
+  assert.equal(cmd('work-1', 'plan_workflow', { workflowKind: 'farm_preview' }).status,'accepted');
+  client.emit('update_block', { position: { x: 8, y: 64, z: 10 }, layer: 0,
+    block_runtime_id: 22 });
+  assert.equal(bridge.snapshot().layerSix.recentBlockUpdates,1);
+  assert.equal(cmd('work-2', 'review_checkpoint', { checkpoint:'observe' }).status,'ok');
+  assert.equal(cmd('work-3', 'review_checkpoint', { checkpoint:'inventory' }).status,'ok');
+  assert.equal(cmd('work-4', 'review_checkpoint', { checkpoint:'terrain' }).status,'blocked');
+  assert.equal(bridge.snapshot().layerSix.nextStep, 'review_terrain');
+  assert.equal(bridge.snapshot().layerSix.executed,false);
+  assert.equal(cmd('work-5', 'probe_step', { confirmed:true, direction:'forward' }).reason,
+    'workflow_not_executable');
+  assert.equal(client.sent.length,0);
+  assert.equal(cmd('work-6', 'stop_movement').status,'ok');
+  assert.equal(bridge.snapshot().layerSix.kind,'none');
+  assert.equal(cmd('work-7', 'plan_workflow', { workflowKind:'storage_preview' }).status,'accepted');
+  client.emit('change_dimension', { dimension:1 });
+  assert.equal(bridge.snapshot().layerSix.kind,'none');
+  bridge.stop();
+  assert.equal(client.listenerCount('inventory_content'),0);
+});

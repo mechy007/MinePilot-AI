@@ -198,6 +198,17 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (!construction.isNull("suggestedLogs")) result.putInt("build_logs_needed", construction.optInt("suggestedLogs"));
                     if (!construction.isNull("logsOnHand")) result.putInt("build_logs_onhand", construction.optInt("logsOnHand"));
                 }
+                JSONObject workflow = gameplay.optJSONObject("layerSix");
+                if (workflow != null) {
+                    result.putString("workflow_kind", workflow.optString("kind", "none"));
+                    result.putString("workflow_state", workflow.optString("state", ""));
+                    result.putString("workflow_next", workflow.optString("nextStep", ""));
+                    result.putInt("workflow_checkpoint", workflow.optInt("checkpoint", 0));
+                    result.putInt("workflow_total", workflow.optInt("totalSteps", 0));
+                    result.putInt("workflow_containers", workflow.optInt("containersObserved", 0));
+                    result.putInt("workflow_updates", workflow.optInt("recentBlockUpdates", 0));
+                    result.putInt("workflow_walkable", workflow.optInt("verifiedWalkableTiles", 0));
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
@@ -220,7 +231,8 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"plan_follow".equals(action) && !"plan_return".equals(action) &&
                 !"plan_collect".equals(action) && !"inspect_block".equals(action) &&
                 !"plan_food".equals(action) && !"plan_shelter".equals(action) &&
-                !"plan_craft_planks".equals(action) &&
+                !"plan_craft_planks".equals(action) && !"plan_workflow".equals(action) &&
+                !"review_checkpoint".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if ("probe_step".equals(action) && !confirmed) return;
@@ -254,6 +266,18 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (count < 1 || count > 256) return;
                     command.put("count", count);
                 }
+            }
+            if ("plan_workflow".equals(action)) {
+                String kind = extras.getString("item_name", "");
+                if (!"farm_preview".equals(kind) && !"storage_preview".equals(kind) &&
+                        !"collect_preview".equals(kind)) return;
+                command.put("workflowKind", kind);
+            }
+            if ("review_checkpoint".equals(action)) {
+                String checkpoint = extras.getString("checkpoint", "");
+                if (!"observe".equals(checkpoint) && !"inventory".equals(checkpoint) &&
+                        !"terrain".equals(checkpoint) && !"recipe".equals(checkpoint)) return;
+                command.put("checkpoint", checkpoint);
             }
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
