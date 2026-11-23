@@ -96,6 +96,35 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putInt("inventory_occupied", inventory.optInt("occupiedSlots"));
                     }
                 }
+                JSONObject follow = gameplay.optJSONObject("layerTwo");
+                if (follow != null) {
+                    JSONObject preview = follow.optJSONObject("preview");
+                    if (preview != null) {
+                        result.putString("follow_goal", preview.optString("goal", ""));
+                        result.putString("follow_state", preview.optString("status", ""));
+                        result.putString("follow_reason", preview.optString("reason", ""));
+                        if (!preview.isNull("distance")) result.putString("follow_distance", preview.optString("distance"));
+                        if (!preview.isNull("heading")) result.putString("follow_heading", preview.optString("heading"));
+                        result.putString("follow_player", preview.optString("targetName", ""));
+                    }
+                    result.putBoolean("home_known", follow.optBoolean("homeKnown", false));
+                    org.json.JSONArray names = follow.optJSONArray("visiblePlayerNames");
+                    if (names != null) {
+                        StringBuilder namesPreview = new StringBuilder();
+                        for (int i = 0; i < Math.min(names.length(), 8); i++) {
+                            String name = names.optString(i, "");
+                            if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) continue;
+                            if (namesPreview.length() > 0) namesPreview.append(", ");
+                            namesPreview.append(name);
+                        }
+                        result.putString("visible_player_names", namesPreview.toString());
+                    }
+                    JSONObject equipment = follow.optJSONObject("equipment");
+                    if (equipment != null && equipment.optBoolean("known")) {
+                        result.putInt("equipment_slot", equipment.optInt("slot", -1));
+                        result.putString("equipment_item_id", equipment.optString("itemId", ""));
+                    }
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
@@ -114,6 +143,8 @@ public final class WorldSessionProvider extends ContentProvider {
         if (extras == null) return;
         String action = extras.getString("action", "");
         if (!"status".equals(action) && !"inspect".equals(action) && !"wait".equals(action) &&
+                !"stay".equals(action) && !"set_home".equals(action) &&
+                !"plan_follow".equals(action) && !"plan_return".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if ("probe_step".equals(action) && !confirmed) return;
@@ -126,6 +157,11 @@ public final class WorldSessionProvider extends ContentProvider {
                     .put("version", "minepilot.gameplay.v1")
                     .put("requestId", requestId)
                     .put("action", action);
+            if ("plan_follow".equals(action)) {
+                String name = extras.getString("player_name", "");
+                if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) return;
+                command.put("playerName", name);
+            }
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
             }

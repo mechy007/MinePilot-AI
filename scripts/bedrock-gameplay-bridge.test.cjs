@@ -180,3 +180,110 @@ test('Layer 1 runs inspect -> wait -> stop -> probe through one live-client brid
   assert.equal(client.listenerCount('inventory_content'), 0);
   assert.equal(client.listenerCount('update_attributes'), 0);
 });
+
+test('Layer 2 plans named-player following, Stay and Return on the same client without sending packets', async () => {
+  const { LayerOneController } = await import('./gameplay/layer-one.js');
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const client = new Client();
+  const planner = new LayerTwoPlanner();
+  const bridge = new BedrockGameplayBridge(client, {
+    layerOne: new LayerOneController(), layerTwo: planner
+  }).start();
+  initialized(client, bridge);
+  client.emit('player_list', { action_type: 'add', records: [{ uuid: 'uuid-fixture', username: 'BuilderFriend' }] });
+  client.emit('add_player', {
+    runtime_entity_id: 456n, uuid: 'uuid-fixture', position: { x: 15, y: 64, z: 10.5 }
+  });
+  const run = (requestId, action, extra = {}) => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId, action, ...extra
+  });
+  assert.equal(bridge.snapshot().layerTwo.visiblePlayerNames[0], 'BuilderFriend');
+  assert.equal(run('a', 'plan_follow', { playerName: 'BuilderFriend' }).reason, 'follow_plan_only');
+  assert.equal(bridge.snapshot().layerTwo.preview.goal, 'follow');
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'route_unverified');
+  assert.equal(bridge.snapshot().layerTwo.preview.executed, false);
+  assert.equal(client.sent.length, 0);
+  client.emit('move_player', {
+    runtime_entity_id: 456n, position: { x: 10, y: 64, z: 10.5 }
+  });
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'at_target');
+  assert.equal(run('b', 'probe_step', { confirmed: true, direction: 'forward' }).reason,
+    'planned_navigation_not_executable');
+  assert.equal(run('c', 'stay').status, 'accepted');
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'stay');
+  assert.equal(run('d', 'set_home').reason, 'home_position_recorded');
+  assert.equal(bridge.snapshot().layerTwo.homeKnown, true);
+  client.emit('move_player', {
+    runtime_entity_id: 123n, position: { x: 25, y: 64, z: 10.5 }
+  });
+  assert.equal(run('e', 'plan_return').reason, 'return_plan_only');
+  assert.equal(bridge.snapshot().layerOne.movementOwner, null,
+    'an accepted return plan releases the old Stay reservation');
+  assert.equal(bridge.snapshot().layerTwo.preview.reason, 'direct_route_needs_collision_data');
+  assert.equal(client.sent.length, 0);
+  assert.equal(run('f', 'stop_movement').reason, 'movement_cancelled');
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'idle');
+  bridge.stop();
+  assert.equal(client.listenerCount('player_list'), 0);
+  assert.equal(client.listenerCount('mob_equipment'), 0);
+});
+
+test('Layer 2 equipment, target removal and health override are observational', async () => {
+  const { LayerOneController } = await import('./gameplay/layer-one.js');
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    layerOne: new LayerOneController(), layerTwo: new LayerTwoPlanner()
+  }).start();
+  initialized(client, bridge);
+  client.emit('mob_equipment', {
+    runtime_entity_id: 999n, slot: 1, item: { network_id: 40 }
+  });
+  assert.equal(bridge.snapshot().layerTwo.equipment.known, false);
+  client.emit('mob_equipment', {
+    runtime_entity_id: 123n, slot: 2, item: { network_id: 40 }
+  });
+  assert.equal(bridge.snapshot().layerTwo.equipment.known, true);
+  assert.equal(bridge.snapshot().layerTwo.equipment.itemId, '40');
+  client.emit('add_player', {
+    runtime_entity_id: 456n, username: 'Friend', position: { x: 15, y: 64, z: 10.5 }
+  });
+  assert.equal(bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'follow', action: 'plan_follow', playerName: 'Friend'
+  }).status, 'accepted');
+  client.emit('update_attributes', { runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 3 }] });
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'paused_by_safety');
+  client.emit('remove_actor', { entity_id: 456n });
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'paused_by_safety');
+  client.emit('update_attributes', { runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 20 }] });
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'waiting_for_target');
+  client.emit('change_dimension', { dimension: 1 });
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'idle');
+  assert.equal(bridge.snapshot().layerTwo.equipment.known, false);
+  bridge.stop();
+});
+
+test('nested Bedrock PlayerRecords add/remove resolves names only for visible entities', async () => {
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
+  initialized(client, bridge);
+  client.emit('player_list', { records: { type: 'add', records: [
+    { uuid: 'fixture-uuid-1', username: 'Friend#1234' }
+  ] } });
+  client.emit('add_player', {
+    runtime_entity_id: 200n, uuid: 'fixture-uuid-1',
+    position: { x: 14, y: 64, z: 11 }
+  });
+  assert.deepEqual(bridge.snapshot().layerTwo.visiblePlayerNames, ['Friend#1234']);
+  assert.equal(bridge.execute({ version: 'minepilot.gameplay.v1', requestId: 'follow1',
+    action: 'plan_follow', playerName: 'Friend#1234' }).status, 'accepted');
+  client.emit('player_list', { records: { type: 'remove', records: [
+    { uuid: 'fixture-uuid-1' }
+  ] } });
+  client.emit('remove_actor', { entity_id: 200n });
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'waiting_for_target');
+  bridge.stop();
+});

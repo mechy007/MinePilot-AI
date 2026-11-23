@@ -11,7 +11,7 @@ const { randomUUID } = require('node:crypto');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stop_movement', 'probe_step']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'stop_movement', 'probe_step']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -48,6 +48,7 @@ class BedrockGameplayBridge {
     this.receiptPath = options.receiptPath ?? null;
     this.movement = options.movement ?? null;
     this.layerOne = options.layerOne ?? null;
+    this.layerTwo = options.layerTwo ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -60,6 +61,7 @@ class BedrockGameplayBridge {
     this.serverTick = null;
     this.receivedChunks = new Map();
     this.players = new Map();
+    this.playerNames = new Map();
     this.corrections = 0;
     this.lastWorldAt = null;
     this.lastServerPositionAt = null;
@@ -81,6 +83,8 @@ class BedrockGameplayBridge {
     this.bind('inventory_content', p => this.layerOne?.onInventory(p));
     this.bind('update_attributes', p => this.attributes(p));
     this.bind('add_player', p => this.addPlayer(p));
+    this.bind('player_list', p => this.playerList(p));
+    this.bind('mob_equipment', p => this.equipment(p));
     this.bind('remove_actor', p => this.removeActor(p));
     this.bind('remove_entity', p => this.removeActor(p));
     this.bind('change_dimension', p => this.dimensionChange(p));
@@ -104,6 +108,8 @@ class BedrockGameplayBridge {
     this.spawned = false;
     this.movement?.stop();
     this.layerOne?.reset();
+    this.layerTwo?.reset();
+    this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
   }
   attributes(packet) {
@@ -117,6 +123,36 @@ class BedrockGameplayBridge {
       if (attr.name === 'minecraft:player.max_health') values.maxHealth = attr.current;
     }
     if (this.layerOne?.onVitals(values)) this.movement?.stop();
+  }
+  gameplayWorld() {
+    return { position: this.position, dimension: this.dimension, spawned: this.spawned,
+      chunks: this.receivedChunks.size, safetyHold: this.layerOne?.snapshot()?.safetyHold ?? false };
+  }
+  playerList(packet) {
+    if (this.closed || !packet || typeof packet !== 'object') return;
+    // Bedrock PlayerRecords is sometimes a nested tagged union, not a flat array.
+    const payload = packet.records ?? packet.entries;
+    const entries = Array.isArray(payload) ? payload :
+      payload && typeof payload === 'object'
+        ? (Array.isArray(payload.records) ? payload.records : payload.entries)
+        : null;
+    if (!Array.isArray(entries)) return;
+    // Only sanitized player names and UUIDs are cached.
+    const action = packet.action_type ?? packet.action ?? payload?.type ?? payload?.action;
+    const removal = action === 'remove' || action === 1;
+    for (const p of entries.slice(0, MAX_VISIBLE_PLAYERS)) {
+      const uuid = typeof p.uuid === 'string' ? p.uuid : null;
+      if (!uuid || uuid.length > 64) continue;
+      if (removal) { this.playerNames.delete(uuid); continue; }
+      const name = p.username;
+      if (typeof name !== 'string' || !/^[a-zA-Z0-9_ #.-]{1,32}$/.test(name)) continue;
+      if (this.playerNames.size >= MAX_VISIBLE_PLAYERS && !this.playerNames.has(uuid)) continue;
+      this.playerNames.set(uuid, name);
+    }
+  }
+  equipment(packet) {
+    if (this.closed || ident(packet?.runtime_entity_id ?? packet?.runtime_id) !== this.self) return;
+    this.layerTwo?.observeEquipment(packet?.slot, packet?.item?.network_id ?? packet?.item?.id ?? null);
   }
   chunk(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.x) || !Number.isInteger(packet.z)) return;
@@ -143,6 +179,7 @@ class BedrockGameplayBridge {
     } else if (this.players.has(id)) {
       this.players.get(id).position = pos;
       this.players.get(id).seenAt = this.clock();
+      this.layerTwo?.movePlayer(id, pos);
     }
   }
   correction(packet) {
@@ -165,11 +202,17 @@ class BedrockGameplayBridge {
     const position = safePoint(packet.position);
     if (!position) return;
     this.players.set(id, { position, seenAt: this.clock() });
+    const uuid = typeof packet.uuid === 'string' ? packet.uuid : null;
+    const name = typeof packet.username === 'string' ? packet.username : this.playerNames.get(uuid);
+    this.layerTwo?.observePlayer(id, name, position, this.dimension);
   }
   removeActor(packet) {
     if (!packet) return;
     const id = ident(packet.entity_id ?? packet.runtime_entity_id ?? packet.runtime_id);
-    if (id) this.players.delete(id);
+    if (id) {
+      this.players.delete(id);
+      this.layerTwo?.removePlayer(id);
+    }
   }
   dimensionChange(packet) {
     if (this.closed) return;
@@ -181,6 +224,8 @@ class BedrockGameplayBridge {
     this.players.clear();
     this.movement?.stop();
     this.layerOne?.reset();
+    this.layerTwo?.dimensionChanged();
+    this.playerNames.clear();
   }
   snapshot() {
     const now = this.clock();
@@ -199,6 +244,7 @@ class BedrockGameplayBridge {
       movementAuthority: this.movementAuthority,
       movement: this.movement?.capability?.(this) ?? 'unavailable',
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
+      ...(this.layerTwo ? { layerTwo: this.layerTwo.snapshot(this.gameplayWorld()) } : {}),
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -215,17 +261,47 @@ class BedrockGameplayBridge {
       return this.layerOne?.inspect({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned })
         ?? { status: 'rejected', reason: 'layer_one_unavailable' };
     }
+    if (raw.action === 'set_home') {
+      return this.layerTwo?.markHome(this.gameplayWorld())
+        ?? { status: 'rejected', reason: 'layer_two_unavailable' };
+    }
+    if (raw.action === 'plan_follow' || raw.action === 'plan_return') {
+      const result = raw.action === 'plan_follow'
+        ? this.layerTwo?.follow(raw.playerName, this.gameplayWorld())
+        : this.layerTwo?.returnHome(this.gameplayWorld());
+      if (!result) return { status: 'rejected', reason: 'layer_two_unavailable' };
+      if (result.status === 'accepted') {
+        // A new plan replaces Stay, but never automatically emits a movement packet.
+        this.movement?.stop?.();
+        this.layerOne?.stop('new_navigation_plan');
+      }
+      return result;
+    }
+    if (raw.action === 'stay') {
+      if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
+      this.movement?.stop?.();
+      const result = this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
+      if (result.status === 'accepted') this.layerTwo?.stay();
+      return result;
+    }
     if (raw.action === 'wait') {
       if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
       this.movement?.stop();
-      return this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
+      const result = this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
+      if (result.status === 'accepted') this.layerTwo?.stay();
+      return result;
     }
     if (raw.action === 'stop_movement') {
       this.layerOne?.stop();
+      this.layerTwo?.cancel();
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
     if (raw.action === 'probe_step') {
+      // A raw forward diagnostic is not execution of a Follow or Return plan.
+      const plan = this.layerTwo?.preview(this.gameplayWorld());
+      if (plan && (plan.goal === 'follow' || plan.goal === 'return'))
+        return { status: 'rejected', reason: 'planned_navigation_not_executable' };
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       if (raw.direction !== 'forward') return { status: 'rejected', reason: 'unsupported_direction' };
       if (!this.movement || this.movement.capability(this) !== 'experimental') {
@@ -281,6 +357,8 @@ class BedrockGameplayBridge {
     this.watch = null;
     this.movement?.stop?.();
     this.layerOne?.stop('session_closed');
+    this.layerTwo?.reset();
+    this.playerNames.clear();
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
     this.listeners = [];
     this.players.clear();

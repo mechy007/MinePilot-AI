@@ -83,7 +83,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     commandPath: gameplayOptions.commandPath,
     receiptPath: gameplayOptions.receiptPath,
     movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true),
-    layerOne: gameplayOptions.layerOneFactory?.() ?? null
+    layerOne: gameplayOptions.layerOneFactory?.() ?? null,
+    layerTwo: gameplayOptions.layerTwoFactory?.() ?? null
   }).start() : null;
   let startGame = false;
   let spawn = false;
@@ -271,6 +272,7 @@ if (require.main === module) {
     const { createClient } = require('bedrock-protocol');
     const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
     const { LayerOneController } = await import('./gameplay/layer-one.js');
+    const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
@@ -285,7 +287,8 @@ if (require.main === module) {
         commandPath: path.join(__dirname, 'gameplay-command.json'),
         receiptPath: path.join(__dirname, 'gameplay-receipt.json'),
         experimentalMovement: config.experimentalMovement === true,
-        layerOneFactory: () => new LayerOneController()
+        layerOneFactory: () => new LayerOneController(),
+        layerTwoFactory: () => new LayerTwoPlanner()
       }
     });
   })().catch(() => publish({ phase: 'failed', stage: 'runtime' }))
