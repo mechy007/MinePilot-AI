@@ -21,6 +21,35 @@ if (source.split(old).length !== 3) {
 fs.writeFileSync(file, source.replaceAll(old, 'token.obtainedOn + Number(token.expires_in) * 1000'));
 JS
 node "$root/scripts/stage-android-bedrock-sdk.mjs" "$temp" 1.26.60
+# Surface the pinned SDK's join stages without forwarding private session data.
+# Publishing the bot's own Xbox activity is optional for joining a host.
+node - "$temp/node_modules/bedrock-protocol/src" <<'JS'
+const fs = require('node:fs');
+const path = require('node:path');
+function patch(relativePath, replacements) {
+  const file = path.join(process.argv[2], relativePath);
+  let source = fs.readFileSync(file, 'utf8');
+  for (const [from, to] of replacements) {
+    if (source.split(from).length !== 2) throw new Error(`Review join patch for ${relativePath}`);
+    source = source.replace(from, to);
+  }
+  fs.writeFileSync(file, source);
+}
+patch('client/auth.js', [
+  ['  const session = await xbox.joinSession(world.sessionRef.name, requestOptions)',
+    "  client.emit('minepilot_join_step', 'xbox_membership')\n  const session = await xbox.joinSession(world.sessionRef.name, requestOptions)"],
+  ['  const networkId = session.current.properties?.custom?.SupportedConnections?.find(e => e.NetherNetId)?.NetherNetId',
+    "  client.emit('minepilot_join_step', 'world_transport')\n  const networkId = session.current.properties?.custom?.SupportedConnections?.find(e => e.NetherNetId)?.NetherNetId"],
+  ['  await session.setActivity()\n  options.nethernet.networkId = BigInt(networkId)',
+    '  options.nethernet.networkId = BigInt(networkId)']
+]);
+patch('client.js', [
+  ['        const { NethernetSignal } = require(\'./nethernet/signalling\')',
+    "        this.emit('minepilot_join_step', 'nethernet_signalling')\n        const { NethernetSignal } = require('./nethernet/signalling')"],
+  ['.then(() => { if (!this._closed) this._connect(sessionData) })',
+    ".then(() => {\n            if (this._closed) return\n            this.emit('minepilot_join_step', 'nethernet_peer')\n            this._connect(sessionData)\n          })"]
+]);
+JS
 data_notice="$temp/node_modules/minecraft-data/minecraft-data/README.md"
 curl --fail --location --silent --show-error --retry 2 --max-time 45 \
     'https://raw.githubusercontent.com/PrismarineJS/minecraft-data/bd8b5c6048e5af9694374b83f25f5b4aade619cc/README.md' \
