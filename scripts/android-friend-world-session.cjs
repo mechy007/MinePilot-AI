@@ -89,7 +89,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     layerFour: gameplayOptions.layerFourFactory?.() ?? null,
     layerFive: gameplayOptions.layerFiveFactory?.() ?? null,
     layerSix: gameplayOptions.layerSixFactory?.() ?? null,
-    layerSeven: gameplayOptions.layerSevenFactory?.() ?? null
+    layerSeven: gameplayOptions.layerSevenFactory?.() ?? null,
+    layerEight: gameplayOptions.layerEightFactory?.() ?? null
   }).start() : null;
   let startGame = false;
   let spawn = false;
@@ -283,6 +284,7 @@ if (require.main === module) {
     const { LayerFivePlanner } = await import('./gameplay/layer-five.js');
     const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
     const { LayerSevenAdvisor } = await import('./gameplay/layer-seven.js');
+    const { LayerEightReadiness } = await import('./gameplay/layer-eight.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
@@ -303,7 +305,8 @@ if (require.main === module) {
         layerFourFactory: () => new LayerFourSupervisor(),
         layerFiveFactory: () => new LayerFivePlanner(),
         layerSixFactory: () => new LayerSixWorkflow(),
-        layerSevenFactory: () => new LayerSevenAdvisor()
+        layerSevenFactory: () => new LayerSevenAdvisor(),
+        layerEightFactory: () => new LayerEightReadiness()
       }
     });
   })().catch(() => publish({ phase: 'failed', stage: 'runtime' }))
