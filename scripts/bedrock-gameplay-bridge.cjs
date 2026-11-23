@@ -59,6 +59,7 @@ class BedrockGameplayBridge {
     this.layerFive = options.layerFive ?? null;
     this.layerSix = options.layerSix ?? null;
     this.layerSeven = options.layerSeven ?? null;
+    this.layerEight = options.layerEight ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -166,6 +167,18 @@ class BedrockGameplayBridge {
     return { position: this.position, dimension: this.dimension, spawned: this.spawned,
       chunks: this.receivedChunks.size,
       safetyHold: (this.layerOne?.snapshot()?.safetyHold ?? false) || (this.layerFour?.critical ?? false) };
+  }
+  readinessInput() {
+    const age = this.lastServerPositionAt == null ? null :
+      Math.max(0, this.clock() - this.lastServerPositionAt);
+    return {
+      spawned: this.spawned, hasSelfEntity: this.self != null,
+      hasPosition: this.position !== null, positionAgeMs: age,
+      receivedChunkHeaders: this.receivedChunks.size,
+      movementAuthority: this.movementAuthority,
+      blocksDecoded: false,
+      movementCorrections: this.corrections, sessionClosed: this.closed
+    };
   }
   advisorWorld() {
     const world = this.gameplayWorld();
@@ -312,6 +325,7 @@ class BedrockGameplayBridge {
       ...(this.layerFive ? { layerFive: this.layerFive.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerSix ? { layerSix: this.layerSix.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerSeven ? { layerSeven: this.layerSeven.snapshot(this.advisorWorld()) } : {}),
+      ...(this.layerEight ? { layerEight: this.layerEight.assess(this.readinessInput()) } : {}),
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -323,6 +337,16 @@ class BedrockGameplayBridge {
       return { status: 'rejected', reason: 'invalid_command' };
     }
     if (this.closed) return { status: 'rejected', reason: 'session_closed' };
+    // Layer 8 enforces a fresh authenticated world for *new* plans.
+    // Stop, status and disabling suggestions remain possible when stale.
+    if (this.layerEight && [
+      'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food',
+      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint'
+    ].includes(raw.action)) {
+      const preflight = this.layerEight.allowPreview(this.readinessInput());
+      if (!preflight.allowed)
+        return { status: 'rejected', reason: preflight.reason };
+    }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
     if (raw.action === 'inspect') {
       return this.layerOne?.inspect({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned })
