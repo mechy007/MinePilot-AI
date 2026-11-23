@@ -910,9 +910,10 @@ test('addon-derived follow priority is wired to same Xbox world without automati
   const follow=bridge.execute({version:'minepilot.gameplay.v1',
     requestId:'follow-addon',action:'plan_follow',playerName:'BuilderFriend'});
   assert.equal(follow.status,'accepted');
-  assert.equal(bridge.snapshot().addonNavigation.owner,'follow');
-  assert.equal(bridge.snapshot().addonNavigation.state,'awaiting_server');
-  assert.equal(bridge.snapshot().addonNavigation.reason,'no_verified_collision_map');
+  assert.equal(bridge.snapshot().addonNavigation.owner,null,
+    'unknown terrain may not claim a physical Follow route');
+  assert.equal(bridge.snapshot().addonNavigation.state,'idle');
+  assert.equal(bridge.snapshot().navigationRoute,undefined);
   assert.equal(bridge.snapshot().addonNavigation.executed,false);
   assert.equal(client.sent.some(s=>s.packet==='player_auth_input'),false);
   assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'addon-stop',
