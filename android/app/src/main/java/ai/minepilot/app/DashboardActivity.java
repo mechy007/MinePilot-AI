@@ -40,6 +40,9 @@ public final class DashboardActivity extends Activity {
     private Button stopMovement;
     private Button inspectWorld;
     private Button waitHere;
+    private Button planFollow;
+    private Button planReturn;
+    private Button markHome;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -489,9 +492,18 @@ public final class DashboardActivity extends Activity {
         inspectWorld = actionButton("Inspect bot status", false, () -> requestGameplay("inspect", false));
         inspectWorld.setVisibility(View.GONE);
         body.addView(inspectWorld, panelLayout(8));
-        waitHere = actionButton("Wait here", false, () -> requestGameplay("wait", false));
+        waitHere = actionButton("Stay here", false, () -> requestGameplay("stay", false));
         waitHere.setVisibility(View.GONE);
         body.addView(waitHere, panelLayout(8));
+        planFollow = actionButton("Plan follow player", false, this::requestFollowPlan);
+        planFollow.setVisibility(View.GONE);
+        body.addView(planFollow, panelLayout(8));
+        markHome = actionButton("Mark current position as home", false, () -> requestGameplay("set_home", false));
+        markHome.setVisibility(View.GONE);
+        body.addView(markHome, panelLayout(8));
+        planReturn = actionButton("Plan return home", false, () -> requestGameplay("plan_return", false));
+        planReturn.setVisibility(View.GONE);
+        body.addView(planReturn, panelLayout(8));
 
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
@@ -616,6 +628,13 @@ public final class DashboardActivity extends Activity {
         String taskState = current.getString("gameplay_task_state", "");
         String movementOwner = current.getString("movement_owner", "");
         boolean inventoryKnown = current.getBoolean("inventory_known", false);
+        String visibleNames = current.getString("visible_player_names", "");
+        String followState = current.getString("follow_state", "");
+        String followGoal = current.getString("follow_goal", "");
+        String followReason = current.getString("follow_reason", "");
+        String followTarget = current.getString("follow_player", "");
+        String followHeading = current.getString("follow_heading", "");
+        String followDistance = current.getString("follow_distance", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -624,12 +643,24 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + (visibleNames.isEmpty() ? "" : "\nObserved players: " + visibleNames)
+                        + (followGoal.isEmpty() ? "" : "\nNavigation plan: " + followGoal + " · " + followState
+                            + (followTarget.isEmpty() ? "" : " (" + followTarget + ")")
+                            + "\nPlan status: " + followReason
+                            + (followDistance.isEmpty() ? "" : " · Distance " + followDistance)
+                            + (followHeading.isEmpty() ? "" : " · Heading " + followHeading + "°"))
+                        + (current.getBoolean("home_known", false) ? "\nHome: saved for this world session" : "")
+                        + (current.containsKey("equipment_slot") ? "\nHeld slot: " + current.getInt("equipment_slot") : "")
                         + (task.isEmpty() ? "" : "\nTask: " + task + " · " + taskState)
                         + (movementOwner.isEmpty() ? "" : "\nMovement owner: " + movementOwner)
                         + (current.getBoolean("safety_hold", false) ? "\nSurvival hold: critical health" : "")
                         + (command.isEmpty() ? "" : "\nLast command: " + command));
         inspectWorld.setVisibility(playing ? View.VISIBLE : View.GONE);
         waitHere.setVisibility(playing ? View.VISIBLE : View.GONE);
+        planFollow.setVisibility(playing ? View.VISIBLE : View.GONE);
+        markHome.setVisibility(playing ? View.VISIBLE : View.GONE);
+        planReturn.setVisibility(playing && current.getBoolean("home_known", false)
+                ? View.VISIBLE : View.GONE);
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
@@ -665,12 +696,33 @@ public final class DashboardActivity extends Activity {
                 .show();
     }
 
+    private void requestFollowPlan() {
+        EditText target = new EditText(this);
+        target.setSingleLine(true);
+        target.setHint("Exact observed gamertag");
+        target.setTextColor(INK);
+        target.setHintTextColor(MUTED);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Plan follow — no automatic movement")
+                .setMessage("Enter the exact gamertag of a currently observed player. This makes a navigation plan but does not move the bot until real walking is verified.")
+                .setView(target)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Plan follow", (dialog, which) ->
+                        requestGameplay("plan_follow", false, target.getText().toString().trim()))
+                .show();
+    }
+
     private void requestGameplay(String action, boolean confirmed) {
+        requestGameplay(action, confirmed, null);
+    }
+
+    private void requestGameplay(String action, boolean confirmed, String playerName) {
         String session = worldSessionId;
         if (session.isEmpty()) return;
         Bundle extras = new Bundle();
         extras.putString("action", action);
         extras.putBoolean("confirmed", confirmed);
+        if (playerName != null) extras.putString("player_name", playerName);
         int generation = worldViewGeneration;
         worldReader.execute(() -> {
             Bundle receipt = worldRequest("gameplay", session, extras);
