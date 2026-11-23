@@ -66,8 +66,6 @@ export function decideGameplay(world: WorldSnapshot, goal: Goal): Decision {
     const blocked = obstruction(world, target);
     return { goal, intents: [{ type: "look", toward: target }, { type: "move", toward: target, sprint: distance(world.position, target) > 7 && !blocked, jump: blocked && world.onGround === true }], reason: blocked ? "Obstacle ahead" : "Navigating" };
   }
-  const actions: Record<string, Intent["type"]> = {};
-  void actions;
   switch (goal.type) {
     case "collect": return { goal, intents: [{ type: "request_action", action: "collect", target: goal.item, count: goal.count }], reason: "Collection requested" };
     case "mine": return { goal, intents: [{ type: "request_action", action: "mine", target: goal.block, count: goal.count }], reason: "Mining requested" };
@@ -75,4 +73,5 @@ export function decideGameplay(world: WorldSnapshot, goal: Goal): Decision {
     case "guard": return { goal, intents: [{ type: "request_action", action: "guard", target: goal.playerId }], reason: "Guard requested" };
     case "explore": return { goal, intents: [{ type: "request_action", action: "explore" }], reason: "Exploration requested" };
   }
+  return { goal, intents: [{ type: "await_world", reason: "Goal requires live executor" }], reason: "Deferred goal" };
 }
