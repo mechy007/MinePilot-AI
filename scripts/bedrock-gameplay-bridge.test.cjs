@@ -431,7 +431,8 @@ test('Layer 4 interrupts existing follow plan on low air and only suggests food 
   client.emit('set_time', { time: 14000 });
   client.emit('update_attributes', { runtime_entity_id: 999n,
     attributes: [{ name: 'minecraft:player.air_supply', current: 0 }] });
-  assert.equal(bridge.snapshot().layerFour.level, 'unknown', 'other entities cannot interrupt bot');
+  assert.equal(bridge.snapshot().layerFour.level, 'caution', 'night advisory may be present');
+  assert.equal(bridge.snapshot().layerFour.taskStatus, 'running', 'other entities cannot interrupt bot');
   client.emit('update_attributes', { runtime_entity_id: 123n,
     attributes: [
       { name: 'minecraft:health', current: 20 },
