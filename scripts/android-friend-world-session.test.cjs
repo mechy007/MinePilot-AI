@@ -91,6 +91,47 @@ test('reports a safe failure on a disconnect before the world starts', async () 
   assert.deepEqual(snapshots, []);
 });
 
+test('assesses the bot’s own vitals from the live session without issuing actions', async () => {
+  const client = new Client();
+  const snapshots = [];
+  const controller = new AbortController();
+  const session = observeSession(client, snapshot => snapshots.push(snapshot), controller.signal, () => 'connection');
+  const update = (runtime_entity_id, health, hunger) => client.emit('update_attributes', {
+    runtime_entity_id,
+    attributes: [
+      { name: 'minecraft:health', current: health },
+      { name: 'minecraft:player.hunger', current: hunger }
+    ]
+  });
+  client.emit('start_game', { runtime_entity_id: 18446744073709551610n });
+  update('18446744073709551610', 5, 4);
+  update('18446744073709551611', 20, 20);
+  client.emit('spawn');
+  assert.deepEqual(snapshots.at(-1)?.vitals, { health: 5, hunger: 4, assessment: 'recover_health' });
+  controller.abort();
+  await session;
+  assert.equal(client.listenerCount('update_attributes'), 0);
+});
+
+test('awareness distinguishes food needs, recovery and incomplete data', () => {
+  const { BotAwareness } = require('./bot-awareness.mjs');
+  const awareness = new BotAwareness();
+  const update = (...attributes) => awareness.update({
+    runtime_entity_id: 1n,
+    attributes: attributes.map(([name, current]) => ({ name, current }))
+  });
+  awareness.start({ runtime_entity_id: 1n });
+  assert.equal(awareness.snapshot(), undefined);
+  update(['minecraft:health', 20]);
+  assert.equal(awareness.snapshot().assessment, 'awaiting_vitals');
+  update(['minecraft:player.hunger', 5]);
+  assert.equal(awareness.snapshot().assessment, 'needs_food');
+  update(['minecraft:player.hunger', 20], ['minecraft:health', NaN]);
+  assert.equal(awareness.snapshot().assessment, 'ready');
+  update(['minecraft:health', 0]);
+  assert.equal(awareness.snapshot().assessment, 'dead');
+});
+
 test('captures the Bedrock disconnect code without forwarding the server message', async () => {
   const client = new Client();
   const session = observeSession(client, () => {}, new AbortController().signal, () => 'connection');
