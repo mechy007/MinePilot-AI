@@ -200,9 +200,12 @@ echo "70458c05b33622a05e4e2bbc5811f6221e4085003db25292ef122e0c830397a1  $data_no
 cp "$root/scripts/android-node-bedrock-smoke.cjs" "$temp/node-smoke.cjs"
 cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
+cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
+cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
 cp "$root/dist/src/connection/prismarine-world-client.js" "$temp/prismarine-world-client.mjs"
 cp "$root/dist/src/core/bot-awareness.js" "$temp/bot-awareness.mjs"
 cp "$root/scripts/android-friend-world-session.test.cjs" "$temp/friend-world-session.test.cjs"
+cp "$root/scripts/bedrock-gameplay-bridge.test.cjs" "$temp/bedrock-gameplay-bridge.test.cjs"
 
 python3 - "$temp" <<'PY'
 from pathlib import Path
@@ -214,6 +217,7 @@ zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
+        "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
@@ -230,7 +234,8 @@ mv "$temp/node_modules" "$temp/installed-modules"
 
 node "$temp/verify/node-smoke.cjs"
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
-node --test "$temp/verify/friend-world-session.test.cjs"
+cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
+node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 du -h "$destination/bedrock-sdk.zip"
