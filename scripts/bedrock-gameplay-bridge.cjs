@@ -60,6 +60,7 @@ class BedrockGameplayBridge {
     this.layerSix = options.layerSix ?? null;
     this.layerSeven = options.layerSeven ?? null;
     this.layerEight = options.layerEight ?? null;
+    this.addonNavigation = options.addonNavigation ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -167,6 +168,7 @@ class BedrockGameplayBridge {
     this.layerFive?.reset();
     this.layerSix?.reset();
     this.layerSeven?.reset();
+    this.addonNavigation?.reset();
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
@@ -401,7 +403,25 @@ class BedrockGameplayBridge {
     this.layerFive?.dimensionChanged();
     this.layerSix?.dimensionChanged();
     this.layerSeven?.reset();
+    this.addonNavigation?.reset();
     this.playerNames.clear();
+  }
+  updateAddonNavigation() {
+    if (!this.addonNavigation) return null;
+    const preview = this.layerTwo?.preview(this.gameplayWorld());
+    if (preview?.status === 'route_unverified' && preview.nextPoint) {
+      this.addonNavigation.request('follow', 'walk', preview.nextPoint, 1000);
+    } else {
+      this.addonNavigation.release('follow');
+    }
+    return this.addonNavigation.update({
+      position: this.position,
+      dimension: this.dimension,
+      observedAt: this.lastServerPositionAt ?? -1,
+      collisionVerified: false,
+      safetyHold: this.layerFour?.critical === true ||
+        this.layerOne?.snapshot()?.safetyHold === true
+    });
   }
   snapshot() {
     const now = this.clock();
@@ -433,6 +453,7 @@ class BedrockGameplayBridge {
       ...(this.layerSix ? { layerSix: this.layerSix.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerSeven ? { layerSeven: this.layerSeven.snapshot(this.advisorWorld()) } : {}),
       ...(this.layerEight ? { layerEight: this.layerEight.assess(this.readinessInput()) } : {}),
+      ...(this.addonNavigation ? { addonNavigation: this.updateAddonNavigation() } : {}),
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -575,6 +596,7 @@ class BedrockGameplayBridge {
       this.layerFive?.cancel();
       this.layerSix?.cancel();
       this.layerSeven?.setMode('off');
+      this.addonNavigation?.emergencyStop();
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
@@ -681,6 +703,7 @@ class BedrockGameplayBridge {
     this.layerFive?.reset();
     this.layerSix?.reset();
     this.layerSeven?.reset();
+    this.addonNavigation?.reset();
     this.playerNames.clear();
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
     this.listeners = [];
