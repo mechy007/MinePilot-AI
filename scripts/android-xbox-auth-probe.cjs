@@ -9,8 +9,9 @@ function runtimeLogger(file) {
     'friends_loaded', 'discovery', 'connection', 'retrying', 'spawned', 'failed', 'disconnected', 'stopped'];
   const stages = ['microsoft_token', 'xbox_token', 'xbox_profile', 'account_save', 'bedrock_credentials',
     'friends', 'owner', 'discovery', 'connection', 'xbox_membership', 'world_transport',
-    'nethernet_signalling', 'nethernet_peer', 'bedrock_login', 'bedrock_spawn', 'runtime'];
-  const reasons = ['no_transport', 'transport', 'network', 'timeout', 'host_disconnect', 'nethernet_closed'];
+    'world_nonce', 'nethernet_signalling', 'nethernet_peer', 'bedrock_login', 'bedrock_spawn', 'runtime'];
+  const reasons = ['no_transport', 'transport', 'network', 'timeout', 'host_disconnect', 'nethernet_closed',
+    'nonce_unavailable'];
   const steps = ['offer_sent', 'answer_received', 'peer_connected'];
   let previous;
   return snapshot => {
@@ -27,6 +28,9 @@ function runtimeLogger(file) {
     }
     if (Number.isInteger(snapshot.nethernetCode) && snapshot.nethernetCode > 0 && snapshot.nethernetCode <= 255) {
       event.nethernetCode = snapshot.nethernetCode;
+    }
+    if (Number.isInteger(snapshot.bedrockCode) && snapshot.bedrockCode >= 0 && snapshot.bedrockCode <= 255) {
+      event.bedrockCode = snapshot.bedrockCode;
     }
     const key = JSON.stringify(event);
     if (key === previous) return;
