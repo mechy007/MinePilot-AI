@@ -64,6 +64,7 @@ async function observeSession(client, publish, signal, getStage) {
       client.removeListener('start_game', onStartGame);
       client.removeListener('spawn', onSpawn);
       client.removeListener('level_chunk', onChunk);
+      client.removeListener('minepilot_join_step', onStep);
       client.removeListener('loggingIn', onLogin);
       client.removeListener('join', onJoin);
       client.removeListener('kick', onKick);
@@ -92,9 +93,16 @@ async function observeSession(client, publish, signal, getStage) {
     const onStartGame = () => { startGame = true; checkSpawn(); };
     const onSpawn = () => { spawn = true; checkSpawn(); };
     const onChunk = () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); };
+    const onStep = step => {
+      if (['xbox_membership', 'world_transport', 'nethernet_signalling', 'nethernet_peer'].includes(step)) {
+        connectionStage = step;
+        publish({ phase: 'connection', stage: step });
+      }
+    };
     const onLogin = () => { connectionStage = 'bedrock_login'; };
     const onJoin = () => { connectionStage = 'bedrock_spawn'; };
     const onKick = () => finish('failed', { reason: 'host_disconnect' });
+    client.on('minepilot_join_step', onStep);
     client.once('loggingIn', onLogin);
     client.once('join', onJoin);
     client.once('kick', onKick);
