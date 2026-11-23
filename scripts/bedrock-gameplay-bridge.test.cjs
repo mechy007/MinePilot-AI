@@ -458,3 +458,66 @@ test('Layer 4 interrupts existing follow plan on low air and only suggests food 
   bridge.stop();
   assert.equal(client.listenerCount('set_time'), 0);
 });
+
+
+test('Layer 5 plans a shelter and crafting BOM from live inventory without emitting block or crafting actions', async () => {
+  const { LayerOneController } = await import('./gameplay/layer-one.js');
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
+  const { LayerFivePlanner } = await import('./gameplay/layer-five.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    layerOne: new LayerOneController(),
+    layerTwo: new LayerTwoPlanner(),
+    layerThree: new LayerThreePlanner(),
+    layerFour: new LayerFourSupervisor(),
+    layerFive: new LayerFivePlanner()
+  }).start();
+  initialized(client, bridge);
+  const cmd = (id, action, more = {}) => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: id, action, ...more
+  });
+  client.emit('item_registry', { itemstates: [
+    { runtime_id: 11, name: 'minecraft:oak_planks' },
+    { runtime_id: 12, name: 'minecraft:oak_log' }
+  ] });
+  client.emit('inventory_content', { window_id: 'inventory', input: [
+    { network_id: 11, count: 8 }, { network_id: 12, count: 4 }
+  ] });
+  assert.equal(cmd('shelter', 'plan_shelter', { material: 'minecraft:oak_planks' }).status, 'accepted');
+  let build = bridge.snapshot().layerFive;
+  assert.equal(build.kind, 'shelter');
+  assert.equal(build.state, 'materials_missing');
+  assert.equal(build.required, 23);
+  assert.equal(build.onHand, 8);
+  assert.equal(build.missing, 15);
+  assert.equal(build.suggestedLogs, 4);
+  assert.equal(build.executed, false);
+  client.emit('update_block', { position: { x: 8, y: 64, z: 9 }, layer: 0, block_runtime_id: 23 });
+  assert.equal(bridge.snapshot().layerFive.observedNearbyBlockUpdates, 1);
+  assert.equal(bridge.snapshot().layerFive.executed, false);
+  assert.equal(cmd('probe', 'probe_step', { direction: 'forward', confirmed: true }).reason,
+    'building_plan_not_executable');
+
+  client.emit('update_attributes', { runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 3 }] });
+  assert.equal(bridge.snapshot().layerFive.state, 'paused_by_safety');
+  assert.equal(cmd('blocked', 'plan_craft_planks', { material: 'minecraft:oak_planks', count: 12 }).reason,
+    'survival_hold');
+  client.emit('update_attributes', { runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 20 }] });
+  assert.equal(cmd('craft', 'plan_craft_planks', { material: 'minecraft:oak_planks', count: 12 }).status,
+    'accepted');
+  build = bridge.snapshot().layerFive;
+  assert.equal(build.kind, 'craft_planks');
+  assert.equal(build.missing, 4);
+  assert.equal(build.suggestedLogs, 1);
+  assert.equal(build.executed, false);
+  assert.equal(client.sent.length, 0, 'no minecraft player action, craft or inventory packet emitted');
+  assert.equal(cmd('stop', 'stop_movement').status, 'ok');
+  assert.equal(bridge.snapshot().layerFive.kind, 'none');
+  bridge.stop();
+  assert.equal(client.listenerCount('item_registry'), 0);
+  assert.equal(client.listenerCount('update_block'), 0);
+});

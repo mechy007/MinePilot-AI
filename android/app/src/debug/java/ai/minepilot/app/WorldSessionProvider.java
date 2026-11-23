@@ -182,6 +182,22 @@ public final class WorldSessionProvider extends ContentProvider {
                         if (name.matches("minecraft:[a-z0-9_./-]{1,80}")) result.putString("survival_food_plan", name);
                     }
                 }
+                JSONObject construction = gameplay.optJSONObject("layerFive");
+                if (construction != null) {
+                    result.putString("build_kind", construction.optString("kind", "none"));
+                    result.putString("build_state", construction.optString("state", ""));
+                    result.putString("build_reason", construction.optString("reason", ""));
+                    String material = construction.optString("material", "");
+                    if (material.matches("minecraft:[a-z0-9_./-]{1,80}"))
+                        result.putString("build_material", material);
+                    result.putInt("build_required", construction.optInt("required", 0));
+                    result.putInt("build_count", construction.optInt("blockCount", 0));
+                    result.putInt("build_observed_updates", construction.optInt("observedNearbyBlockUpdates", 0));
+                    if (!construction.isNull("onHand")) result.putInt("build_onhand", construction.optInt("onHand"));
+                    if (!construction.isNull("missing")) result.putInt("build_missing", construction.optInt("missing"));
+                    if (!construction.isNull("suggestedLogs")) result.putInt("build_logs_needed", construction.optInt("suggestedLogs"));
+                    if (!construction.isNull("logsOnHand")) result.putInt("build_logs_onhand", construction.optInt("logsOnHand"));
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
@@ -203,7 +219,8 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"stay".equals(action) && !"set_home".equals(action) &&
                 !"plan_follow".equals(action) && !"plan_return".equals(action) &&
                 !"plan_collect".equals(action) && !"inspect_block".equals(action) &&
-                !"plan_food".equals(action) &&
+                !"plan_food".equals(action) && !"plan_shelter".equals(action) &&
+                !"plan_craft_planks".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if ("probe_step".equals(action) && !confirmed) return;
@@ -227,6 +244,16 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (!itemName.matches("minecraft:[a-z0-9_./-]{1,80}") ||
                         itemCount < 1 || itemCount > 64) return;
                 command.put("itemName", itemName).put("count", itemCount);
+            }
+            if ("plan_shelter".equals(action) || "plan_craft_planks".equals(action)) {
+                String material = extras.getString("item_name", "");
+                if (!material.matches("minecraft:(oak|spruce|birch|jungle|acacia|dark_oak|mangrove|cherry|bamboo|crimson|warped|pale_oak)_planks")) return;
+                command.put("material", material);
+                if ("plan_craft_planks".equals(action)) {
+                    int count = extras.getInt("item_count", -1);
+                    if (count < 1 || count > 256) return;
+                    command.put("count", count);
+                }
             }
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");

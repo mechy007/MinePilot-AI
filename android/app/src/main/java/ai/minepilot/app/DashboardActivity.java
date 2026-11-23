@@ -46,6 +46,8 @@ public final class DashboardActivity extends Activity {
     private Button planCollect;
     private Button inspectUpdatedBlocks;
     private Button planFood;
+    private Button planShelter;
+    private Button planPlanks;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -518,6 +520,12 @@ public final class DashboardActivity extends Activity {
                 () -> requestGameplay("plan_food", false));
         planFood.setVisibility(View.GONE);
         body.addView(planFood, panelLayout(8));
+        planShelter = actionButton("Plan 3×3 shelter (no placement)", false, this::requestShelterPlan);
+        planShelter.setVisibility(View.GONE);
+        body.addView(planShelter, panelLayout(8));
+        planPlanks = actionButton("Plan plank crafting (no crafting)", false, this::requestPlankCraftPlan);
+        planPlanks.setVisibility(View.GONE);
+        body.addView(planPlanks, panelLayout(8));
 
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
@@ -567,7 +575,8 @@ public final class DashboardActivity extends Activity {
                 "Read item registry, nearby drops and block updates; gathering remains planning-only.");
         skillCard("Survival priorities", "Experimental", AMBER,
                 "Pause plans on critical vitals and suggest observed food; no automatic eating or combat.");
-        skillCard("Gather and build", "Planned", AMBER, "Collect materials and carry out building tasks.");
+        skillCard("Craft and shelter plans", "Experimental", AMBER,
+                "Estimate plank materials and preview a 23-block shelter; no crafting or placement yet.");
     }
 
     private void skillCard(String name, String availability, int color, String description) {
@@ -664,6 +673,10 @@ public final class DashboardActivity extends Activity {
         String survivalTask = current.getString("survival_task_status", "");
         String survivalFoods = current.getString("survival_foods", "");
         String survivalFoodPlan = current.getString("survival_food_plan", "");
+        String buildKind = current.getString("build_kind", "none");
+        String buildState = current.getString("build_state", "");
+        String buildMaterial = current.getString("build_material", "");
+        String buildReason = current.getString("build_reason", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -672,6 +685,16 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + ("none".equals(buildKind) ? "" :
+                            "\nBuild/craft proposal: " + buildKind + " · " + buildState
+                            + (buildMaterial.isEmpty() ? "" : "\nMaterial: " + buildMaterial)
+                            + "\nRequired: " + current.getInt("build_required")
+                            + (current.containsKey("build_onhand") ? " · Owned: " + current.getInt("build_onhand") : "")
+                            + (current.containsKey("build_missing") ? " · Missing: " + current.getInt("build_missing") : "")
+                            + (current.containsKey("build_logs_needed") ? "\nPossible logs needed (unverified recipe): "
+                                + current.getInt("build_logs_needed") : "")
+                            + "\nPlan details: " + buildReason
+                            + " · Block updates near plan: " + current.getInt("build_observed_updates"))
                         + "\nSurvival observation: " + survivalLevel
                         + (survivalReason.isEmpty() ? "" : " · " + survivalReason)
                         + (survivalTask.isEmpty() ? "" : "\nTask safety: " + survivalTask)
@@ -709,6 +732,8 @@ public final class DashboardActivity extends Activity {
         planCollect.setVisibility(playing ? View.VISIBLE : View.GONE);
         inspectUpdatedBlocks.setVisibility(playing ? View.VISIBLE : View.GONE);
         planFood.setVisibility(playing ? View.VISIBLE : View.GONE);
+        planShelter.setVisibility(playing ? View.VISIBLE : View.GONE);
+        planPlanks.setVisibility(playing ? View.VISIBLE : View.GONE);
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
@@ -795,6 +820,57 @@ public final class DashboardActivity extends Activity {
                     }
                     requestGameplay("plan_collect", false, null,
                             item.getText().toString().trim(), requested);
+                }).show();
+    }
+
+    private void requestShelterPlan() {
+        EditText material = new EditText(this);
+        material.setSingleLine(true);
+        material.setText("minecraft:oak_planks");
+        material.setHint("minecraft:oak_planks");
+        material.setTextColor(INK);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Plan a small wooden shelter")
+                .setMessage("Creates a 3×3, two-high wall and roof blueprint with doorway. Terrain is not scanned; no blocks will be placed.")
+                .setView(material)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Create plan only", (dialog, which) ->
+                        requestGameplay("plan_shelter", false, null, material.getText().toString().trim(), 0))
+                .show();
+    }
+
+    private void requestPlankCraftPlan() {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        EditText material = new EditText(this);
+        material.setSingleLine(true);
+        material.setText("minecraft:oak_planks");
+        material.setTextColor(INK);
+        fields.addView(material);
+        EditText amount = new EditText(this);
+        amount.setSingleLine(true);
+        amount.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        amount.setHint("Plank count (1–256)");
+        amount.setTextColor(INK);
+        fields.addView(amount);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Plan plank crafting")
+                .setMessage("Estimates required logs based on inventory. It will not craft or change your items.")
+                .setView(fields)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Plan only", (dialog, which) -> {
+                    int count;
+                    try { count = Integer.parseInt(amount.getText().toString().trim()); }
+                    catch (NumberFormatException invalid) {
+                        showStatus("Enter a plank count from 1 to 256.");
+                        return;
+                    }
+                    if (count < 1 || count > 256) {
+                        showStatus("Plank count must be 1 to 256.");
+                        return;
+                    }
+                    requestGameplay("plan_craft_planks", false, null,
+                            material.getText().toString().trim(), count);
                 }).show();
     }
 
