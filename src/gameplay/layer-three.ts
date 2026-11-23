@@ -71,6 +71,7 @@ export class LayerThreePlanner {
   private readonly blockUpdates = new Map<string, BlockUpdate>();
   private readonly inventory = new Map<number, number>();
   private inventoryKnown = false;
+  private inventorySeenAt: number | null = null;
   private pendingPickups: PendingPickup[] = [];
   private goal: ResourceGoal | null = null;
   private progressValidated = false;
@@ -83,11 +84,15 @@ export class LayerThreePlanner {
     this.dimensionChanged();
     this.inventory.clear();
     this.inventoryKnown = false;
+    this.inventorySeenAt = null;
   }
   dimensionChanged(): void {
     this.drops.clear();
     this.blockUpdates.clear();
     this.pendingPickups = [];
+    this.inventory.clear();
+    this.inventoryKnown = false;
+    this.inventorySeenAt = null;
     this.goal = null;
     this.progressValidated = false;
   }
@@ -212,7 +217,24 @@ export class LayerThreePlanner {
     this.inventory.clear();
     for (const [id, count] of totals) this.inventory.set(id, count);
     this.inventoryKnown = true;
+    this.inventorySeenAt = this.now();
     return true;
+  }
+
+  /** Sanitized, server-observed item counts for higher-layer survival/build plans. */
+  inventoryItems(): {
+    known: boolean; observedAt: number | null; counts: Record<string, number>;
+  } {
+    const counts: Record<string, number> = {};
+    if (this.inventoryKnown) {
+      for (const [id, amount] of this.inventory) {
+        const name = this.registry.get(id);
+        if (name && ITEM_NAME.test(name) && amount >= 0 && amount <= 16256)
+          counts[name] = (counts[name] ?? 0) + amount;
+      }
+    }
+    return { known: this.inventoryKnown && this.registry.size > 0,
+      observedAt: this.inventorySeenAt, counts };
   }
 
   planCollect(itemName: unknown, count: unknown, world: ResourceWorld): { status: string; reason: string } {
