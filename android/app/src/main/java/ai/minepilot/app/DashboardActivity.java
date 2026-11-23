@@ -48,6 +48,8 @@ public final class DashboardActivity extends Activity {
     private Button planFood;
     private Button planShelter;
     private Button planPlanks;
+    private Button planFarm;
+    private Button planStorage;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -526,6 +528,14 @@ public final class DashboardActivity extends Activity {
         planPlanks = actionButton("Plan plank crafting (no crafting)", false, this::requestPlankCraftPlan);
         planPlanks.setVisibility(View.GONE);
         body.addView(planPlanks, panelLayout(8));
+        planFarm = actionButton("Preview farming workflow", false,
+                () -> requestGameplay("plan_workflow", false, null, "farm_preview", 0));
+        planFarm.setVisibility(View.GONE);
+        body.addView(planFarm, panelLayout(8));
+        planStorage = actionButton("Preview storage workflow", false,
+                () -> requestGameplay("plan_workflow", false, null, "storage_preview", 0));
+        planStorage.setVisibility(View.GONE);
+        body.addView(planStorage, panelLayout(8));
 
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
@@ -677,6 +687,9 @@ public final class DashboardActivity extends Activity {
         String buildState = current.getString("build_state", "");
         String buildMaterial = current.getString("build_material", "");
         String buildReason = current.getString("build_reason", "");
+        String workflowKind = current.getString("workflow_kind", "none");
+        String workflowState = current.getString("workflow_state", "");
+        String workflowNext = current.getString("workflow_next", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -685,6 +698,13 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + ("none".equals(workflowKind) ? "" :
+                            "\nWorkflow preview: " + workflowKind + " · " + workflowState
+                            + "\nReview step: " + current.getInt("workflow_checkpoint")
+                                + "/" + current.getInt("workflow_total")
+                            + (workflowNext.isEmpty() ? "" : " · " + workflowNext))
+                        + "\nObserved storage windows: " + current.getInt("workflow_containers")
+                        + " · Farm-region updates: " + current.getInt("workflow_updates")
                         + ("none".equals(buildKind) ? "" :
                             "\nBuild/craft proposal: " + buildKind + " · " + buildState
                             + (buildMaterial.isEmpty() ? "" : "\nMaterial: " + buildMaterial)
@@ -734,6 +754,8 @@ public final class DashboardActivity extends Activity {
         planFood.setVisibility(playing ? View.VISIBLE : View.GONE);
         planShelter.setVisibility(playing ? View.VISIBLE : View.GONE);
         planPlanks.setVisibility(playing ? View.VISIBLE : View.GONE);
+        planFarm.setVisibility(playing ? View.VISIBLE : View.GONE);
+        planStorage.setVisibility(playing ? View.VISIBLE : View.GONE);
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
