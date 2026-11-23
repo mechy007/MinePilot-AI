@@ -323,7 +323,10 @@ class BedrockGameplayBridge {
       if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
       this.movement?.stop();
       const result = this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
-      if (result.status === 'accepted') this.layerTwo?.stay();
+      if (result.status === 'accepted') {
+        this.layerTwo?.stay();
+        this.layerThree?.cancel();
+      }
       return result;
     }
     if (raw.action === 'stop_movement') {
