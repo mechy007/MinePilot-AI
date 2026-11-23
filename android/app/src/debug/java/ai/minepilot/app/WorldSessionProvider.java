@@ -234,6 +234,13 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("workflow_updates", workflow.optInt("recentBlockUpdates", 0));
                     result.putInt("workflow_walkable", workflow.optInt("verifiedWalkableTiles", 0));
                 }
+                JSONObject navigator = gameplay.optJSONObject("addonNavigation");
+                if (navigator != null) {
+                    result.putString("addon_nav_owner", navigator.optString("owner", "none"));
+                    result.putString("addon_nav_state", navigator.optString("state", "idle"));
+                    result.putString("addon_nav_reason", navigator.optString("reason", ""));
+                    result.putInt("addon_nav_stuck", navigator.optInt("stuckSamples", 0));
+                }
                 JSONObject advisor = gameplay.optJSONObject("layerSeven");
                 if (advisor != null) {
                     result.putString("advisor_mode", advisor.optString("mode", "off"));
