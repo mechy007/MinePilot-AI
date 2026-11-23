@@ -11,7 +11,9 @@
 const INPUT_TICK_MS = 50;
 const PROBE_TICKS = 6;
 const PROBE_STEP = 0.065; // Conservative predicted 0.39-block pulse, not a physics engine.
-const MAX_FRESH_MS = 2500;
+// A stopped client may receive no periodic self-position echoes. The probe is
+// still explicitly confirmed and only allowed shortly after a real StartGame.
+const MAX_FRESH_MS = 30_000;
 const finite3 = p => p && ['x', 'y', 'z'].every(k => Number.isFinite(p[k]));
 const packetTick = v => v == null ? null : BigInt(v);
 const normalYaw = v => ((v % 360) + 360) % 360;
