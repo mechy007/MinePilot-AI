@@ -202,6 +202,9 @@ cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
 cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
+cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
+cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
+cp "$root/scripts/bedrock-local-path.cjs" "$temp/bedrock-local-path.cjs"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
 mkdir -p "$temp/gameplay"
