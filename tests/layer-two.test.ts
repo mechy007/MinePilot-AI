@@ -93,3 +93,18 @@ test('explicit stay and cancel affect planning, not simulated movement', () => {
   planner.dimensionChanged();
   assert.equal(planner.snapshot(world).homeKnown, false);
 });
+
+test('reused runtime entity IDs cannot redirect an existing named follow goal to strangers', () => {
+  const planner = new LayerTwoPlanner(() => 1000);
+  planner.observePlayer('42', 'Original', { x: 15, y: 64, z: 0 }, 0);
+  assert.equal(planner.follow('Original', world).status, 'accepted');
+  planner.removePlayer('42');
+  planner.observePlayer('42', 'Imposter', { x: 5, y: 64, z: 0 }, 0);
+  assert.equal(planner.preview(world).status, 'waiting_for_target');
+  assert.equal(planner.preview(world).executed, false);
+});
+test('Xbox gamertag display suffix can be selected using exact observed name', () => {
+  const planner = new LayerTwoPlanner(() => 1000);
+  assert.equal(planner.observePlayer('42', 'Player#1234', { x: 10, y: 64, z: 0 }, 0), true);
+  assert.equal(planner.follow('Player#1234', world).status, 'accepted');
+});
