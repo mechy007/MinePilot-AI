@@ -17,7 +17,7 @@ function fixture() {
     stop(reason){called.push('movement:'+reason);},
     startPresence(){called.push('presence:started');}
   };
-  const autonomy={stop(reason){called.push('autonomy:'+reason);}};
+  const autonomy={stop(reason){called.push('autonomy:'+reason);}, snapshot(){return {active:false};}};
   const bridge=new BedrockGameplayBridge(client,{movement,autonomy}).start();
   client.emit('start_game',initial);
   client.emit('spawn');
