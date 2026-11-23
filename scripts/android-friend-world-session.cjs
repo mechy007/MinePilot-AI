@@ -82,7 +82,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   const gameplay = gameplayOptions ? new BedrockGameplayBridge(client, {
     commandPath: gameplayOptions.commandPath,
     receiptPath: gameplayOptions.receiptPath,
-    movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true)
+    movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true),
+    layerOne: gameplayOptions.layerOneFactory?.() ?? null
   }).start() : null;
   let startGame = false;
   let spawn = false;
@@ -269,6 +270,7 @@ if (require.main === module) {
     const { XboxClient } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
     const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
+    const { LayerOneController } = await import('./gameplay/layer-one.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
@@ -282,7 +284,8 @@ if (require.main === module) {
       gameplayOptions: {
         commandPath: path.join(__dirname, 'gameplay-command.json'),
         receiptPath: path.join(__dirname, 'gameplay-receipt.json'),
-        experimentalMovement: config.experimentalMovement === true
+        experimentalMovement: config.experimentalMovement === true,
+        layerOneFactory: () => new LayerOneController()
       }
     });
   })().catch(() => publish({ phase: 'failed', stage: 'runtime' }))
