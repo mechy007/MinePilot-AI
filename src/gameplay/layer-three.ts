@@ -298,10 +298,11 @@ export class LayerThreePlanner {
     inventoryKnown: boolean;
     pickupCorrelations: boolean;
   } {
+    const playerPosition = world.position;
     const names = new Set(this.recentDrops(world)
-      .filter(d => finiteVec(world.position) &&
-        Math.hypot(d.position.x - world.position.x, d.position.y - world.position.y,
-          d.position.z - world.position.z) <= 16)
+      .filter(d => playerPosition != null && finiteVec(playerPosition) &&
+        Math.hypot(d.position.x - playerPosition.x, d.position.y - playerPosition.y,
+          d.position.z - playerPosition.z) <= 16)
       .map(d => this.registry.get(d.itemId)).filter((name): name is string => !!name));
     return {
       route: this.preview(world), observedDrops: this.recentDrops(world).length,
