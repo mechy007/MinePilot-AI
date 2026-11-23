@@ -305,9 +305,17 @@ public final class XboxSignInService extends Service {
             case "owner": return "Could not identify a separate host. Check your friend’s gamertag or XUID.";
             case "discovery": return "The selected owner’s compatible world could not be found on Xbox.";
             case "connection":
+            case "xbox_membership":
+            case "world_transport":
+            case "nethernet_signalling":
+            case "nethernet_peer":
             case "bedrock_login":
             case "bedrock_spawn":
                 String connectionStep = switch (snapshot.optString("stage")) {
+                    case "xbox_membership" -> "Xbox world membership";
+                    case "world_transport" -> "reading the world’s transport details";
+                    case "nethernet_signalling" -> "connecting to the Minecraft signalling service";
+                    case "nethernet_peer" -> "connecting to the host over NetherNet";
                     case "bedrock_login" -> "Minecraft login";
                     case "bedrock_spawn" -> "waiting for the bot to spawn";
                     default -> "Xbox membership or Bedrock network setup";
