@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
 const { androidNetworkInterfaces, observeSession, run, validateOwner } = require('./friend-world-session.cjs');
+const { runtimeLogger } = require('./xbox-auth-probe.cjs');
 
 class Client extends EventEmitter {
   closed = 0;
@@ -12,6 +13,27 @@ class Client extends EventEmitter {
     this.emit('close');
   }
 }
+
+test('runtime logs retain diagnostic codes and omit private data and duplicate heartbeats', context => {
+  const { mkdtempSync, readFileSync, rmSync } = require('node:fs');
+  const { join } = require('node:path');
+  const directory = mkdtempSync(join(require('node:os').tmpdir(), 'minepilot-log-'));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const file = join(directory, 'events.jsonl');
+  const log = runtimeLogger(file);
+  log({ phase: 'device_code', userCode: 'private', verificationUri: 'private' });
+  log({ phase: 'spawned', seconds: 1 });
+  log({ phase: 'spawned', seconds: 2 });
+  log({ phase: 'private', stage: 'private' });
+  log({ phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed',
+    nethernetCode: 37, gamertag: 'private', xuid: 'private', rawError: 'private' });
+  const events = readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(events.every(event => Number.isInteger(event.at)));
+  assert.deepEqual(events.map(({ at, ...event }) => event), [
+    { phase: 'device_code' }, { phase: 'spawned' },
+    { phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37 }
+  ]);
+});
 
 test('validates the exact owner Xbox ID without converting it to a number', () => {
   assert.doesNotThrow(() => validateOwner('18446744073709551615'));
@@ -264,6 +286,7 @@ test('packaged SDK sends the NetherNet offer first and reports the host close co
     pickOwnerWorld
   });
   assert.equal(sent[0]?.type, SignalType.ConnectRequest, JSON.stringify(snapshots));
+  assert.ok(snapshots.some(event => event.step === 'offer_sent'));
   assert.match(sent[0].data, /^a=candidate:.*127\.0\.0\.1/m);
   assert.equal(client.connection.nethernet.responseTimeoutMs, 25000);
   assert.equal(client.connection.nethernet.inactivityTimeoutMs, 12000);
