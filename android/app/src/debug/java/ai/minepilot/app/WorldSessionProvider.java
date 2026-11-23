@@ -251,6 +251,13 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("terrain_route_length", route.optJSONArray("path") == null
                         ? 0 : route.optJSONArray("path").length());
                 }
+                JSONObject breaker = gameplay.optJSONObject("blockBreak");
+                if(breaker!=null) {
+                    result.putString("block_break_status", breaker.optString("status", "idle"));
+                    result.putString("block_break_reason", breaker.optString("reason", ""));
+                    result.putInt("block_break_frames", breaker.optInt("frames", 0));
+                    result.putBoolean("block_break_changed", breaker.optBoolean("serverChanged", false));
+                }
                 JSONObject autonomy = gameplay.optJSONObject("autonomy");
                 if (autonomy != null) {
                     result.putBoolean("autonomy_active", autonomy.optBoolean("active", false));
@@ -323,10 +330,12 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"advisor_review".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action) &&
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
-                !"autonomy_follow".equals(action) && !"autonomy_stop".equals(action)) return;
+                !"autonomy_follow".equals(action) && !"autonomy_stop".equals(action) &&
+                !"experimental_break".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
-                "verified_step".equals(action) || "autonomy_follow".equals(action)) && !confirmed) return;
+                "verified_step".equals(action) || "autonomy_follow".equals(action) ||
+                "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
         Path temporary = directory.resolve("gameplay-command-" + requestId + ".tmp");
@@ -383,7 +392,22 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (ticks < 1 || ticks > 20) return;
                 command.put("confirmed", true).put("mode", mode).put("ticks", ticks);
             }
-            if ("verified_step".equals(action) || "autonomy_follow".equals(action))
+            if ("experimental_break".equals(action)) {
+                String source = extras.getString("block_position", "").trim();
+                String[] coordinates = source.split(",", -1);
+                if(coordinates.length!=3)return;
+                int bx,by,bz;
+                try {
+                    bx=Integer.parseInt(coordinates[0].trim());
+                    by=Integer.parseInt(coordinates[1].trim());
+                    bz=Integer.parseInt(coordinates[2].trim());
+                } catch(NumberFormatException invalid){return;}
+                if(Math.abs((long)bx)>30000000 || Math.abs((long)bz)>30000000 ||
+                    by<-256 || by>512)return;
+                command.put("position", new JSONObject().put("x",bx).put("y",by).put("z",bz));
+            }
+            if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
+                "experimental_break".equals(action))
                 command.put("confirmed", true);
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
