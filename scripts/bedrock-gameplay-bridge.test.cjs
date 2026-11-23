@@ -441,6 +441,8 @@ test('Layer 4 interrupts existing follow plan on low air and only suggests food 
     ] });
   assert.equal(bridge.snapshot().layerFour.level, 'critical');
   assert.equal(bridge.snapshot().layerFour.reason, 'low_air_supply');
+  assert.equal(cmd('air-probe', 'probe_step', { confirmed: true, direction: 'forward' }).reason,
+    'survival_hold');
   assert.equal(bridge.snapshot().layerFour.taskStatus, 'paused');
   assert.equal(bridge.snapshot().layerTwo.preview.status, 'paused_by_safety');
   assert.ok(stops >= 2);
