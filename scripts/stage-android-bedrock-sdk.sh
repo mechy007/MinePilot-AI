@@ -156,6 +156,41 @@ patch('bedrock-protocol/src/nethernet/signallingCodec.js', [
     'function encodeSignal (signal, networkId, protocol, id, messageId, peerPlayerId) {'],
   ['toPlayerId: String(signal.networkId)', 'toPlayerId: peerPlayerId ?? String(signal.networkId)']
 ]);
+// The host issues an account-specific login nonce through the joined Xbox session.
+patch('bedrock-protocol/src/client/auth.js', [
+  ['async function worldAuthenticate (client, options) {',
+    `async function applyWorldNonce (client, options, session, xuid, parentSignal) {
+  client.emit('minepilot_join_step', 'world_nonce')
+  const deadline = AbortSignal.timeout(12000)
+  const signal = AbortSignal.any([parentSignal, deadline])
+  let document = session.current
+  try {
+    for (;;) {
+      signal.throwIfAborted()
+      const nonce = document?.properties?.custom?.nonces?.[xuid]
+      if (typeof nonce === 'string' && /^[0-9a-f]{1,256}$/i.test(nonce)) {
+        options.skinData = { ...options.skinData, Nonce: nonce }
+        return
+      }
+      await require('node:timers/promises').setTimeout(1000, undefined, { signal })
+      document = await session.get({ signal })
+    }
+  } catch (error) {
+    parentSignal.throwIfAborted()
+    if (deadline.aborted) throw new Error('Xbox world login nonce unavailable')
+    throw error
+  }
+}
+
+async function worldAuthenticate (client, options) {`],
+  ['        options.nethernet._peerPlayerId = playerId.toLowerCase()\n        return',
+    '        options.nethernet._peerPlayerId = playerId.toLowerCase()\n        await applyWorldNonce(client, options, session, profile.xuid, controller.signal)\n        return'],
+  ['  options.nethernet.networkId = legacy',
+    `  options.nethernet.networkId = legacy
+  if (session.current.properties?.custom?.nonces != null) {
+    await applyWorldNonce(client, options, session, profile.xuid, controller.signal)
+  }`]
+]);
 JS
 data_notice="$temp/node_modules/minecraft-data/minecraft-data/README.md"
 curl --fail --location --silent --show-error --retry 2 --max-time 45 \
