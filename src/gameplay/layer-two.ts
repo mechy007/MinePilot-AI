@@ -35,7 +35,8 @@ const MAX_PLAYERS = 64;
 const PLAYER_TTL_MS = 8_000;
 const FOLLOW_DISTANCE = 3;
 const MAX_STEP_DISTANCE = 1.0;
-const namePattern = /^[a-zA-Z0-9_ -]{1,24}$/;
+// Modern Xbox gamertags may have a displayed #suffix.
+const namePattern = /^[a-zA-Z0-9_ #.-]{1,32}$/;
 const entityPattern = /^\d{1,20}$/;
 const finiteVec = (p: unknown): p is Vec3 => {
   if (p == null || typeof p !== 'object') return false;
@@ -69,7 +70,13 @@ export class LayerTwoPlanner {
   observePlayer(id: unknown, name: unknown, position: unknown, dimension: unknown): boolean {
     if (typeof id !== 'string' || !entityPattern.test(id) || typeof name !== 'string' ||
       !namePattern.test(name) || !finiteVec(position) || !validDimension(dimension)) return false;
-    if (this.players.size >= MAX_PLAYERS && !this.players.has(id)) return false;
+    if (this.players.size >= MAX_PLAYERS && !this.players.has(id)) {
+      // Expire out-of-range sightings before rejecting a new legitimate player.
+      for (const [key, player] of this.players) {
+        if (this.now() - player.seenAt > PLAYER_TTL_MS) this.players.delete(key);
+      }
+      if (this.players.size >= MAX_PLAYERS) return false;
+    }
     this.players.set(id, { id, name, position: copy(position), dimension, seenAt: this.now() });
     return true;
   }
@@ -156,7 +163,8 @@ export class LayerTwoPlanner {
     if (goal.type === 'follow') {
       const observed = this.players.get(goal.id);
       const age = observed ? this.now() - observed.seenAt : Infinity;
-      if (!observed || observed.dimension !== world.dimension || age < 0 || age > PLAYER_TTL_MS)
+      if (!observed || observed.name.toLocaleLowerCase('en') !== goal.name.toLocaleLowerCase('en') ||
+          observed.dimension !== world.dimension || age < 0 || age > PLAYER_TTL_MS)
         return status(goal, 'waiting_for_target', 'player_position_stale');
       target = observed.position;
     } else {
