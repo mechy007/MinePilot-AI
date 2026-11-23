@@ -35,6 +35,12 @@ function safeJoinFailure(error) {
   const status = error?.status ?? error?.response?.status;
   if (Number.isInteger(status) && status >= 400 && status <= 599) return { httpStatus: status };
   const message = typeof error?.message === 'string' ? error.message : '';
+  if (message === 'NetherNet peer closed') {
+    const code = error.nethernetCode;
+    return Number.isInteger(code) && code > 0 && code <= 255
+      ? { reason: 'nethernet_closed', nethernetCode: code }
+      : { reason: 'nethernet_closed' };
+  }
   if (message === "Couldn't find a Nethernet ID to connect to.") return { reason: 'no_transport' };
   if (/timed out|timeout/i.test(message)) return { reason: 'timeout' };
   if (/signalling|websocket|webrtc|\bice\b/i.test(message)) return { reason: 'transport' };
@@ -144,8 +150,8 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
       deviceType: 'Android',
       authflow: auth,
       // Give the mobile path room for signalling and ICE before the spawn deadline.
-      connectTimeout: 30000,
-      nethernet: { webrtcBackend: 'werift' },
+      connectTimeout: 45000,
+      nethernet: { webrtcBackend: 'werift', responseTimeoutMs: 25000, inactivityTimeoutMs: 12000 },
       conLog: null,
       world: {
         pickSession(sessions) {
