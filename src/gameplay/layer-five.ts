@@ -166,7 +166,8 @@ export class LayerFivePlanner {
     const logName = MAP_LOGS[plan.material];
     const logsOnHand = known && logName ? (this.inventory.counts[logName] ?? 0) : null;
     // Recipe is advisory (normal four-plank conversion), not server-verified.
-    const suggestedLogs = missing == null ? null : Math.ceil(missing / 4);
+    const planksPerLog = plan.material === 'minecraft:bamboo_planks' ? 2 : 4;
+    const suggestedLogs = missing == null ? null : Math.ceil(missing / planksPerLog);
     const base = {
       kind: plan.kind, material: plan.material, required, onHand, missing,
       suggestedLogs, logsOnHand, blockCount: plan.kind === 'shelter' ? plan.steps.length : 0,
