@@ -6,12 +6,20 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.UUID;
 import org.json.JSONObject;
 
-/** Exposes display-safe world state and a scoped stop request to the dashboard process. */
+/**
+ * Unexported, session-scoped Android -> same Node gameplay IPC.
+ * The provider runs inside :friend_world; it never opens a second Xbox client.
+ * A queued diagnostic command is NOT a server-confirmed gameplay action.
+ */
 public final class WorldSessionProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
 
@@ -34,7 +42,16 @@ public final class WorldSessionProvider extends ContentProvider {
             }
             return result;
         }
+
+        if ("gameplay".equals(method)) {
+            if (!id.isEmpty() && id.equals(sessionId) && status != null &&
+                    !Files.exists(status.resolveSibling("stop-session"))) {
+                queueGameplay(status.getParent(), extras, result);
+            }
+            return result;
+        }
         if (!"status".equals(method)) return result;
+
         result.putString("session_id", id);
         JSONObject snapshot = XboxSignInService.readStatus();
         String phase = snapshot == null ? "" : snapshot.optString("phase");
@@ -50,12 +67,60 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (vitals.has("hunger")) result.putString("hunger", vitals.optString("hunger"));
                 result.putString("assessment", vitals.optString("assessment"));
             }
+            // Only sanitized, bounded numbers escape the child process.
+            JSONObject gameplay = snapshot.optJSONObject("gameplay");
+            if (gameplay != null) {
+                result.putString("gameplay_state", gameplay.optString("state", ""));
+                result.putString("movement", gameplay.optString("movement", "unavailable"));
+                JSONObject position = gameplay.optJSONObject("position");
+                if (position != null) {
+                    result.putString("position", position.optString("x") + ", "
+                            + position.optString("y") + ", " + position.optString("z"));
+                }
+                result.putInt("nearby_players", gameplay.optInt("visiblePlayers", 0));
+                result.putInt("corrections", gameplay.optInt("correctionCount", 0));
+                JSONObject command = gameplay.optJSONObject("lastCommand");
+                if (command != null) {
+                    result.putString("last_command", command.optString("status", "")
+                            + ": " + command.optString("reason", ""));
+                }
+            }
         } else if ("failed".equals(phase) || "stopped".equals(phase) || "disconnected".equals(phase)) {
             result.putString("phase", phase);
         } else {
             result.putString("phase", "connecting");
         }
         return result;
+    }
+
+    private static void queueGameplay(Path directory, Bundle extras, Bundle result) {
+        if (extras == null) return;
+        String action = extras.getString("action", "");
+        if (!"status".equals(action) && !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
+        boolean confirmed = extras.getBoolean("confirmed", false);
+        if ("probe_step".equals(action) && !confirmed) return;
+        String requestId = UUID.randomUUID().toString();
+        Path inbox = directory.resolve("gameplay-command.json");
+        Path temporary = directory.resolve("gameplay-command-" + requestId + ".tmp");
+        try {
+            if (Files.exists(inbox)) return; // Single pending command, no silent overwrite.
+            JSONObject command = new JSONObject()
+                    .put("version", "minepilot.gameplay.v1")
+                    .put("requestId", requestId)
+                    .put("action", action);
+            if ("probe_step".equals(action)) {
+                command.put("confirmed", true).put("direction", "forward");
+            }
+            Files.write(temporary, command.toString().getBytes(StandardCharsets.UTF_8),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Files.move(temporary, inbox, StandardCopyOption.ATOMIC_MOVE);
+            result.putString("request_id", requestId);
+            result.putBoolean("accepted", true);
+        } catch (Exception ignored) {
+            // Command is rejected or the session already ended. Never send account data.
+        } finally {
+            try { Files.deleteIfExists(temporary); } catch (IOException ignored) {}
+        }
     }
 
     @Override public String getType(Uri uri) { return null; }

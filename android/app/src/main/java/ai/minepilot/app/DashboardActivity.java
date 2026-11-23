@@ -35,6 +35,9 @@ public final class DashboardActivity extends Activity {
     private TextView worldHealth;
     private TextView worldHunger;
     private TextView lastEvent;
+    private TextView gameplayStatus;
+    private Button probeStep;
+    private Button stopMovement;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -475,6 +478,23 @@ public final class DashboardActivity extends Activity {
         worldHunger = addVital(vitals, "Hunger", 0);
         body.addView(vitals, panelLayout(10));
 
+        LinearLayout gameplay = card();
+        gameplay.addView(text("GAMEPLAY TELEMETRY", 11, GRASS, true));
+        gameplayStatus = text("Waiting for a server-reported position", 13, MUTED, false);
+        gameplayStatus.setPadding(0, dp(5), 0, dp(6));
+        gameplay.addView(gameplayStatus);
+        body.addView(gameplay, panelLayout(10));
+        stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
+        stopMovement.setVisibility(View.GONE);
+        body.addView(stopMovement, panelLayout(8));
+        probeStep = actionButton("Experimental: move forward briefly", false, this::confirmMovementProbe);
+        probeStep.setVisibility(View.GONE);
+        body.addView(probeStep, panelLayout(8));
+        boolean experimentEnabled = getSharedPreferences("minepilot_gameplay", MODE_PRIVATE)
+                .getBoolean("allow_experimental_movement", false);
+        button(experimentEnabled ? "Disable movement probe for next join" : "Enable experimental movement for next join",
+                () -> configureMovementProbe(!experimentEnabled));
+
         stopWorld = actionButton("Disconnect bot", false, this::requestWorldStop);
         stopWorld.setTextColor(AMBER);
         stopWorld.setVisibility(View.GONE);
@@ -523,9 +543,13 @@ public final class DashboardActivity extends Activity {
     }
 
     private Bundle worldRequest(String method, String sessionId) {
+        return worldRequest(method, sessionId, null);
+    }
+
+    private Bundle worldRequest(String method, String sessionId, Bundle extras) {
         try {
             return getContentResolver().call(Uri.parse("content://" + getPackageName() + ".world-session"),
-                    method, sessionId, null);
+                    method, sessionId, extras);
         } catch (IllegalArgumentException | IllegalStateException | SecurityException unavailable) {
             return null;
         }
@@ -576,10 +600,65 @@ public final class DashboardActivity extends Activity {
                 });
         worldHealth.setText(current.getString("health", "—"));
         worldHunger.setText(current.getString("hunger", "—"));
+        String coordinates = current.getString("position", "");
+        String movement = current.getString("movement", "unavailable");
+        String command = current.getString("last_command", "");
+        gameplayStatus.setText(coordinates.isEmpty() ? "Awaiting server position and chunks"
+                : "Position: " + coordinates + " · Nearby players: " + current.getInt("nearby_players")
+                        + " · Corrections: " + current.getInt("corrections")
+                        + "\nMovement: " + movement
+                        + (command.isEmpty() ? "" : "\nLast command: " + command));
+        stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
+        probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
         stopWorld.setEnabled(canStop);
         joinFriend.setVisibility(playing || "connecting".equals(phase) || "stopping".equals(phase)
                 ? View.GONE : View.VISIBLE);
+    }
+
+    private void configureMovementProbe(boolean enable) {
+        if (!enable) {
+            getSharedPreferences("minepilot_gameplay", MODE_PRIVATE).edit()
+                    .putBoolean("allow_experimental_movement", false).commit();
+            show("World");
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Experimental Bedrock movement")
+                .setMessage("Only enable this in a safe, consenting friend's test world. The movement codec and physics are not verified on your device. It will affect the next connection, and each probe still requires confirmation.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Enable for next join", (dialog, which) -> {
+                    getSharedPreferences("minepilot_gameplay", MODE_PRIVATE).edit()
+                            .putBoolean("allow_experimental_movement", true).commit();
+                    show("World");
+                }).show();
+    }
+
+    private void confirmMovementProbe() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Run one short movement probe?")
+                .setMessage("This sends up to six experimental Bedrock input ticks. It may fail, disconnect, or move unexpectedly. Test only on safe flat terrain. Queued packets do not prove the bot moved.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Run probe", (dialog, which) -> requestGameplay("probe_step", true))
+                .show();
+    }
+
+    private void requestGameplay(String action, boolean confirmed) {
+        String session = worldSessionId;
+        if (session.isEmpty()) return;
+        Bundle extras = new Bundle();
+        extras.putString("action", action);
+        extras.putBoolean("confirmed", confirmed);
+        int generation = worldViewGeneration;
+        worldReader.execute(() -> {
+            Bundle receipt = worldRequest("gameplay", session, extras);
+            runOnUiThread(() -> {
+                if (generation != worldViewGeneration || !dashboardVisible) return;
+                showStatus(receipt != null && receipt.getBoolean("accepted")
+                        ? "Gameplay command queued. Check the server response below."
+                        : "Gameplay request could not be queued for this session.");
+            });
+        });
     }
 
     private void requestWorldStop() {
