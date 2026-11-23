@@ -18,10 +18,12 @@ The user tested the previous ARM64 debug APK in a friend's Xbox Bedrock world. T
 6. `VerifiedAutonomyRunner`: a 250 ms bounded Follow/Return supervisor that requests at most 20 steps or 30 s of total activity. Each short 8-tick pulse must be followed by fresh server-reported movement >=0.08 block; otherwise the runner stops within 4 s. Never assumes that sent packets are accepted.
 7. Android Command Center has explicit confirmation dialogs for `verified_step` and `autonomy_follow`, a separate `autonomy_stop`, terrain coverage/registry/A* status and attempted-vs-server-confirmed steps. All commands are filtered by a private IPC allowlist.
 8. Packaged Node SDK runs offline terrain/A* and runner regression tests. Unknown data, lava, corrupt palettes, custom registries, critical health, inactivity and missing authority all reject or stop actions.
+9. `scripts/bedrock-block-break.cjs`: one manually confirmed, nearby solid-block break interaction. Start/continue/stop actions are inserted into the existing 20Hz PlayerAuthInput stream using Bedrock InputData 35 and optional `block_action` entries. A change to the exact observed target block on the same dimension is reported as `server_block_changed_causality_unverified`, never guaranteed successful mining. Hard cap 24 continue frames and six-second timeout; Stop/close/dimension/authority changes abort. Android presents a coordinate-validated explicit confirmation dialog.
+10. Packet serializer regression tests verify that the real staged Bedrock 1.26.60 SDK accepts block-action frames; future automated mining must not start until actual host behavior and item drops are independently checked.
 
 ## What this PR does NOT claim
 - It does not establish that the Xbox friend-hosted world accepts MinePilot as a real Survival player; only the user's phone and server can verify that.
-- It does not implement unrestricted exploration, jumping over unknown blocks, stairs/slabs, swimming, mining, crafting, building, combat or inventory transactions.
+- It does not implement unrestricted exploration, jumping over unknown blocks, stairs/slabs, swimming, **autonomous** mining, crafting, building, combat or inventory transactions. A single confirmed block-break diagnostic exists but is not proof of actual server-side mining.
 - It does not mean Live autonomy is verified; the readiness gate must remain false until on-device telemetry proves movement, terrain decoding and action consequences.
 - Experimental tests can move the character unexpectedly. Only use in a flat, private, safe friend world; test bots in Survival and note game mode, heartbeat frames, decoded sections, classified block registry, verified route and corrected movement.
 
