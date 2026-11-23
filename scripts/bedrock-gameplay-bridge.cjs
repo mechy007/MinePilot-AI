@@ -680,6 +680,7 @@ class BedrockGameplayBridge {
       return { status: 'ok', reason: 'movement_cancelled' };
     }
     if (raw.action === 'motion_diagnostic') {
+      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
       if (this.layerOne?.snapshot()?.safetyHold)
         return { status: 'rejected', reason: 'critical_health' };
       if (this.layerFour?.critical)
@@ -704,6 +705,7 @@ class BedrockGameplayBridge {
       return this.movement.runDiagnostic(this, { mode: raw.mode, ticks: raw.ticks });
     }
     if (raw.action === 'probe_step') {
+      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
       if (this.layerOne?.snapshot()?.safetyHold)
         return { status: 'rejected', reason: 'critical_health' };
       if (this.layerFour?.critical)
