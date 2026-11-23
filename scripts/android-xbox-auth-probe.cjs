@@ -4,6 +4,41 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { generateKeyPairSync } = require('node:crypto');
 
+function runtimeLogger(file) {
+  const phases = ['device_code', 'microsoft_approved', 'bedrock_credentials', 'verified', 'account_sent',
+    'friends_loaded', 'discovery', 'connection', 'retrying', 'spawned', 'failed', 'disconnected', 'stopped'];
+  const stages = ['microsoft_token', 'xbox_token', 'xbox_profile', 'account_save', 'bedrock_credentials',
+    'friends', 'owner', 'discovery', 'connection', 'xbox_membership', 'world_transport',
+    'nethernet_signalling', 'nethernet_peer', 'bedrock_login', 'bedrock_spawn', 'runtime'];
+  const reasons = ['no_transport', 'transport', 'network', 'timeout', 'host_disconnect', 'nethernet_closed'];
+  const steps = ['offer_sent', 'answer_received', 'peer_connected'];
+  let previous;
+  return snapshot => {
+    if (!file || !phases.includes(snapshot.phase)) return;
+    const event = { phase: snapshot.phase };
+    if (stages.includes(snapshot.stage)) event.stage = snapshot.stage;
+    if (reasons.includes(snapshot.reason)) event.reason = snapshot.reason;
+    if (steps.includes(snapshot.step)) event.step = snapshot.step;
+    if (Number.isInteger(snapshot.httpStatus) && snapshot.httpStatus >= 400 && snapshot.httpStatus <= 599) {
+      event.httpStatus = snapshot.httpStatus;
+    }
+    if (typeof snapshot.xboxCode === 'string' && /^214\d{7}$/.test(snapshot.xboxCode)) {
+      event.xboxCode = snapshot.xboxCode;
+    }
+    if (Number.isInteger(snapshot.nethernetCode) && snapshot.nethernetCode > 0 && snapshot.nethernetCode <= 255) {
+      event.nethernetCode = snapshot.nethernetCode;
+    }
+    const key = JSON.stringify(event);
+    if (key === previous) return;
+    try {
+      fs.appendFileSync(file, JSON.stringify({ ...event, at: Date.now() }) + '\n', { mode: 0o600 });
+      previous = key;
+    } catch {
+      // The primary status and connection must continue if log storage fails.
+    }
+  };
+}
+
 function createMemoryCache(initial = {}) {
   let values = initial;
   return {
@@ -205,18 +240,20 @@ function accountWriter(fd) {
 
 if (require.main === module) {
   process.env.HOME ??= __dirname;
+  const sessionPath = path.join(__dirname, 'device-session.json');
+  const session = fs.existsSync(sessionPath) ? JSON.parse(fs.readFileSync(sessionPath, 'utf8')) : {};
+  const record = runtimeLogger(session.logFile);
   const status = path.join(__dirname, 'auth-status.json');
   const publish = snapshot => {
     fs.writeFileSync(status + '.tmp', JSON.stringify(snapshot), { mode: 0o600 });
     fs.renameSync(status + '.tmp', status);
+    record(snapshot);
   };
   // This probe publishes only allowlisted fields. Upstream diagnostic output can include auth responses.
   require('debug').disable();
   console.info = console.warn = console.error = console.log = console.debug = () => {};
   const { Authflow, Titles } = require('prismarine-auth');
   const { XboxClient } = require('prismarine-xbox-services');
-  const sessionPath = path.join(__dirname, 'device-session.json');
-  const session = fs.existsSync(sessionPath) ? JSON.parse(fs.readFileSync(sessionPath, 'utf8')) : {};
   const refreshToken = Number.isInteger(session.fd) ? fs.readFileSync(session.fd, 'utf8') : undefined;
   const saveAccount = accountWriter(session.saveFd);
   const friendsOwner = session.friendsOwner;
@@ -242,4 +279,4 @@ if (require.main === module) {
     .catch(() => { process.exitCode = 1; });
 }
 
-module.exports = { accountWriter, connectXboxAccount, deviceCodeStatus, loadFriends, verifyXbox };
+module.exports = { accountWriter, connectXboxAccount, deviceCodeStatus, loadFriends, runtimeLogger, verifyXbox };
