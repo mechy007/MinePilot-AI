@@ -486,7 +486,7 @@ public final class DashboardActivity extends Activity {
         gameplayStatus.setPadding(0, dp(5), 0, dp(6));
         gameplay.addView(gameplayStatus);
         body.addView(gameplay, panelLayout(10));
-        inspectWorld = actionButton("Inspect surroundings", false, () -> requestGameplay("inspect", false));
+        inspectWorld = actionButton("Inspect bot status", false, () -> requestGameplay("inspect", false));
         inspectWorld.setVisibility(View.GONE);
         body.addView(inspectWorld, panelLayout(8));
         waitHere = actionButton("Wait here", false, () -> requestGameplay("wait", false));
