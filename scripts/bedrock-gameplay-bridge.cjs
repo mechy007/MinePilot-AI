@@ -282,7 +282,12 @@ class BedrockGameplayBridge {
       followStatus: this.layerTwo?.preview(world).status ?? 'idle',
       resourceStatus: this.layerThree?.preview(world).status ?? 'idle',
       buildStatus: this.layerFive?.snapshot(world).state ?? 'idle',
-      workflowStatus: this.layerSix?.snapshot(world).state ?? 'idle'
+      workflowStatus: this.layerSix?.snapshot(world).state ?? 'idle',
+      playerGameMode: this.playerGameMode === 'fallback' ? this.worldGameMode : this.playerGameMode,
+      loadingPacketsSent: this.spawnTrace?.loadingPacketsSent ?? 0,
+      loadingErrors: this.spawnTrace?.handshakeErrors ?? 0,
+      movementAuthority: this.movementAuthority,
+      isNight: survival?.isNight ?? null
     };
   }
   playerList(packet) {
