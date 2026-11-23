@@ -140,8 +140,7 @@ test('autonomy requires movement capability, verified route and safety hold',()=
 
 test('packaged minecraft-data 1.26.60 supplies real vanilla air and stone runtime states',()=>{
   clearRuntimeRegistryCache();
-  const registry=createVanillaRuntimeRegistry({engine:'1.26.60',block_properties:[]},
-    require('minecraft-data'));
+  const registry=createVanillaRuntimeRegistry({engine:'1.26.60',block_properties:[]});
   assert.ok(registry instanceof Map,'pinned Bedrock registry must be loadable on Android');
   assert.equal(registry.get(18894)?.name,'minecraft:air');
   assert.equal(registry.get(3317)?.name,'minecraft:stone');
