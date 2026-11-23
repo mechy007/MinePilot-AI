@@ -44,6 +44,8 @@ patch('bedrock-protocol/src/client/auth.js', [
     '  options.nethernet.networkId = BigInt(networkId)']
 ]);
 patch('bedrock-protocol/src/client.js', [
+  ['new NethernetClient({ networkId, host: this.options.host, webrtcBackend: this.options.nethernet.webrtcBackend })',
+    'new NethernetClient({ ...this.options.nethernet, networkId, host: this.options.host })'],
   ['        const { NethernetSignal } = require(\'./nethernet/signalling\')',
     "        this.emit('minepilot_join_step', 'nethernet_signalling')\n        const { NethernetSignal } = require('./nethernet/signalling')"],
   ['.then(() => { if (!this._closed) this._connect(sessionData) })',
