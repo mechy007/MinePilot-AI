@@ -25,6 +25,16 @@ import android.widget.TextView;
 public final class DashboardActivity extends Activity {
     private LinearLayout body;
     private TextView status;
+    private TextView latestRuntimeStatus;
+    private TextView runtimeEvents;
+    private final android.os.Handler logRefresh = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable updateLogs = new Runnable() {
+        @Override public void run() {
+            if (!"Logs".equals(currentTab)) return;
+            refreshRuntimeLogs();
+            logRefresh.postDelayed(this, 1000);
+        }
+    };
     private String currentTab = "World";
     // UI-thread-only generation counter prevents stale asynchronous diagnostic results.
     private int udpDiagnosticGeneration;
@@ -153,6 +163,8 @@ public final class DashboardActivity extends Activity {
             xuidDraft = state.getString("xuid_draft");
         } else if ("Xbox".equals(getIntent().getStringExtra("open_tab"))) {
             currentTab = "Xbox";
+        } else if ("Logs".equals(getIntent().getStringExtra("open_tab"))) {
+            currentTab = "Logs";
         }
         show(currentTab);
         showSignInReturnStatus(getIntent());
@@ -165,13 +177,22 @@ public final class DashboardActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if ("Xbox".equals(currentTab) || "World".equals(currentTab)) show(currentTab);
+        if ("Logs".equals(currentTab)) {
+            logRefresh.removeCallbacks(updateLogs);
+            updateLogs.run();
+        }
+    }
+
+    @Override protected void onPause() {
+        logRefresh.removeCallbacks(updateLogs);
+        super.onPause();
     }
 
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         String requestedTab = intent.getStringExtra("open_tab");
-        if ("Xbox".equals(requestedTab)) show("Xbox");
+        if ("Xbox".equals(requestedTab) || "Logs".equals(requestedTab)) show(requestedTab);
         showSignInReturnStatus(intent);
     }
 
@@ -260,6 +281,7 @@ public final class DashboardActivity extends Activity {
     }
 
     private void show(String tab) {
+        logRefresh.removeCallbacks(updateLogs);
         if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
         xuidInput = null;
         currentTab = tab;
@@ -295,7 +317,7 @@ public final class DashboardActivity extends Activity {
         root.addView(status);
         LinearLayout nav = new LinearLayout(this);
         nav.setPadding(0, dp(8), 0, 0);
-        for (String page : new String[]{"World", "Xbox", "Settings"}) {
+        for (String page : new String[]{"World", "Xbox", "Logs", "Settings"}) {
             boolean selected = page.equals(tab) || ("Settings".equals(page) && "Diagnostics".equals(tab));
             Button item = new Button(this);
             item.setText(page.equals("Xbox") ? "Friends" : page);
@@ -316,6 +338,9 @@ public final class DashboardActivity extends Activity {
 
         boolean signedIn = BotAccount.saved(this);
         switch (tab) {
+            case "Logs":
+                showRuntimeLogs(signedIn);
+                break;
             case "Xbox":
                 hero("MULTIPLAYER", "Xbox friends", "See who’s around and check for a world you can join.");
                 if (signedIn) {
@@ -377,6 +402,47 @@ public final class DashboardActivity extends Activity {
                     if (!result.isEmpty()) label(result, 14);
                 }
         }
+    }
+
+    private void showRuntimeLogs(boolean signedIn) {
+        section("App status");
+        label(signedIn ? "Xbox account connected" : "Xbox account disconnected", 14);
+        latestRuntimeStatus = text("", 16, INK, true);
+        body.addView(latestRuntimeStatus);
+        section("Recent events");
+        button("Copy recent logs", () -> {
+            android.content.ClipboardManager clipboard = getSystemService(android.content.ClipboardManager.class);
+            var events = RuntimeLog.recent(this);
+            if (clipboard == null || events.isEmpty()) return;
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("MinePilot logs", formatRuntimeEvents(events)));
+        });
+        runtimeEvents = text("", 14, MUTED, false);
+        runtimeEvents.setTextIsSelectable(true);
+        runtimeEvents.setLineSpacing(dp(5), 1f);
+        body.addView(runtimeEvents);
+        updateLogs.run();
+    }
+
+    private void refreshRuntimeLogs() {
+        var events = RuntimeLog.recent(this);
+        String latest = events.isEmpty() ? "Ready" : RuntimeLog.describe(events.getLast());
+        latestRuntimeStatus.setText("Latest status · " + latest);
+        String history = formatRuntimeEvents(events);
+        if (!android.text.TextUtils.equals(runtimeEvents.getText(), history)) runtimeEvents.setText(history);
+    }
+
+    private String formatRuntimeEvents(java.util.ArrayDeque<org.json.JSONObject> events) {
+        if (events.isEmpty()) return "No events yet. Try signing in or joining a world.";
+        var timeFormat = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.MEDIUM);
+        var history = new StringBuilder();
+        var newestFirst = events.descendingIterator();
+        while (newestFirst.hasNext()) {
+            var event = newestFirst.next();
+            if (history.length() != 0) history.append('\n');
+            history.append(timeFormat.format(new java.util.Date(event.optLong("at")))).append("  ")
+                    .append(RuntimeLog.describe(event));
+        }
+        return history.toString();
     }
 
     private void showManualJoin() {
