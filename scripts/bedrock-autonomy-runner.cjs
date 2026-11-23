@@ -52,6 +52,7 @@ class VerifiedAutonomyRunner {
     if (world.gameplayWorld().safetyHold) return 'survival_safety_override';
     if (!world.terrain?.snapshot().collisionClassificationReady)
       return 'block_registry_unavailable';
+    if (world.blockBreaker?.snapshot()?.active) return 'block_action_busy';
     if (world.movement?.capability(world)!=='experimental')
       return 'experimental_movement_not_enabled';
     return null;
