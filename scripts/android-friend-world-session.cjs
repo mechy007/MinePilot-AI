@@ -40,6 +40,7 @@ function safeJoinFailure(error) {
   const status = error?.status ?? error?.response?.status;
   if (Number.isInteger(status) && status >= 400 && status <= 599) return { httpStatus: status };
   const message = typeof error?.message === 'string' ? error.message : '';
+  if (message === 'Xbox world login nonce unavailable') return { reason: 'nonce_unavailable' };
   if (message === 'NetherNet peer closed') {
     const code = error.nethernetCode;
     return Number.isInteger(code) && code > 0 && code <= 255
@@ -60,6 +61,15 @@ function shouldRetry(result) {
     ['nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
     (['timeout', 'network'].includes(result.reason) ||
       (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
+}
+
+function bedrockDisconnectCode(reason) {
+  // Use the active protocol's enum instead of storing host-controlled display text.
+  if (Number.isInteger(reason) && reason >= 0 && reason <= 255) return reason;
+  if (typeof reason !== 'string') return;
+  const { mappings } = require('minecraft-data')('bedrock_1.26.60').protocol.types.DisconnectFailReason[1];
+  const match = Object.entries(mappings).find(([, name]) => name === reason);
+  if (match) return Number(match[0]);
 }
 
 async function observeSession(client, publish, signal, getStage, timeoutMs = ATTEMPT_TIMEOUT_MS) {
@@ -112,7 +122,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     const onSpawn = () => { spawn = true; checkSpawn(); };
     const onChunk = () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); };
     const onStep = step => {
-      if (['xbox_membership', 'world_transport', 'nethernet_signalling', 'nethernet_peer'].includes(step)) {
+      if (['xbox_membership', 'world_transport', 'world_nonce', 'nethernet_signalling', 'nethernet_peer'].includes(step)) {
         connectionStage = step;
         publish({ phase: 'connection', stage: step });
       }
@@ -126,7 +136,9 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       connectionStage = 'bedrock_spawn';
       publish({ phase: 'connection', stage: connectionStage });
     };
-    const onKick = () => finish('failed', { reason: 'host_disconnect' });
+    const onKick = packet => finish('failed', {
+      reason: 'host_disconnect', bedrockCode: bedrockDisconnectCode(packet?.reason)
+    });
     client.on('minepilot_join_step', onStep);
     client.on('minepilot_join_trace', onTrace);
     client.once('loggingIn', onLogin);

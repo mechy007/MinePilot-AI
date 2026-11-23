@@ -27,11 +27,14 @@ test('runtime logs retain diagnostic codes and omit private data and duplicate h
   log({ phase: 'private', stage: 'private' });
   log({ phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed',
     nethernetCode: 37, gamertag: 'private', xuid: 'private', rawError: 'private' });
+  log({ phase: 'failed', stage: 'bedrock_login', reason: 'host_disconnect', bedrockCode: 136,
+    nonce: 'private', message: 'private' });
   const events = readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(events.every(event => Number.isInteger(event.at)));
   assert.deepEqual(events.map(({ at, ...event }) => event), [
     { phase: 'device_code' }, { phase: 'spawned' },
-    { phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37 }
+    { phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37 },
+    { phase: 'failed', stage: 'bedrock_login', reason: 'host_disconnect', bedrockCode: 136 }
   ]);
 });
 
@@ -86,6 +89,16 @@ test('reports a safe failure on a disconnect before the world starts', async () 
   client.emit('close');
   assert.deepEqual(await session, { phase: 'failed', stage: 'connection' });
   assert.deepEqual(snapshots, []);
+});
+
+test('captures the Bedrock disconnect code without forwarding the server message', async () => {
+  const client = new Client();
+  const session = observeSession(client, () => {}, new AbortController().signal, () => 'connection');
+  client.emit('loggingIn');
+  client.emit('kick', { reason: 'nonce_missing', message: 'private server text' });
+  assert.deepEqual(await session, {
+    phase: 'failed', stage: 'bedrock_login', reason: 'host_disconnect', bedrockCode: 136
+  });
 });
 
 test('hands the verified account to the friend-world SDK with exact owner selection', async () => {
@@ -249,6 +262,7 @@ test('packaged SDK routes the offer to the Xbox messaging ID and accepts the mat
   const botXuid = '2533274790000001';
   const hostNetworkId = '18446744073709551610';
   const hostPlayerId = '1e95d572-0f41-481e-44c9-a47d46d4fc70';
+  const botNonce = 'a123b456c789d012';
   context.mock.method(os, 'networkInterfaces', () => ({
     fixture: [{ address: '127.0.0.1', family: 'IPv4', internal: false }]
   }));
@@ -261,12 +275,22 @@ test('packaged SDK routes the offer to the Xbox messaging ID and accepts the mat
     { ConnectionType: 3, NetherNetId: '123' },
     { ConnectionType: 7, NetherNetId: hostNetworkId, PmsgId: hostPlayerId }
   ] } } };
+  membership.current.properties.custom.nonces = { [ownerXuid]: 'deadbeef' };
+  const get = context.mock.fn(async () => {
+    const document = structuredClone(membership.current);
+    document.properties.custom.nonces[botXuid] = botNonce;
+    return document;
+  });
+  membership.get = get;
   const close = context.mock.fn();
   membership.close = close;
   context.mock.method(XboxClient.prototype, 'joinSession', async () => membership);
   const sent = [];
   let client;
+  let signedNonce;
   context.mock.method(NethernetSignal.prototype, 'connect', async function () {
+    client.createClientUserChain(client.ecdhKeyPair.privateKey);
+    signedNonce = JSON.parse(Buffer.from(client.clientUserChain.split('.')[1], 'base64url')).Nonce;
     this.ws = { readyState: 1, terminate() {}, send: text => {
       const frame = parseJson(text);
       sent.push(frame);
@@ -303,6 +327,10 @@ test('packaged SDK routes the offer to the Xbox messaging ID and accepts the mat
     pickOwnerWorld
   });
   assert.equal(sent[0]?.method, 'Signaling_SendClientMessage_v1_0', JSON.stringify(snapshots));
+  assert.equal(get.mock.callCount(), 1);
+  assert.equal(signedNonce, botNonce);
+  assert.ok(snapshots.some(event => event.stage === 'world_nonce'));
+  assert.ok(!JSON.stringify(snapshots).includes(botNonce));
   assert.equal(sent[0].params.toPlayerId, hostPlayerId);
   const offer = parseJson(sent[0].params.message).params;
   assert.equal(offer.netherNetId, String(client.connection.nethernet.networkId));

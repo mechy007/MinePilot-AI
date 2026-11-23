@@ -320,6 +320,7 @@ public final class XboxSignInService extends Service {
             case "connection":
             case "xbox_membership":
             case "world_transport":
+            case "world_nonce":
             case "nethernet_signalling":
             case "nethernet_peer":
             case "bedrock_login":
@@ -327,6 +328,7 @@ public final class XboxSignInService extends Service {
                 String connectionStep = switch (snapshot.optString("stage")) {
                     case "xbox_membership" -> "Xbox world membership";
                     case "world_transport" -> "reading the world’s transport details";
+                    case "world_nonce" -> "waiting for the host’s Minecraft login nonce";
                     case "nethernet_signalling" -> "connecting to the Minecraft signalling service";
                     case "nethernet_peer" -> "connecting to the host over NetherNet";
                     case "bedrock_login" -> "Minecraft login";
@@ -338,7 +340,11 @@ public final class XboxSignInService extends Service {
                     case "transport" -> "NetherNet signalling or the peer connection failed.";
                     case "network" -> "The connection to the service or host failed.";
                     case "timeout" -> "The connection timed out.";
-                    case "host_disconnect" -> "Minecraft disconnected the bot.";
+                    case "nonce_unavailable" -> "The host did not publish a login nonce for the bot’s Xbox account.";
+                    case "host_disconnect" -> {
+                        String bedrock = RuntimeLog.bedrockDisconnect(snapshot.optInt("bedrockCode", -1));
+                        yield bedrock.isEmpty() ? "Minecraft disconnected the bot." : bedrock + ".";
+                    }
                     case "nethernet_closed" -> {
                         int code = snapshot.optInt("nethernetCode");
                         yield switch (code) {

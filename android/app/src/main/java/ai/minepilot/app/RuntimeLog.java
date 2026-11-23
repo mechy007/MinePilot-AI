@@ -85,6 +85,7 @@ final class RuntimeLog {
             case "discovery" -> "Friend-world discovery";
             case "xbox_membership" -> "Xbox world membership";
             case "world_transport" -> "Reading world transport details";
+            case "world_nonce" -> "Waiting for the host’s Minecraft login nonce";
             case "nethernet_signalling" -> "Minecraft signalling";
             case "nethernet_peer" -> "NetherNet peer negotiation";
             case "bedrock_login" -> "Minecraft login";
@@ -123,6 +124,7 @@ final class RuntimeLog {
             case "timeout" -> "Timed out";
             case "host_disconnect" -> "Host disconnected the bot";
             case "nethernet_closed" -> "NetherNet connection closed";
+            case "nonce_unavailable" -> "Host login nonce unavailable";
             default -> "";
         };
         if (!reason.isEmpty()) message += " · " + reason;
@@ -130,8 +132,28 @@ final class RuntimeLog {
         if (http >= 400 && http <= 599) message += " · HTTP " + http;
         int nethernet = event.optInt("nethernetCode");
         if (nethernet > 0 && nethernet <= 255) message += " · NetherNet " + nethernet;
+        String bedrock = bedrockDisconnect(event.optInt("bedrockCode", -1));
+        if (!bedrock.isEmpty()) message += " · " + bedrock;
         String xbox = event.optString("xboxCode");
         if (xbox.matches("214[0-9]{7}")) message += " · Xbox " + xbox;
         return message;
+    }
+
+    static String bedrockDisconnect(int code) {
+        if (code < 0 || code > 255) return "";
+        String reason = switch (code) {
+            case 2, 45, 111 -> "Access denied";
+            case 8, 34, 35, 73 -> "Minecraft version mismatch";
+            case 25 -> "World full";
+            case 43 -> "Account logged in elsewhere";
+            case 46, 146 -> "Minecraft authentication rejected";
+            case 136 -> "Login nonce missing";
+            case 137 -> "Login nonce unknown to the host";
+            case 138 -> "Login nonce expired";
+            case 139 -> "Login nonce invalid";
+            case 144 -> "Minecraft login token expired";
+            default -> "";
+        };
+        return reason.isEmpty() ? "Bedrock code " + code : reason + " (Bedrock code " + code + ")";
     }
 }
