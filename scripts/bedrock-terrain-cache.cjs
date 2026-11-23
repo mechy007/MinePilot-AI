@@ -93,6 +93,7 @@ class BedrockTerrainCache {
     this.decoded=0;
     this.cacheMisses=0;
     this.registry=null;
+    this.airRuntimeId=null;
   }
   reset(dimension=null) {
     this.sections.clear();this.updates.clear();
@@ -104,12 +105,14 @@ class BedrockTerrainCache {
   setRegistry(mapping) {
     if (!(mapping instanceof Map) || mapping.size>131072) return false;
     this.registry=new Map();
+    this.airRuntimeId=null;
     for (const [key,value] of mapping) {
       if(!Number.isInteger(key)||key<0||key>=0x100000000)continue;
       const name=typeof value==='string'?value:value?.name;
       const boundingBox=typeof value==='object'?value?.boundingBox:null;
       if(typeof name==='string' && /^minecraft:[a-z0-9_./-]{1,90}$/.test(name))
         this.registry.set(key,{name,boundingBox});
+      if(name==='minecraft:air') this.airRuntimeId=key;
     }
     return this.registry.size>0;
   }
@@ -162,9 +165,10 @@ class BedrockTerrainCache {
         y=Number(origin.y)+e.dy;
       if(!isInt(x)||!isInt(z)||y<-16||y>32)continue;
       const status=e.result;
-      if(status==='success_all_air'||status===6){
-        // Only a server-declared all-air subchunk is safely known to be air.
-        this.store(dim,x,z,y,new Uint32Array(CELLS));
+      if((status==='success_all_air'||status===6) && this.airRuntimeId != null){
+        // Server-declared all-air; use the network palette's actual air state ID.
+        const air=new Uint32Array(CELLS);air.fill(this.airRuntimeId);
+        this.store(dim,x,z,y,air);
         count++;
       }else if((status==='success'||status===1)&&Buffer.isBuffer(e.payload)){
         try{
