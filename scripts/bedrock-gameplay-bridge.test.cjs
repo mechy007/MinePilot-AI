@@ -128,3 +128,13 @@ test('experimental diagnostic input requires opt-in, movement authority and expl
   await new Promise(resolve => setTimeout(resolve, 120));
   assert.equal(client.sent.length, count);
 });
+
+test('pinned Bedrock 1.26.60 serializer accepts the experimental auth input shape', () => {
+  const { createSerializer } = require('bedrock-protocol/src/transforms/serializer');
+  const serializer = createSerializer('1.26.60');
+  for (const moving of [true, false]) {
+    const payload = buildInputPacket(origin, 0, 102n, moving);
+    const buffer = serializer.createPacketBuffer({ name: 'player_auth_input', params: payload });
+    assert.ok(Buffer.isBuffer(buffer) && buffer.length > 10);
+  }
+});
