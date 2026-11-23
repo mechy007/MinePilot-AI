@@ -304,7 +304,27 @@ public final class XboxSignInService extends Service {
                         ? " (HTTP " + friendsStatus + ")." : ".");
             case "owner": return "Could not identify a separate host. Check your friend’s gamertag or XUID.";
             case "discovery": return "The selected owner’s compatible world could not be found on Xbox.";
-            case "connection": return "The friend’s world was found, but the Bedrock session failed.";
+            case "connection":
+            case "bedrock_login":
+            case "bedrock_spawn":
+                String connectionStep = switch (snapshot.optString("stage")) {
+                    case "bedrock_login" -> "Minecraft login";
+                    case "bedrock_spawn" -> "waiting for the bot to spawn";
+                    default -> "Xbox membership or Bedrock network setup";
+                };
+                String connectionReason = switch (snapshot.optString("reason")) {
+                    case "no_transport" -> "The world did not advertise a compatible NetherNet connection.";
+                    case "transport" -> "NetherNet signalling or the peer connection failed.";
+                    case "network" -> "The connection to the service or host failed.";
+                    case "timeout" -> "The connection timed out.";
+                    case "host_disconnect" -> "Minecraft disconnected the bot.";
+                    default -> "";
+                };
+                int connectionStatus = snapshot.optInt("httpStatus");
+                String http = connectionStatus >= 400 && connectionStatus <= 599
+                        ? " (HTTP " + connectionStatus + ")" : "";
+                return "World found. Failed during " + connectionStep + http + "."
+                        + (connectionReason.isEmpty() ? "" : " " + connectionReason);
             case "runtime": return "The embedded friend-world runtime could not start.";
             default: break;
         }
