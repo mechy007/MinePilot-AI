@@ -38,6 +38,8 @@ public final class DashboardActivity extends Activity {
     private TextView gameplayStatus;
     private Button probeStep;
     private Button stopMovement;
+    private Button inspectWorld;
+    private Button waitHere;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -484,6 +486,13 @@ public final class DashboardActivity extends Activity {
         gameplayStatus.setPadding(0, dp(5), 0, dp(6));
         gameplay.addView(gameplayStatus);
         body.addView(gameplay, panelLayout(10));
+        inspectWorld = actionButton("Inspect surroundings", false, () -> requestGameplay("inspect", false));
+        inspectWorld.setVisibility(View.GONE);
+        body.addView(inspectWorld, panelLayout(8));
+        waitHere = actionButton("Wait here", false, () -> requestGameplay("wait", false));
+        waitHere.setVisibility(View.GONE);
+        body.addView(waitHere, panelLayout(8));
+
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
         body.addView(stopMovement, panelLayout(8));
@@ -603,11 +612,24 @@ public final class DashboardActivity extends Activity {
         String coordinates = current.getString("position", "");
         String movement = current.getString("movement", "unavailable");
         String command = current.getString("last_command", "");
+        String task = current.getString("gameplay_task", "");
+        String taskState = current.getString("gameplay_task_state", "");
+        String movementOwner = current.getString("movement_owner", "");
+        boolean inventoryKnown = current.getBoolean("inventory_known", false);
+        String inventory = inventoryKnown
+                ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
+                : "inventory not observed";
         gameplayStatus.setText(coordinates.isEmpty() ? "Awaiting server position and chunks"
                 : "Position: " + coordinates + " · Nearby players: " + current.getInt("nearby_players")
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
+                        + "\nInventory: " + inventory
+                        + (task.isEmpty() ? "" : "\nTask: " + task + " · " + taskState)
+                        + (movementOwner.isEmpty() ? "" : "\nMovement owner: " + movementOwner)
+                        + (current.getBoolean("safety_hold", false) ? "\nSurvival hold: critical health" : "")
                         + (command.isEmpty() ? "" : "\nLast command: " + command));
+        inspectWorld.setVisibility(playing ? View.VISIBLE : View.GONE);
+        waitHere.setVisibility(playing ? View.VISIBLE : View.GONE);
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
