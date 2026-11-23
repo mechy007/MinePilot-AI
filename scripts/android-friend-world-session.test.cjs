@@ -422,3 +422,33 @@ test('uses the Android network addresses to gather a Werift ICE candidate when l
     await peer.close();
   }
 });
+
+
+test('Android join process reuses its authenticated client for gameplay observations', async t => {
+  const { mkdtempSync, rmSync } = require('node:fs');
+  const { join } = require('node:path');
+  const dir = mkdtempSync(join(require('node:os').tmpdir(), 'minepilot-live-bridge-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const client = new Client();
+  const controller = new AbortController();
+  const observations = [];
+  const session = observeSession(client, state => observations.push(state),
+    controller.signal, () => 'connection', 2000, {
+      commandPath: join(dir, 'gameplay-command.json'),
+      receiptPath: join(dir, 'gameplay-receipt.json'),
+      experimentalMovement: false
+    });
+  client.emit('start_game', { runtime_entity_id: 123n,
+    player_position: { x: 14, y: 65, z: 7 }, dimension: 0,
+    current_tick: 200n, movement_authority: 1 });
+  client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+  client.emit('spawn');
+  assert.equal(observations.at(-1).gameplay.state, 'observing');
+  assert.deepEqual(observations.at(-1).gameplay.position, { x: 14, y: 65, z: 7 });
+  assert.equal(observations.at(-1).gameplay.movement, 'unavailable');
+  controller.abort();
+  assert.equal((await session).phase, 'stopped');
+  assert.equal(client.listenerCount('correct_player_move_prediction'), 0);
+  assert.equal(client.listenerCount('add_player'), 0);
+  assert.equal(client.closed, 1);
+});
