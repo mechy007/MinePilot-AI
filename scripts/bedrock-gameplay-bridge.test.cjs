@@ -373,7 +373,9 @@ test('Layer 3 block updates do not imply mining, and dimension resets resource t
   assert.equal(inspected.reason, 'block_observation_only');
   assert.equal(bridge.snapshot().layerThree.route.status, 'route_unverified');
   assert.equal(bridge.snapshot().layerThree.route.executed, false);
-  assert.equal(client.sent.length, 0);
+  assert.deepEqual(client.sent.map(s => s.packet),
+    ['serverbound_loading_screen', 'serverbound_loading_screen'],
+    'spawn initialization packets do not imply gameplay or mining');
   client.emit('change_dimension', { dimension: 1 });
   assert.equal(bridge.snapshot().layerThree.observedBlockUpdates, 0);
   assert.equal(bridge.snapshot().layerThree.route.status, 'idle');
