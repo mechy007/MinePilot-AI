@@ -77,6 +77,12 @@ class BedrockGameplayBridge {
     this.lastWorldAt = null;
     this.lastServerPositionAt = null;
     this.lastReceipt = null;
+    this.playerGameMode = 'unknown';
+    this.worldGameMode = 'unknown';
+    this.difficulty = null;
+    this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
+      loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
+    this.lastRespawnState = null;
     this.watch = null;
     this.listeners = [];
   }
@@ -87,7 +93,10 @@ class BedrockGameplayBridge {
   start() {
     if (this.closed || this.watch || this.listeners.length) throw new Error('Bridge already used');
     this.bind('start_game', p => this.startGame(p));
-    this.bind('spawn', () => { this.spawned = true; });
+    this.bind('spawn', () => this.onSpawn());
+    this.bind('respawn', p => this.onRespawn(p));
+    this.bind('set_player_game_type', p => this.gameModeChange(p));
+    this.bind('update_player_game_type', p => this.gameModeChange(p));
     this.bind('set_movement_authority', p => this.authorityChange(p));
     this.bind('level_chunk', p => this.chunk(p));
     this.bind('move_player', p => this.move(p));
@@ -126,6 +135,7 @@ class BedrockGameplayBridge {
   startGame(packet) {
     if (!packet || typeof packet !== 'object') return;
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
+    this.selfUnique = ident(packet.entity_id);
     this.position = safePoint(packet.player_position);
     const startRotation = packet.rotation;
     this.pitch = Number.isFinite(startRotation?.x) ? startRotation.x : null;
@@ -133,6 +143,13 @@ class BedrockGameplayBridge {
       Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
+    this.playerGameMode = this.modeName(packet.player_gamemode);
+    this.worldGameMode = this.modeName(packet.world_gamemode);
+    this.difficulty = Number.isInteger(packet.difficulty) && packet.difficulty >= 0 &&
+      packet.difficulty <= 3 ? packet.difficulty : null;
+    this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
+      loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
+    this.lastRespawnState = null;
     const authority = packet.movement_authority;
     this.movementAuthority = Number.isInteger(authority) ? authority :
       ({ client: 0, server: 1, server_with_rewind: 2 })[authority] ?? null;
@@ -153,6 +170,60 @@ class BedrockGameplayBridge {
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
+  }
+  modeName(mode) {
+    if (typeof mode === 'number' && Number.isInteger(mode))
+      mode = ({ 0: 'survival', 1: 'creative', 2: 'adventure',
+        3: 'survival_spectator', 4: 'creative_spectator',
+        5: 'fallback', 6: 'spectator' })[mode];
+    return ['survival', 'creative', 'adventure','survival_spectator',
+      'creative_spectator','fallback','spectator'].includes(mode) ? mode : 'unknown';
+  }
+  gameModeChange(packet) {
+    if (this.closed) return;
+    // set_player_game_type is local-player only; update_player_game_type carries
+    // a player unique id. Never attribute another player's game mode to ours.
+    if (packet?.player_unique_id != null && this.selfUnique != null &&
+      ident(packet.player_unique_id) !== this.selfUnique) return;
+    if (packet?.player_unique_id != null && this.selfUnique == null) return;
+    const next = this.modeName(packet?.gamemode);
+    if (next !== 'unknown') this.playerGameMode = next;
+  }
+  onRespawn(packet) {
+    if (this.closed || !packet || !Number.isInteger(packet.state)) return;
+    const incomingId = ident(packet.runtime_entity_id);
+    if (incomingId && this.self && incomingId !== this.self) return;
+    this.spawnTrace.respawnSeen++;
+    this.lastRespawnState = packet.state;
+    if (packet.state !== 1 || !this.self || typeof this.client.queue !== 'function') return;
+    // Bedrock respawn handshake: ack server state 1 with state 2.
+    // Never assume this proves that the host registered an active player.
+    try {
+      this.client.queue('respawn', { state: 2,
+        position: finitePosition(packet.position) ? packet.position : this.position,
+        runtime_entity_id: BigInt(this.self) });
+      this.spawnTrace.respawnAcknowledged++;
+      if (finitePosition(packet.position)) {
+        this.position = safePoint(packet.position);
+        this.lastServerPositionAt = this.clock();
+        this.layerOne?.onServerPosition(this.position);
+      }
+    } catch { this.spawnTrace.handshakeErrors++; }
+  }
+  onSpawn() {
+    if (this.closed) return;
+    this.spawned = true;
+    // Player initialization is handled by bedrock-protocol's autoInitPlayer.
+    // Bedrock Dedicated Server 1.26.x can require both loading-screen closure
+    // packets before simulating movement. Send exactly once per dimension.
+    if (this.spawnTrace.loadingCompleted || typeof this.client.queue !== 'function') return;
+    try {
+      this.client.queue('serverbound_loading_screen', { type: 1 });
+      this.spawnTrace.loadingPacketsSent++;
+      this.client.queue('serverbound_loading_screen', { type: 2 });
+      this.spawnTrace.loadingPacketsSent++;
+      this.spawnTrace.loadingCompleted = true;
+    } catch { this.spawnTrace.handshakeErrors++; }
   }
   authorityChange(packet) {
     if (this.closed) return;
@@ -311,6 +382,9 @@ class BedrockGameplayBridge {
     this.position = null;
     this.lastServerPositionAt = null;
     this.serverTick = null;
+    this.spawned = false;
+    this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
+      loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.receivedChunks.clear();
     this.players.clear();
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
@@ -339,6 +413,11 @@ class BedrockGameplayBridge {
       serverPositionAgeMs: age,
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
+      serverGameMode: this.playerGameMode === 'fallback' ? this.worldGameMode : this.playerGameMode,
+      playerGameMode: this.playerGameMode,
+      worldGameMode: this.worldGameMode,
+      difficulty: this.difficulty,
+      spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       movement: this.movement?.capability?.(this) ?? 'unavailable',
       ...(this.movement?.snapshot ? { motionDiagnostic: this.movement.snapshot() } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
