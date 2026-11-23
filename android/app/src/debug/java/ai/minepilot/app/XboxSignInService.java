@@ -344,7 +344,7 @@ public final class XboxSignInService extends Service {
                         yield switch (code) {
                             case 1 -> "NetherNet could no longer reach the host’s session (code 1).";
                             case 5, 9 -> "The peer network connection did not finish (NetherNet code " + code + ").";
-                            case 14 -> "The host did not answer the connection offer (NetherNet code 14).";
+                            case 14 -> "MinePilot did not receive a matching connection answer (NetherNet code 14).";
                             default -> code > 0 && code <= 255
                                     ? "NetherNet closed the connection (code " + code + ")."
                                     : "The NetherNet connection closed before Minecraft login.";
