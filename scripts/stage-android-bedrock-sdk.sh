@@ -202,6 +202,12 @@ cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
 cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
+cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
+cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
+cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-12660-states.json"
+cp "$root/scripts/bedrock-local-path.cjs" "$temp/bedrock-local-path.cjs"
+cp "$root/scripts/bedrock-autonomy-runner.cjs" "$temp/bedrock-autonomy-runner.cjs"
+cp "$root/scripts/bedrock-block-break.cjs" "$temp/bedrock-block-break.cjs"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
 mkdir -p "$temp/gameplay"
@@ -234,6 +240,10 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs",
+        "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
+        "bedrock-vanilla-12660-states.json",
+        "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
+        "bedrock-block-break.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
@@ -252,9 +262,22 @@ PY
 mv "$temp/node_modules" "$temp/installed-modules"
 
 node "$temp/verify/node-smoke.cjs"
+node - "$temp/verify" <<'JS'
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const runtime=process.argv[2];
+const {createVanillaRuntimeRegistry}=require(path.join(runtime,'bedrock-runtime-registry.cjs'));
+const map=createVanillaRuntimeRegistry({engine:'1.26.60',block_properties:[]});
+assert.ok(map instanceof Map,'runtime block registry loads from bundled dependency');
+assert.equal(map.get(18894)?.name,'minecraft:air');
+assert.equal(map.get(3317)?.name,'minecraft:stone');
+console.log('Verified vanilla Bedrock runtime block-state registry in extracted Android SDK');
+JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
-node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs"
+cp "$root/scripts/bedrock-autonomy-runtime.test.cjs" "$temp/verify/"
+cp "$root/scripts/bedrock-block-break.test.cjs" "$temp/verify/"
+node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 du -h "$destination/bedrock-sdk.zip"

@@ -11,7 +11,7 @@ const { randomUUID } = require('node:crypto');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'autonomy_stop', 'verified_step', 'experimental_break']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -61,6 +61,12 @@ class BedrockGameplayBridge {
     this.layerSeven = options.layerSeven ?? null;
     this.layerEight = options.layerEight ?? null;
     this.addonNavigation = options.addonNavigation ?? null;
+    this.terrain = options.terrain ?? null;
+    this.routePlanner = options.routePlanner ?? null;
+    this.registryResolver = options.registryResolver ?? null;
+    this.navigationRoute = null;
+    this.autonomy = options.autonomy ?? null;
+    this.blockBreaker = options.blockBreaker ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -100,7 +106,8 @@ class BedrockGameplayBridge {
     this.bind('set_player_game_type', p => this.gameModeChange(p));
     this.bind('update_player_game_type', p => this.gameModeChange(p));
     this.bind('set_movement_authority', p => this.authorityChange(p));
-    this.bind('level_chunk', p => this.chunk(p));
+    this.bind('level_chunk', p => { this.chunk(p); this.terrain?.levelChunk(p); });
+    this.bind('subchunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
     this.bind('inventory_content', p => {
@@ -117,6 +124,8 @@ class BedrockGameplayBridge {
     });
     this.bind('set_time', p => this.layerFour?.observeTime(p?.time));
     this.bind('update_block', p => {
+      this.blockBreaker?.observedBlock(p, this.dimension);
+      this.terrain?.updateBlock(p, this.dimension);
       this.layerThree?.observeBlock(p, this.dimension);
       this.layerFive?.observeBlockUpdate(p, this.dimension);
       this.layerSix?.observeBlock(p, this.dimension);
@@ -145,6 +154,15 @@ class BedrockGameplayBridge {
       Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
+    this.terrain?.reset(this.dimension);
+    this.navigationRoute = null;
+    if (this.registryResolver && this.terrain) {
+      try {
+        const mapped = this.registryResolver(packet);
+        if (mapped) this.terrain.setRegistry(mapped);
+        else this.terrain.setRegistry(new Map());
+      } catch { this.terrain.setRegistry(new Map()); }
+    }
     this.playerGameMode = this.modeName(packet.player_gamemode);
     this.worldGameMode = this.modeName(packet.world_gamemode);
     this.difficulty = Number.isInteger(packet.difficulty) && packet.difficulty >= 0 &&
@@ -175,6 +193,8 @@ class BedrockGameplayBridge {
     this.layerSix?.reset();
     this.layerSeven?.reset();
     this.addonNavigation?.reset();
+    this.autonomy?.stop('world_reset');
+    this.blockBreaker?.abort('world_reset');
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
@@ -281,7 +301,7 @@ class BedrockGameplayBridge {
       hasPosition: this.position !== null, positionAgeMs: age,
       receivedChunkHeaders: this.receivedChunks.size,
       movementAuthority: this.movementAuthority,
-      blocksDecoded: false,
+      blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       movementCorrections: this.corrections, sessionClosed: this.closed
     };
   }
@@ -400,6 +420,8 @@ class BedrockGameplayBridge {
   dimensionChange(packet) {
     if (this.closed) return;
     this.dimension = validDimension(packet?.dimension);
+    this.terrain?.reset(this.dimension);
+    this.navigationRoute = null;
     this.position = null;
     this.lastServerPositionAt = null;
     this.serverTick = null;
@@ -420,21 +442,31 @@ class BedrockGameplayBridge {
     this.layerSix?.dimensionChanged();
     this.layerSeven?.reset();
     this.addonNavigation?.reset();
+    this.autonomy?.stop('dimension_changed');
+    this.blockBreaker?.abort('dimension_changed');
     this.playerNames.clear();
   }
   updateAddonNavigation() {
     if (!this.addonNavigation) return null;
     const preview = this.layerTwo?.preview(this.gameplayWorld());
+    let route = null;
     if (preview?.status === 'route_unverified' && preview.nextPoint) {
-      this.addonNavigation.request('follow', 'walk', preview.nextPoint, 1000);
+      if(this.terrain && this.routePlanner && this.position && this.dimension!=null) {
+        try { route=this.routePlanner(this.terrain,this.dimension,
+          this.position,preview.nextPoint); } catch { route=null; }
+      }
+      if(route?.status==='route_found' && route.waypoint)
+        this.addonNavigation.request('follow', 'walk', route.waypoint, 1000);
+      else this.addonNavigation.release('follow');
     } else {
       this.addonNavigation.release('follow');
     }
+    this.navigationRoute=route;
     return this.addonNavigation.update({
       position: this.position,
       dimension: this.dimension,
       observedAt: this.lastServerPositionAt ?? -1,
-      collisionVerified: false,
+      collisionVerified: route?.status==='route_found',
       safetyHold: this.layerFour?.critical === true ||
         this.layerOne?.snapshot()?.safetyHold === true
     });
@@ -450,7 +482,11 @@ class BedrockGameplayBridge {
       visiblePlayers: this.players.size,
       loadedChunkHeaders: this.receivedChunks.size,
       // A chunk header does NOT prove decoded, navigable block/voxel data.
-      blocksDecoded: false,
+      blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
+      ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
+      ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
+      ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
+      ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
       serverPositionAgeMs: age,
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
@@ -493,6 +529,30 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: preflight.reason };
     }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if(raw.action === 'experimental_break') {
+      if (raw.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
+      if (this.autonomy?.snapshot()?.active)return {status:'rejected',reason:'autonomy_busy'};
+      return this.blockBreaker?.start(this,raw.position,true)
+        ?? {status:'rejected',reason:'block_break_unavailable'};
+    }
+    if(raw.action === 'autonomy_stop') {
+      this.autonomy?.stop('user_stopped');
+      return {status:'ok',reason:'autonomy_stopped'};
+    }
+    if(raw.action === 'autonomy_follow') {
+      if(!this.autonomy)return {status:'rejected',reason:'autonomy_runner_unavailable'};
+      return this.autonomy.enable(this,{confirmed:raw.confirmed});
+    }
+    if(raw.action === 'verified_step') {
+      if(raw.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
+      if(this.autonomy?.snapshot().active)return {status:'rejected',reason:'autonomy_busy'};
+      if(this.gameplayWorld().safetyHold)return {status:'rejected',reason:'survival_safety_override'};
+      const route=this.autonomy?.route(this);
+      if(route?.status!=='ready')
+        return {status:'rejected',reason:route?.reason??'verified_path_unavailable'};
+      return this.movement?.runVerifiedStep?.(this,route.waypoint,8)
+        ?? {status:'rejected',reason:'movement_unavailable'};
+    }
     if (raw.action === 'inspect') {
       return this.layerOne?.inspect({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned })
         ?? { status: 'rejected', reason: 'layer_one_unavailable' };
@@ -614,10 +674,13 @@ class BedrockGameplayBridge {
       this.layerSix?.cancel();
       this.layerSeven?.setMode('off');
       this.addonNavigation?.emergencyStop();
+      this.autonomy?.stop('user_stop');
+      this.blockBreaker?.abort('user_stop');
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
     if (raw.action === 'motion_diagnostic') {
+      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
       if (this.layerOne?.snapshot()?.safetyHold)
         return { status: 'rejected', reason: 'critical_health' };
       if (this.layerFour?.critical)
@@ -642,6 +705,7 @@ class BedrockGameplayBridge {
       return this.movement.runDiagnostic(this, { mode: raw.mode, ticks: raw.ticks });
     }
     if (raw.action === 'probe_step') {
+      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
       if (this.layerOne?.snapshot()?.safetyHold)
         return { status: 'rejected', reason: 'critical_health' };
       if (this.layerFour?.critical)
@@ -712,6 +776,8 @@ class BedrockGameplayBridge {
     this.closed = true;
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
+    this.autonomy?.stop('session_closed');
+    this.blockBreaker?.abort('session_closed');
     this.movement?.stopPresence?.('session_closed');
     this.movement?.stop?.();
     this.layerOne?.stop('session_closed');
@@ -722,6 +788,8 @@ class BedrockGameplayBridge {
     this.layerSix?.reset();
     this.layerSeven?.reset();
     this.addonNavigation?.reset();
+    this.terrain?.reset();
+    this.navigationRoute=null;
     this.playerNames.clear();
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
     this.listeners = [];

@@ -53,6 +53,7 @@ class ExperimentalPlayerInput {
     // Neutral standing-still input is separate from opt-in physical movement.
     // Enabled only for the real authenticated Android session, never fixtures.
     this.presenceEnabled = options.presenceEnabled === true;
+    this.blockExecutor = options.blockExecutor ?? null;
     this.presenceTimer = null;
     this.presenceWorld = null;
     this.presenceFrames = 0;
@@ -110,13 +111,22 @@ class ExperimentalPlayerInput {
         const tick = this.lastTick + 1n;
         const yaw = Number.isFinite(current.yaw) ? current.yaw : this.lastYaw;
         const packet = buildInputPacket(current.position, yaw, tick, false);
+        // Bedrock's server-authoritative block break action is an optional
+        // field on the SAME movement tick. Never create a competing tick writer.
+        const blockAction = this.blockExecutor?.next?.(current);
+        if(blockAction) {
+          packet.input_data=[35];
+          packet.block_action=[blockAction];
+        }
         this.client.queue('player_auth_input', packet);
+        this.blockExecutor?.pulseTimeout?.();
         this.lastTick = tick;
         this.lastYaw = yaw;
         this.presenceFrames++;
       } catch {
         this.errors++;
         this.presenceError = 'presence_input_failed';
+        this.blockExecutor?.abort?.('packet_write_failed');
         this.stopPresence('packet_write_failed');
       }
     };
@@ -127,6 +137,7 @@ class ExperimentalPlayerInput {
     if (this.presenceTimer) this.clearInterval(this.presenceTimer);
     this.presenceTimer = null;
     this.presenceWorld = null;
+    this.blockExecutor?.abort?.('presence_stopped');
     if (reason === 'packet_write_failed') this.presenceError = reason;
   }
   capability(world) {
@@ -161,7 +172,8 @@ class ExperimentalPlayerInput {
     this.lastTick = this.lastTick != null && this.lastTick > world.serverTick
       ? this.lastTick : world.serverTick;
     this.world = world;
-    this.lastYaw = Number.isFinite(world.yaw) ? world.yaw : 0;
+    this.lastYaw = Number.isFinite(options.initialYaw)
+      ? normalYaw(options.initialYaw) : Number.isFinite(world.yaw) ? world.yaw : 0;
     this.mode = mode;
     this.framesSent = 0;
     this.serverUpdates = 0;
@@ -208,6 +220,25 @@ class ExperimentalPlayerInput {
     this.timer = this.setInterval(send, this.interval);
     return { status: 'accepted', reason: 'diagnostic_scheduled_not_verified' };
   }
+  /**
+   * Real (not just planned) bounded movement along one verified local waypoint.
+   * The caller must validate terrain and obtain user approval before invocation.
+   * This does not assert server acceptance or actual locomotion.
+   */
+  runVerifiedStep(world, target, ticks = 8) {
+    if (!finite3(world?.position) || !finite3(target) ||
+        !Number.isInteger(ticks) || ticks < 1 || ticks > 12)
+      return {status:'rejected', reason:'invalid_waypoint'};
+    const dx=target.x-world.position.x, dz=target.z-world.position.z;
+    const distance=Math.hypot(dx,dz);
+    if (distance<0.08 || distance>2.1 || Math.abs(target.y-world.position.y)>0.85)
+      return {status:'rejected', reason:'waypoint_outside_verified_step'};
+    const yaw=normalYaw(Math.atan2(-dx,dz)*180/Math.PI);
+    const result=this.runDiagnostic(world,{mode:'forward',ticks,initialYaw:yaw});
+    return result.status==='accepted'
+      ? {status:'accepted',reason:'verified_waypoint_queued_not_host_confirmed'}
+      : result;
+  }
   probeStep(world) {
     const result = this.runDiagnostic(world, { mode: 'forward', ticks: PROBE_TICKS });
     return result.status === 'accepted'
@@ -242,6 +273,7 @@ class ExperimentalPlayerInput {
   }
   /** Explicit stop emits one neutral frame, unless connection/world ended. */
   stop(reason = 'user_stopped', opts = {}) {
+    this.blockExecutor?.abort?.('movement_stopped');
     const active = this.timer != null;
     if (this.timer) this.clearInterval(this.timer);
     this.timer = null;

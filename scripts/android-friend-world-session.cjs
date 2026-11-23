@@ -10,6 +10,11 @@ const { accountWriter, runtimeLogger, verifyXbox } = require('./xbox-auth-probe.
 const { BotAwareness } = require('./bot-awareness.mjs');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { ExperimentalPlayerInput } = require('./bedrock-player-input.cjs');
+const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
+const { createVanillaRuntimeRegistry } = require('./bedrock-runtime-registry.cjs');
+const { planLocalRoute } = require('./bedrock-local-path.cjs');
+const { VerifiedAutonomyRunner } = require('./bedrock-autonomy-runner.cjs');
+const { BedrockBlockBreakExecutor } = require('./bedrock-block-break.cjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -79,14 +84,17 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   const awareness = new BotAwareness();
   // The gameplay bridge observes and commands the SAME authenticated world client.
   // Default remains off for existing join checks and fixture clients.
+  const blockBreaker = gameplayOptions ? new BedrockBlockBreakExecutor() : null;
   const gameplay = gameplayOptions ? new BedrockGameplayBridge(client, {
     commandPath: gameplayOptions.commandPath,
     receiptPath: gameplayOptions.receiptPath,
     movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true, {
       // Standing-still 20Hz input is standard Bedrock player presence, not
       // opt-in walking. Same writer/packet tick stream as user diagnostics.
-      presenceEnabled: true
+      presenceEnabled: true,
+      blockExecutor: blockBreaker
     }),
+    blockBreaker,
     layerOne: gameplayOptions.layerOneFactory?.() ?? null,
     layerTwo: gameplayOptions.layerTwoFactory?.() ?? null,
     layerThree: gameplayOptions.layerThreeFactory?.() ?? null,
@@ -95,7 +103,11 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     layerSix: gameplayOptions.layerSixFactory?.() ?? null,
     layerSeven: gameplayOptions.layerSevenFactory?.() ?? null,
     layerEight: gameplayOptions.layerEightFactory?.() ?? null,
-    addonNavigation: gameplayOptions.addonNavigationFactory?.() ?? null
+    addonNavigation: gameplayOptions.addonNavigationFactory?.() ?? null,
+    terrain: new BedrockTerrainCache(),
+    registryResolver: createVanillaRuntimeRegistry,
+    routePlanner: planLocalRoute,
+    autonomy: new VerifiedAutonomyRunner()
   }).start() : null;
   let startGame = false;
   let spawn = false;

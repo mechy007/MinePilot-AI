@@ -238,6 +238,34 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("workflow_updates", workflow.optInt("recentBlockUpdates", 0));
                     result.putInt("workflow_walkable", workflow.optInt("verifiedWalkableTiles", 0));
                 }
+                JSONObject terrain = gameplay.optJSONObject("terrain");
+                if (terrain != null) {
+                    result.putInt("terrain_sections", terrain.optInt("decodedSections", 0));
+                    result.putInt("terrain_decode_errors", terrain.optInt("decodeErrors", 0));
+                    result.putBoolean("terrain_registry_ready", terrain.optBoolean("collisionClassificationReady", false));
+                }
+                JSONObject route = gameplay.optJSONObject("navigationRoute");
+                if (route != null) {
+                    result.putString("terrain_route_status", route.optString("status", ""));
+                    result.putString("terrain_route_reason", route.optString("reason", ""));
+                    result.putInt("terrain_route_length", route.optJSONArray("path") == null
+                        ? 0 : route.optJSONArray("path").length());
+                }
+                JSONObject breaker = gameplay.optJSONObject("blockBreak");
+                if(breaker!=null) {
+                    result.putString("block_break_status", breaker.optString("status", "idle"));
+                    result.putString("block_break_reason", breaker.optString("reason", ""));
+                    result.putInt("block_break_frames", breaker.optInt("frames", 0));
+                    result.putBoolean("block_break_changed", breaker.optBoolean("serverChanged", false));
+                }
+                JSONObject autonomy = gameplay.optJSONObject("autonomy");
+                if (autonomy != null) {
+                    result.putBoolean("autonomy_active", autonomy.optBoolean("active", false));
+                    result.putString("autonomy_phase", autonomy.optString("phase", "idle"));
+                    result.putString("autonomy_reason", autonomy.optString("stopReason", ""));
+                    result.putInt("autonomy_attempted", autonomy.optInt("attemptedSteps", 0));
+                    result.putInt("autonomy_verified", autonomy.optInt("serverVerifiedSteps", 0));
+                }
                 JSONObject navigator = gameplay.optJSONObject("addonNavigation");
                 if (navigator != null) {
                     result.putString("addon_nav_owner", navigator.optString("owner", "none"));
@@ -301,9 +329,13 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"review_checkpoint".equals(action) && !"advisor_mode".equals(action) &&
                 !"advisor_review".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action) &&
-                !"motion_diagnostic".equals(action)) return;
+                !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
+                !"autonomy_follow".equals(action) && !"autonomy_stop".equals(action) &&
+                !"experimental_break".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
-        if (("probe_step".equals(action) || "motion_diagnostic".equals(action)) && !confirmed) return;
+        if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
+                "verified_step".equals(action) || "autonomy_follow".equals(action) ||
+                "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
         Path temporary = directory.resolve("gameplay-command-" + requestId + ".tmp");
@@ -360,6 +392,23 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (ticks < 1 || ticks > 20) return;
                 command.put("confirmed", true).put("mode", mode).put("ticks", ticks);
             }
+            if ("experimental_break".equals(action)) {
+                String source = extras.getString("block_position", "").trim();
+                String[] coordinates = source.split(",", -1);
+                if(coordinates.length!=3)return;
+                int bx,by,bz;
+                try {
+                    bx=Integer.parseInt(coordinates[0].trim());
+                    by=Integer.parseInt(coordinates[1].trim());
+                    bz=Integer.parseInt(coordinates[2].trim());
+                } catch(NumberFormatException invalid){return;}
+                if(Math.abs((long)bx)>30000000 || Math.abs((long)bz)>30000000 ||
+                    by<-256 || by>512)return;
+                command.put("position", new JSONObject().put("x",bx).put("y",by).put("z",bz));
+            }
+            if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
+                "experimental_break".equals(action))
+                command.put("confirmed", true);
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
             }
