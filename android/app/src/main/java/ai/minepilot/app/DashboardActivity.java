@@ -619,7 +619,7 @@ public final class DashboardActivity extends Activity {
     private void configureMovementProbe(boolean enable) {
         if (!enable) {
             getSharedPreferences("minepilot_gameplay", MODE_PRIVATE).edit()
-                    .putBoolean("allow_experimental_movement", false).apply();
+                    .putBoolean("allow_experimental_movement", false).commit();
             show("World");
             return;
         }
@@ -629,7 +629,7 @@ public final class DashboardActivity extends Activity {
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Enable for next join", (dialog, which) -> {
                     getSharedPreferences("minepilot_gameplay", MODE_PRIVATE).edit()
-                            .putBoolean("allow_experimental_movement", true).apply();
+                            .putBoolean("allow_experimental_movement", true).commit();
                     show("World");
                 }).show();
     }
