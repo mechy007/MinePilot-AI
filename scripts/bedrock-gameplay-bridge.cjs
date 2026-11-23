@@ -360,6 +360,8 @@ class BedrockGameplayBridge {
       return { status: 'ok', reason: 'movement_cancelled' };
     }
     if (raw.action === 'probe_step') {
+      if (this.gameplayWorld().safetyHold)
+        return { status: 'rejected', reason: 'survival_hold' };
       // A raw forward diagnostic is not execution of a Follow or Return plan.
       const plan = this.layerTwo?.preview(this.gameplayWorld());
       if (plan && (plan.goal === 'follow' || plan.goal === 'return'))
