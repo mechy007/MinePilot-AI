@@ -221,17 +221,21 @@ class BedrockGameplayBridge {
   onSpawn() {
     if (this.closed) return;
     this.spawned = true;
-    this.movement?.startPresence?.(this);
     // Player initialization is handled by bedrock-protocol's autoInitPlayer.
     // Bedrock Dedicated Server 1.26.x can require both loading-screen closure
     // packets before simulating movement. Send exactly once per dimension.
-    if (this.spawnTrace.loadingCompleted || typeof this.client.queue !== 'function') return;
+    if (this.spawnTrace.loadingCompleted || typeof this.client.queue !== 'function') {
+      if (this.spawnTrace.loadingCompleted) this.movement?.startPresence?.(this);
+      return;
+    }
     try {
       this.client.queue('serverbound_loading_screen', { type: 1 });
       this.spawnTrace.loadingPacketsSent++;
       this.client.queue('serverbound_loading_screen', { type: 2 });
       this.spawnTrace.loadingPacketsSent++;
       this.spawnTrace.loadingCompleted = true;
+      // Loading-screen completion is queued before the neutral input stream.
+      this.movement?.startPresence?.(this);
     } catch { this.spawnTrace.handshakeErrors++; }
   }
   authorityChange(packet) {
