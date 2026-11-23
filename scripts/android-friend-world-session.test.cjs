@@ -236,10 +236,11 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
   assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'xbox_membership', httpStatus: 403 });
 });
 
-test('packaged SDK sends the NetherNet offer first and reports the host close code', { timeout: 10000 }, async context => {
+test('packaged SDK routes the offer to the Xbox messaging ID and accepts the matching peer', { timeout: 10000 }, async context => {
   const os = require('node:os');
   const { createClient } = require('bedrock-protocol');
   const { NethernetSignal } = require('bedrock-protocol/src/nethernet/signalling');
+  const { parseJson } = require('bedrock-protocol/src/nethernet/signallingCodec');
   const { Titles } = require('prismarine-auth');
   const { XboxClient } = require('prismarine-xbox-services');
   const { SignalType } = require('nethernet');
@@ -247,6 +248,7 @@ test('packaged SDK sends the NetherNet offer first and reports the host close co
   const ownerXuid = '2533274790000002';
   const botXuid = '2533274790000001';
   const hostNetworkId = '18446744073709551610';
+  const hostPlayerId = '1e95d572-0f41-481e-44c9-a47d46d4fc70';
   context.mock.method(os, 'networkInterfaces', () => ({
     fixture: [{ address: '127.0.0.1', family: 'IPv4', internal: false }]
   }));
@@ -255,19 +257,34 @@ test('packaged SDK sends the NetherNet offer first and reports the host close co
     { sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225 } }
   ]);
   const membership = new EventEmitter();
-  membership.current = { properties: { custom: { SupportedConnections: [{ NetherNetId: hostNetworkId }] } } };
+  membership.current = { properties: { custom: { SupportedConnections: [
+    { ConnectionType: 3, NetherNetId: '123' },
+    { ConnectionType: 7, NetherNetId: hostNetworkId, PmsgId: hostPlayerId }
+  ] } } };
   const close = context.mock.fn();
   membership.close = close;
   context.mock.method(XboxClient.prototype, 'joinSession', async () => membership);
-  context.mock.method(NethernetSignal.prototype, 'connect', async function () { this.emit('credentials', []); });
   const sent = [];
   let client;
-  context.mock.method(NethernetSignal.prototype, 'write', function (offer) {
-    sent.push(offer);
-    if (offer.type !== SignalType.ConnectRequest) return;
-    this.emit('signal', {
-      type: SignalType.ConnectError, connectionId: offer.connectionId, networkId: hostNetworkId, data: '37'
-    });
+  context.mock.method(NethernetSignal.prototype, 'connect', async function () {
+    this.ws = { readyState: 1, terminate() {}, send: text => {
+      const frame = parseJson(text);
+      sent.push(frame);
+      const inner = frame.params?.message && parseJson(frame.params.message);
+      const [type, id] = inner?.params?.message?.split(' ') ?? [];
+      if (type !== SignalType.ConnectRequest) return;
+      const respond = (from, networkId, code) => this.onMessage(JSON.stringify({
+        jsonrpc: '2.0', method: 'Signaling_ReceiveMessage_v1_0',
+        params: { From: from, Message: JSON.stringify({
+          jsonrpc: '2.0', method: 'Signaling_WebRtc_v1_0',
+          params: { netherNetId: networkId, message: `CONNECTERROR ${id} ${code}` }
+        }) }
+      }));
+      respond('4a62d29e-2f5e-4f2c-87ec-42001f84ff01', hostNetworkId, 38);
+      respond(hostPlayerId, '124', 39);
+      respond(hostPlayerId.toUpperCase(), hostNetworkId, 37);
+    } };
+    this.emit('credentials', []);
   });
   class Authflow {
     async getXboxToken() {}
@@ -285,15 +302,32 @@ test('packaged SDK sends the NetherNet offer first and reports the host close co
     createClient: options => { client = createClient(options); return client; },
     pickOwnerWorld
   });
-  assert.equal(sent[0]?.type, SignalType.ConnectRequest, JSON.stringify(snapshots));
+  assert.equal(sent[0]?.method, 'Signaling_SendClientMessage_v1_0', JSON.stringify(snapshots));
+  assert.equal(sent[0].params.toPlayerId, hostPlayerId);
+  const offer = parseJson(sent[0].params.message).params;
+  assert.equal(offer.netherNetId, String(client.connection.nethernet.networkId));
+  assert.match(offer.message, /^CONNECTREQUEST /);
   assert.ok(snapshots.some(event => event.step === 'offer_sent'));
-  assert.match(sent[0].data, /^a=candidate:.*127\.0\.0\.1/m);
+  assert.match(offer.message, /^a=candidate:.*127\.0\.0\.1/m);
   assert.equal(client.connection.nethernet.responseTimeoutMs, 25000);
   assert.equal(client.connection.nethernet.inactivityTimeoutMs, 12000);
   assert.deepEqual(snapshots.at(-1), {
     phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37
   });
   assert.equal(close.mock.callCount(), 1);
+});
+
+test('signalling keeps legacy numeric destinations and existing Realm UUID routes', () => {
+  const { encodeSignal, parseJson, parseJsonRpcReceiveItem } = require('bedrock-protocol/src/nethernet/signallingCodec');
+  const { SignalStructure } = require('nethernet');
+  const nethernetId = '18446744073709551610';
+  const realmId = '1e95d572-0f41-481e-44c9-a47d46d4fc70';
+  const signal = SignalStructure.fromString('CONNECTREQUEST 12 fixture');
+  signal.networkId = nethernetId;
+  assert.match(encodeSignal(signal, 42n, 'legacy', 'request', 'message'), new RegExp(`"To":${nethernetId}`));
+  signal.networkId = realmId;
+  assert.equal(parseJson(encodeSignal(signal, 42n, 'jsonrpc', 'request', 'message')).params.toPlayerId, realmId);
+  assert.equal(parseJsonRpcReceiveItem({ From: realmId, Message: 'CONNECTRESPONSE 12 fixture' }).networkId, realmId);
 });
 
 
