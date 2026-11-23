@@ -21,3 +21,10 @@ This PR changes the actual Bedrock player input writer. It is still an EXPERIMEN
 5. Keep stacked PR draft; do not merge into stable or request a new APK install for this engineering step.
 
 This is a bounded movement diagnostic, not autonomous gameplay.
+## Pinned schema checks and tick safety
+
+- PrismarineJS minecraft-data Bedrock 1.26.60 maps InputData ordinal 10 to **up**; unlike generic gamepad flags this is version-specific.
+- The movement authority field is delivered via the distinct **set_movement_authority** packet, not necessarily StartGame. The live bridge handles both explicit authority updates and StartGame if present; it stops a running diagnostic when authority changes.
+- Initial orientation is parsed from StartGame rotation, and correction packet orientation is observed.
+- PlayerAuthInput tick counters now stay strictly increasing across multiple diagnostic commands (including their neutral frames); only a fresh StartGame/dimension change resets the counter. Correction ticks are reconciled upward.
+- It is still not proven that the host accepts these inputs, that server tick pacing is correct or that an observed position delta was caused by the bot.
