@@ -24,9 +24,11 @@ test('manual control preempts follow then resumes after release', () => {
   nav.request('follow', one, { ttlMs: 500 }, 1000);
   nav.request('manual', two, { ttlMs: 200 }, 1000);
   assert.equal(nav.selected(1100).kind, 'move');
-  assert.equal(nav.selected(1100).kind === 'move' ? nav.selected(1100).owner : '', 'manual');
+  const manualDecision = nav.selected(1100);
+  assert.equal(manualDecision.kind === 'move' ? manualDecision.owner : '', 'manual');
   nav.release('manual');
-  assert.equal(nav.selected(1100).kind === 'move' ? nav.selected(1100).owner : '', 'follow');
+  const followDecision = nav.selected(1100);
+  assert.equal(followDecision.kind === 'move' ? followDecision.owner : '', 'follow');
 });
 test('emergency stop is sticky until explicitly cleared', () => {
   const nav = new NavigationAuthority();
