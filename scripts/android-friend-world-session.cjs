@@ -8,6 +8,8 @@ const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
 const { accountWriter, runtimeLogger, verifyXbox } = require('./xbox-auth-probe.cjs');
 const { BotAwareness } = require('./bot-awareness.mjs');
+const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
+const { ExperimentalPlayerInput } = require('./bedrock-player-input.cjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -73,8 +75,15 @@ function bedrockDisconnectCode(reason) {
   if (match) return Number(match[0]);
 }
 
-async function observeSession(client, publish, signal, getStage, timeoutMs = ATTEMPT_TIMEOUT_MS) {
+async function observeSession(client, publish, signal, getStage, timeoutMs = ATTEMPT_TIMEOUT_MS, gameplayOptions = null) {
   const awareness = new BotAwareness();
+  // The gameplay bridge observes and commands the SAME authenticated world client.
+  // Default remains off for existing join checks and fixture clients.
+  const gameplay = gameplayOptions ? new BedrockGameplayBridge(client, {
+    commandPath: gameplayOptions.commandPath,
+    receiptPath: gameplayOptions.receiptPath,
+    movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true)
+  }).start() : null;
   let startGame = false;
   let spawn = false;
   let chunks = 0;
@@ -89,6 +98,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       finished = true;
       clearTimeout(timeout);
       clearInterval(heartbeat);
+      gameplay?.stop();
       signal.removeEventListener('abort', stop);
       client.removeListener('close', closed);
       client.removeListener('start_game', onStartGame);
@@ -113,7 +123,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       if (joinedAt !== undefined) {
         const vitals = awareness.snapshot();
         publish({ phase: 'spawned', chunks, seconds: Math.floor((performance.now() - joinedAt) / 1000),
-          ...(vitals ? { vitals } : {}) });
+          ...(vitals ? { vitals } : {}),
+          ...(gameplay ? { gameplay: gameplay.snapshot() } : {}) });
       }
     };
     const checkSpawn = () => {
@@ -165,7 +176,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   return result;
 }
 
-async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld, saveAccount }) {
+async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld, saveAccount, gameplayOptions }) {
   let stage = 'owner';
   let retried = false;
   try {
@@ -207,7 +218,7 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
         }
       });
       client.viewDistance = 4;
-      return observeSession(client, publish, signal, () => stage, timeoutMs);
+      return observeSession(client, publish, signal, () => stage, timeoutMs, gameplayOptions);
     }
     let result = await attempt(ATTEMPT_TIMEOUT_MS);
     signal.throwIfAborted();
@@ -267,7 +278,12 @@ if (require.main === module) {
       authDependencies: { Authflow, Titles, XboxClient, refreshToken },
       saveAccount,
       createClient,
-      pickOwnerWorld
+      pickOwnerWorld,
+      gameplayOptions: {
+        commandPath: path.join(__dirname, 'gameplay-command.json'),
+        receiptPath: path.join(__dirname, 'gameplay-receipt.json'),
+        experimentalMovement: config.experimentalMovement === true
+      }
     });
   })().catch(() => publish({ phase: 'failed', stage: 'runtime' }))
     .finally(() => clearInterval(stop));
