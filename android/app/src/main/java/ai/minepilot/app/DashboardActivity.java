@@ -45,6 +45,7 @@ public final class DashboardActivity extends Activity {
     private Button markHome;
     private Button planCollect;
     private Button inspectUpdatedBlocks;
+    private Button planFood;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -513,6 +514,10 @@ public final class DashboardActivity extends Activity {
                 () -> requestGameplay("inspect_block", false));
         inspectUpdatedBlocks.setVisibility(View.GONE);
         body.addView(inspectUpdatedBlocks, panelLayout(8));
+        planFood = actionButton("Plan food from observed inventory", false,
+                () -> requestGameplay("plan_food", false));
+        planFood.setVisibility(View.GONE);
+        body.addView(planFood, panelLayout(8));
 
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
@@ -560,7 +565,8 @@ public final class DashboardActivity extends Activity {
         skillCard("Follow a player", "Planned", AMBER, "Track a selected player and maintain a follow distance.");
         skillCard("Resource observations", "Experimental", AMBER,
                 "Read item registry, nearby drops and block updates; gathering remains planning-only.");
-        skillCard("Survival and inventory", "Planned", AMBER, "Respond to low health, eat available food, and manage items.");
+        skillCard("Survival priorities", "Experimental", AMBER,
+                "Pause plans on critical vitals and suggest observed food; no automatic eating or combat.");
         skillCard("Gather and build", "Planned", AMBER, "Collect materials and carry out building tasks.");
     }
 
@@ -653,6 +659,11 @@ public final class DashboardActivity extends Activity {
         int resourceRequested = current.getInt("resource_requested", 0);
         int resourceObserved = current.getInt("resource_observed", 0);
         String resourceDistance = current.getString("resource_distance", "");
+        String survivalLevel = current.getString("survival_level", "unknown");
+        String survivalReason = current.getString("survival_reason", "");
+        String survivalTask = current.getString("survival_task_status", "");
+        String survivalFoods = current.getString("survival_foods", "");
+        String survivalFoodPlan = current.getString("survival_food_plan", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -661,6 +672,11 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + "\nSurvival observation: " + survivalLevel
+                        + (survivalReason.isEmpty() ? "" : " · " + survivalReason)
+                        + (survivalTask.isEmpty() ? "" : "\nTask safety: " + survivalTask)
+                        + (survivalFoods.isEmpty() ? "" : "\nObserved food: " + survivalFoods)
+                        + (survivalFoodPlan.isEmpty() ? "" : "\nFood plan (not used): " + survivalFoodPlan)
                         + "\nDrop actors: " + current.getInt("resource_drops")
                         + " · Recent block updates: " + current.getInt("resource_blocks")
                         + " · Registered item types: " + current.getInt("resource_items")
@@ -692,6 +708,7 @@ public final class DashboardActivity extends Activity {
                 ? View.VISIBLE : View.GONE);
         planCollect.setVisibility(playing ? View.VISIBLE : View.GONE);
         inspectUpdatedBlocks.setVisibility(playing ? View.VISIBLE : View.GONE);
+        planFood.setVisibility(playing ? View.VISIBLE : View.GONE);
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
