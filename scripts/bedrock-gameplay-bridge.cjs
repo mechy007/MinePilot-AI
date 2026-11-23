@@ -91,7 +91,9 @@ class BedrockGameplayBridge {
     this.position = safePoint(packet.player_position);
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
-    this.movementAuthority = Number.isInteger(packet.movement_authority) ? packet.movement_authority : null;
+    const authority = packet.movement_authority;
+    this.movementAuthority = Number.isInteger(authority) ? authority :
+      ({ client: 0, server: 1, server_with_rewind: 2 })[authority] ?? null;
     this.serverTick = validTick(packet.current_tick);
     this.players.clear();
     this.receivedChunks.clear();
