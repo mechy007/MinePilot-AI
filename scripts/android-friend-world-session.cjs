@@ -10,6 +10,9 @@ const { accountWriter, runtimeLogger, verifyXbox } = require('./xbox-auth-probe.
 const { BotAwareness } = require('./bot-awareness.mjs');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { ExperimentalPlayerInput } = require('./bedrock-player-input.cjs');
+const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
+const { createVanillaRuntimeRegistry } = require('./bedrock-runtime-registry.cjs');
+const { planLocalRoute } = require('./bedrock-local-path.cjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -95,7 +98,10 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     layerSix: gameplayOptions.layerSixFactory?.() ?? null,
     layerSeven: gameplayOptions.layerSevenFactory?.() ?? null,
     layerEight: gameplayOptions.layerEightFactory?.() ?? null,
-    addonNavigation: gameplayOptions.addonNavigationFactory?.() ?? null
+    addonNavigation: gameplayOptions.addonNavigationFactory?.() ?? null,
+    terrain: new BedrockTerrainCache(),
+    registryResolver: createVanillaRuntimeRegistry,
+    routePlanner: planLocalRoute
   }).start() : null;
   let startGame = false;
   let spawn = false;
