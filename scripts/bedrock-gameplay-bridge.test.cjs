@@ -398,3 +398,63 @@ test('pinned Bedrock SDK serializes break intent fixtures without executing them
     assert.ok(Buffer.isBuffer(encoded) && encoded.length > 10);
   }
 });
+
+
+test('Layer 4 interrupts existing follow plan on low air and only suggests food from verified inventory', async () => {
+  const { LayerOneController } = await import('./gameplay/layer-one.js');
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
+  const client = new Client();
+  let stops = 0;
+  const bridge = new BedrockGameplayBridge(client, {
+    layerOne: new LayerOneController(), layerTwo: new LayerTwoPlanner(),
+    layerThree: new LayerThreePlanner(), layerFour: new LayerFourSupervisor(),
+    movement: { capability: () => 'unavailable', stop: () => { stops++; } }
+  }).start();
+  initialized(client, bridge);
+  client.emit('add_player', {
+    runtime_entity_id: 456n, username: 'Friend',
+    position: { x: 20, y: 64, z: 10.5 }
+  });
+  const cmd = (id, action, rest = {}) => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: id, action, ...rest
+  });
+  assert.equal(cmd('follow', 'plan_follow', { playerName: 'Friend' }).status, 'accepted');
+  client.emit('item_registry', { itemstates: [
+    { runtime_id: 11, name: 'minecraft:bread' },
+    { runtime_id: 12, name: 'minecraft:stone' }
+  ] });
+  client.emit('inventory_content', { window_id: 'inventory', input: [
+    { network_id: 11, count: 3 }, { network_id: 12, count: 64 }
+  ] });
+  client.emit('set_time', { time: 14000 });
+  client.emit('update_attributes', { runtime_entity_id: 999n,
+    attributes: [{ name: 'minecraft:player.air_supply', current: 0 }] });
+  assert.equal(bridge.snapshot().layerFour.level, 'caution', 'night advisory may be present');
+  assert.equal(bridge.snapshot().layerFour.taskStatus, 'running', 'other entities cannot interrupt bot');
+  client.emit('update_attributes', { runtime_entity_id: 123n,
+    attributes: [
+      { name: 'minecraft:health', current: 20 },
+      { name: 'minecraft:player.hunger', current: 4 },
+      { name: 'minecraft:player.air_supply', current: 2 }
+    ] });
+  assert.equal(bridge.snapshot().layerFour.level, 'critical');
+  assert.equal(bridge.snapshot().layerFour.reason, 'low_air_supply');
+  assert.equal(cmd('air-probe', 'probe_step', { confirmed: true, direction: 'forward' }).reason,
+    'survival_hold');
+  assert.equal(bridge.snapshot().layerFour.taskStatus, 'paused');
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'paused_by_safety');
+  assert.ok(stops >= 2);
+  assert.equal(cmd('food', 'plan_food').reason, 'food_use_requires_verified_item_interaction');
+  assert.equal(bridge.snapshot().layerFour.foodPlan.item, 'minecraft:bread');
+  assert.equal(bridge.snapshot().layerFour.foodPlan.status, 'planned_not_executed');
+  assert.equal(bridge.snapshot().layerFour.executed, false);
+  client.emit('update_attributes', { runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:player.air_supply', current: 20 }] });
+  assert.equal(bridge.snapshot().layerFour.taskStatus, 'ready_to_replan');
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'route_unverified');
+  assert.equal(client.sent.length, 0, 'no eating, mining or movement packet was emitted');
+  bridge.stop();
+  assert.equal(client.listenerCount('set_time'), 0);
+});
