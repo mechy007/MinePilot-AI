@@ -6,7 +6,7 @@
  * This stage does not guess IDs from a block name or a chunk header.
  */
 let cached = null;
-function createVanillaRuntimeRegistry(startGame, loadMinecraftData = require('minecraft-data')) {
+function createVanillaRuntimeRegistry(startGame, loadMinecraftData = null) {
   const engine = startGame?.engine;
   if (typeof engine === 'string' && engine.length &&
       !/^1\.26\.60(?:\.|$)/.test(engine)) return null;
@@ -14,7 +14,21 @@ function createVanillaRuntimeRegistry(startGame, loadMinecraftData = require('mi
   if (Array.isArray(custom) && custom.length) return null;
   if (cached) return cached;
   let data;
-  try { data = loadMinecraftData('bedrock_1.26.60'); } catch { return null; }
+  try {
+    if (typeof loadMinecraftData === 'function') {
+      // Test-only injection permits malformed/foreign registry fixtures.
+      data=loadMinecraftData('bedrock_1.26.60');
+    } else {
+      // This pinned JSON is extracted from minecraft-data's 1.26.60
+      // Bedrock blocks.json. Runtime NPM version aliases can differ, so
+      // resolve state ranges from the bundled artifact deterministically.
+      const pinned=require('./bedrock-vanilla-12660-states.json');
+      if(pinned.protocol!=='1.26.60' || !Array.isArray(pinned.blocks))return null;
+      data={blocks:pinned.blocks.map(([minStateId,maxStateId,name,boundingBox])=>({
+        minStateId,maxStateId,name,boundingBox
+      }))};
+    }
+  } catch { return null; }
   if (!data || !Array.isArray(data.blocks)) return null;
   const map = new Map();
   // Bedrock block palette has many states per block; minecraft-data enumerates
