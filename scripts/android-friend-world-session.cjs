@@ -7,6 +7,7 @@ const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
 const { accountWriter, runtimeLogger, verifyXbox } = require('./xbox-auth-probe.cjs');
+const { BotAwareness } = require('./bot-awareness.mjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -73,6 +74,7 @@ function bedrockDisconnectCode(reason) {
 }
 
 async function observeSession(client, publish, signal, getStage, timeoutMs = ATTEMPT_TIMEOUT_MS) {
+  const awareness = new BotAwareness();
   let startGame = false;
   let spawn = false;
   let chunks = 0;
@@ -90,6 +92,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       signal.removeEventListener('abort', stop);
       client.removeListener('close', closed);
       client.removeListener('start_game', onStartGame);
+      client.removeListener('update_attributes', onAttributes);
       client.removeListener('spawn', onSpawn);
       client.removeListener('level_chunk', onChunk);
       client.removeListener('minepilot_join_step', onStep);
@@ -108,7 +111,9 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     const closed = () => finish(joinedAt === undefined ? 'failed' : 'disconnected');
     const report = () => {
       if (joinedAt !== undefined) {
-        publish({ phase: 'spawned', chunks, seconds: Math.floor((performance.now() - joinedAt) / 1000) });
+        const vitals = awareness.snapshot();
+        publish({ phase: 'spawned', chunks, seconds: Math.floor((performance.now() - joinedAt) / 1000),
+          ...(vitals ? { vitals } : {}) });
       }
     };
     const checkSpawn = () => {
@@ -118,7 +123,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       report();
       heartbeat = setInterval(report, 1000);
     };
-    const onStartGame = () => { startGame = true; checkSpawn(); };
+    const onStartGame = packet => { awareness.start(packet); startGame = true; checkSpawn(); };
+    const onAttributes = packet => awareness.update(packet);
     const onSpawn = () => { spawn = true; checkSpawn(); };
     const onChunk = () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); };
     const onStep = step => {
@@ -145,6 +151,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     client.once('join', onJoin);
     client.once('kick', onKick);
     client.once('start_game', onStartGame);
+    client.on('update_attributes', onAttributes);
     client.once('spawn', onSpawn);
     client.on('level_chunk', onChunk);
     client.once('close', closed);
