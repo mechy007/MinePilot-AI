@@ -69,7 +69,7 @@ test('server block updates near plan are recorded but not counted as bot placeme
   assert.equal(p.observeBlockUpdate({ position: { x: 8, y: 64, z: 9 }, layer: 0 }, 0), true);
   assert.equal(p.observeBlockUpdate({ position: { x: 8, y: 64, z: 9 }, layer: 0 }, 0), true);
   assert.equal(p.observeBlockUpdate({ position: { x: 8, y: 64, z: 9 }, layer: 0 }, 1), false);
-  assert.equal(p.observeBlockUpdate({ position: { x: 9, y: 64, z: 11 }, layer: 0 }, 0), false);
+  assert.equal(p.observeBlockUpdate({ position: { x: 8, y: 64, z: 11 }, layer: 0 }, 0), false);
   assert.equal(p.snapshot(w).observedNearbyBlockUpdates, 1);
   assert.equal(p.snapshot(w).executed, false);
 });
