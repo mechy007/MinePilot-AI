@@ -258,13 +258,17 @@ class BedrockGameplayBridge {
       return this.layerTwo?.markHome(this.gameplayWorld())
         ?? { status: 'rejected', reason: 'layer_two_unavailable' };
     }
-    if (raw.action === 'plan_follow') {
-      return this.layerTwo?.follow(raw.playerName, this.gameplayWorld())
-        ?? { status: 'rejected', reason: 'layer_two_unavailable' };
-    }
-    if (raw.action === 'plan_return') {
-      return this.layerTwo?.returnHome(this.gameplayWorld())
-        ?? { status: 'rejected', reason: 'layer_two_unavailable' };
+    if (raw.action === 'plan_follow' || raw.action === 'plan_return') {
+      const result = raw.action === 'plan_follow'
+        ? this.layerTwo?.follow(raw.playerName, this.gameplayWorld())
+        : this.layerTwo?.returnHome(this.gameplayWorld());
+      if (!result) return { status: 'rejected', reason: 'layer_two_unavailable' };
+      if (result.status === 'accepted') {
+        // A new plan replaces Stay, but never automatically emits a movement packet.
+        this.movement?.stop?.();
+        this.layerOne?.stop('new_navigation_plan');
+      }
+      return result;
     }
     if (raw.action === 'stay') {
       if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
