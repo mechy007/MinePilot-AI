@@ -152,6 +152,62 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
   assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'xbox_membership', httpStatus: 403 });
 });
 
+test('packaged SDK sends the NetherNet offer first and reports the host close code', { timeout: 10000 }, async context => {
+  const os = require('node:os');
+  const { createClient } = require('bedrock-protocol');
+  const { NethernetSignal } = require('bedrock-protocol/src/nethernet/signalling');
+  const { Titles } = require('prismarine-auth');
+  const { XboxClient } = require('prismarine-xbox-services');
+  const { SignalType } = require('nethernet');
+  const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
+  const ownerXuid = '2533274790000002';
+  const botXuid = '2533274790000001';
+  const hostNetworkId = '18446744073709551610';
+  context.mock.method(os, 'networkInterfaces', () => ({
+    fixture: [{ address: '127.0.0.1', family: 'IPv4', internal: false }]
+  }));
+  context.mock.method(XboxClient.prototype, 'getProfile', async () => ({ xuid: botXuid, gamertag: 'FixtureBot' }));
+  context.mock.method(XboxClient.prototype, 'getActivityHandles', async () => [
+    { sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225 } }
+  ]);
+  const membership = new EventEmitter();
+  membership.current = { properties: { custom: { SupportedConnections: [{ NetherNetId: hostNetworkId }] } } };
+  const close = context.mock.fn();
+  membership.close = close;
+  context.mock.method(XboxClient.prototype, 'joinSession', async () => membership);
+  context.mock.method(NethernetSignal.prototype, 'connect', async function () { this.emit('credentials', []); });
+  const sent = [];
+  context.mock.method(NethernetSignal.prototype, 'write', function (offer) {
+    sent.push(offer);
+    if (offer.type !== SignalType.ConnectRequest) return;
+    this.emit('signal', {
+      type: SignalType.ConnectError, connectionId: offer.connectionId, networkId: hostNetworkId, data: '37'
+    });
+  });
+  class Authflow {
+    async getXboxToken() {}
+    async getMinecraftBedrockToken() {
+      const payload = Buffer.from(JSON.stringify({ extraData: { XUID: botXuid } })).toString('base64url');
+      return { chain: ['fixture', 'header.' + payload + '.signature'], token: 'fixture' };
+    }
+  }
+  const snapshots = [];
+  await run({
+    ownerXuid,
+    publish: snapshot => snapshots.push(snapshot),
+    signal: AbortSignal.timeout(5000),
+    authDependencies: { Authflow, XboxClient, Titles },
+    createClient,
+    pickOwnerWorld
+  });
+  assert.equal(sent[0]?.type, SignalType.ConnectRequest, JSON.stringify(snapshots));
+  assert.match(sent[0].data, /^a=candidate:.*127\.0\.0\.1/m);
+  assert.deepEqual(snapshots.at(-1), {
+    phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37
+  });
+  assert.equal(close.mock.callCount(), 1);
+});
+
 
 test('uses the Android network addresses to gather a Werift ICE candidate when libuv is denied', async context => {
   const os = require('node:os');
