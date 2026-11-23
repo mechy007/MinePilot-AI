@@ -66,6 +66,7 @@ public final class XboxSignInService extends Service {
         if (!joining && !friends) XboxSignInReceiver.record(this, "");
         started = true;
         new Thread(() -> {
+            RuntimeLog.begin(this, joining ? "join_start" : friends ? "friends_start" : "sign_in_start");
             Path directory = null;
             android.os.ParcelFileDescriptor[] savePipe = null;
             Thread accountWriter = null;
@@ -85,7 +86,9 @@ public final class XboxSignInService extends Service {
                 accountWriter = new Thread(() -> readAndSaveAccount(accountSink), "minepilot-save-account");
                 accountWriter.start();
                 int exitCode;
-                JSONObject sessionConfig = new JSONObject().put("saveFd", savePipe[1].getFd());
+                JSONObject sessionConfig = new JSONObject().put("saveFd", savePipe[1].getFd())
+                        .put("logFile", RuntimeLog.file(this).toString());
+                RuntimeLog.record(this, "runtime_ready");
                 if (joining || friends) {
                     if (friends) {
                         String owner = BotAccount.xuid(this);
@@ -114,6 +117,11 @@ public final class XboxSignInService extends Service {
                 savePipe[1].close();
                 accountWriter.join(5000);
                 JSONObject last = readStatus();
+                if (last == null || (exitCode != 0 && !"failed".equals(last.optString("phase")))) {
+                    RuntimeLog.record(this, "runtime_failed");
+                } else if (!joining && !friends && "account_sent".equals(last.optString("phase"))) {
+                    RuntimeLog.record(this, accountReadBack ? "account_saved" : "account_failed");
+                }
                 if (friends && exitCode == 0 && last != null && "friends_loaded".equals(last.optString("phase"))) {
                     last.put("updatedAt", System.currentTimeMillis());
                     XboxSignInReceiver.recordFriends(this, last);
@@ -124,8 +132,10 @@ public final class XboxSignInService extends Service {
                         ? "FAIL. The sign-in runtime exited with code " + exitCode + "."
                         : finalMessage(last, exitCode);
             } catch (IOException | JSONException | UnsatisfiedLinkError | SecurityException failure) {
+                RuntimeLog.record(this, "runtime_failed");
                 completedMessage = "FAIL. The Android sign-in runtime could not start.";
             } catch (InterruptedException interrupted) {
+                RuntimeLog.record(this, "runtime_interrupted");
                 Thread.currentThread().interrupt();
                 completedMessage = "Sign-in was interrupted. Try again.";
             } finally {

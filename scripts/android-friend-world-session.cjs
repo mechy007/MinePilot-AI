@@ -6,7 +6,7 @@ const os = require('node:os');
 const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
-const { accountWriter, verifyXbox } = require('./xbox-auth-probe.cjs');
+const { accountWriter, runtimeLogger, verifyXbox } = require('./xbox-auth-probe.cjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -83,6 +83,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       client.removeListener('spawn', onSpawn);
       client.removeListener('level_chunk', onChunk);
       client.removeListener('minepilot_join_step', onStep);
+      client.removeListener('minepilot_join_trace', onTrace);
       client.removeListener('loggingIn', onLogin);
       client.removeListener('join', onJoin);
       client.removeListener('kick', onKick);
@@ -116,10 +117,18 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
         publish({ phase: 'connection', stage: step });
       }
     };
-    const onLogin = () => { connectionStage = 'bedrock_login'; };
-    const onJoin = () => { connectionStage = 'bedrock_spawn'; };
+    const onTrace = step => publish({ phase: 'connection', stage: 'nethernet_peer', step });
+    const onLogin = () => {
+      connectionStage = 'bedrock_login';
+      publish({ phase: 'connection', stage: connectionStage });
+    };
+    const onJoin = () => {
+      connectionStage = 'bedrock_spawn';
+      publish({ phase: 'connection', stage: connectionStage });
+    };
     const onKick = () => finish('failed', { reason: 'host_disconnect' });
     client.on('minepilot_join_step', onStep);
+    client.on('minepilot_join_trace', onTrace);
     client.once('loggingIn', onLogin);
     client.once('join', onJoin);
     client.once('kick', onKick);
@@ -205,15 +214,20 @@ if (require.main === module) {
   require('debug').disable();
   console.info = console.warn = console.error = console.log = () => {};
   const file = path.join(__dirname, 'auth-status.json');
+  let record = () => {};
   const publish = snapshot => {
     writeFileSync(file + '.tmp', JSON.stringify(snapshot), { mode: 0o600 });
     renameSync(file + '.tmp', file);
+    record(snapshot);
   };
   const controller = new AbortController();
   const stop = setInterval(() => {
     if (existsSync(path.join(__dirname, 'stop-session'))) controller.abort();
   }, 250);
   (async () => {
+    const configPath = path.join(__dirname, 'device-session.json');
+    const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
+    record = runtimeLogger(config.logFile);
     const addressFile = path.join(__dirname, 'network-addresses.json');
     if (existsSync(addressFile)) {
       // Werift uses Node's interface enumeration when gathering ICE candidates.
@@ -225,8 +239,6 @@ if (require.main === module) {
     const { XboxClient } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
     const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
-    const configPath = path.join(__dirname, 'device-session.json');
-    const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
