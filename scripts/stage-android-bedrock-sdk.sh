@@ -92,6 +92,70 @@ patch('nethernet/src/client.js', [
   ['new SignalStructure(SignalType.ConnectRequest, this.connectionId, sdp, this.serverNetworkId)\n      )',
     'new SignalStructure(SignalType.ConnectRequest, this.connectionId, sdp, this.serverNetworkId)\n      )\n      offerSent = true']
 ]);
+// Xbox friend-world JSON-RPC addressing has two IDs: PmsgId routes the outer
+// message, and NetherNetId identifies the peer in the inner WebRTC exchange.
+patch('bedrock-protocol/src/client/auth.js', [
+  ['  // Select the connection that advertises a NetherNet id. The ConnectionType value for NetherNet is not stable across\n  // client versions (a live 1.26.51 host advertises 7, this code assumed 3), so match on the NetherNetId itself.\n',
+    ''],
+  ["  const networkId = session.current.properties?.custom?.SupportedConnections?.find(e => e.NetherNetId)?.NetherNetId\n\n  if (!networkId) throw Error('Couldn\\'t find a Nethernet ID to connect to.')\n\n  options.nethernet.networkId = BigInt(networkId)",
+    `  const connections = session.current.properties?.custom?.SupportedConnections
+  const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+  const networkId = (value, acceptsUuid) => {
+    if (typeof value === 'number' && !Number.isSafeInteger(value)) return
+    const text = String(value)
+    if (/^[1-9][0-9]{0,19}$/.test(text) && BigInt(text) <= 18446744073709551615n) return BigInt(text)
+    if (acceptsUuid && uuid.test(text)) return text.toLowerCase()
+  }
+  let legacy
+  for (const connection of Array.isArray(connections) ? connections : []) {
+    if (!connection) continue
+    const type = String(connection.ConnectionType ?? '')
+    if (type === '7') {
+      const { PmsgId: playerId } = connection
+      const id = networkId(connection.NetherNetId, true)
+      if (id && typeof playerId === 'string' && uuid.test(playerId) && playerId !== '00000000-0000-0000-0000-000000000000') {
+        options.nethernet.networkId = id
+        options.nethernet._signallingProtocol = 'jsonrpc'
+        options.nethernet._peerPlayerId = playerId.toLowerCase()
+        return
+      }
+    } else if (type === '3' || type === '') {
+      legacy ??= networkId(connection.NetherNetId ?? connection.WebRTCNetworkId, false)
+    }
+  }
+  if (!legacy) throw Error("Couldn't find a Nethernet ID to connect to.")
+  options.nethernet.networkId = legacy`]
+]);
+patch('bedrock-protocol/src/client.js', [
+  ['{ protocol: this.options.nethernet._signallingProtocol, host: this.options.nethernet._signallingHost, timeout: this.options.nethernet.signallingConnectTimeout }',
+    `{
+            protocol: this.options.nethernet._signallingProtocol,
+            host: this.options.nethernet._signallingHost,
+            timeout: this.options.nethernet.signallingConnectTimeout,
+            peerPlayerId: this.options.nethernet._peerPlayerId
+          }`]
+]);
+patch('bedrock-protocol/src/nethernet/signalling.js', [
+  ['    this.host = options.host || null', '    this.host = options.host || null\n    this.peerPlayerId = options.peerPlayerId'],
+  ['parseJsonRpcReceiveItem(item)', 'parseJsonRpcReceiveItem(item, this.peerPlayerId)'],
+  ['encodeSignal(signal, this.networkId, this._protocol, randomUUID(), randomUUID())',
+    'encodeSignal(signal, this.networkId, this._protocol, randomUUID(), randomUUID(), this.peerPlayerId)']
+]);
+patch('bedrock-protocol/src/nethernet/signallingCodec.js', [
+  ['function parseJsonRpcReceiveItem (item) {', 'function parseJsonRpcReceiveItem (item, peerPlayerId) {'],
+  ['  const networkId = item.From || item.from || item.fromPlayerId || signal.networkId',
+    `  const from = item.From || item.from || item.fromPlayerId
+  if (peerPlayerId) {
+    if (typeof from !== 'string' || from.toLowerCase() !== peerPlayerId) return null
+    // Keep the inner ID so the NetherNet client can validate the peer and connection.
+    if (signal.networkId) signal.networkId = signal.networkId.toLowerCase()
+    return signal
+  }
+  const networkId = from || signal.networkId`],
+  ['function encodeSignal (signal, networkId, protocol, id, messageId) {',
+    'function encodeSignal (signal, networkId, protocol, id, messageId, peerPlayerId) {'],
+  ['toPlayerId: String(signal.networkId)', 'toPlayerId: peerPlayerId ?? String(signal.networkId)']
+]);
 JS
 data_notice="$temp/node_modules/minecraft-data/minecraft-data/README.md"
 curl --fail --location --silent --show-error --retry 2 --max-time 45 \
