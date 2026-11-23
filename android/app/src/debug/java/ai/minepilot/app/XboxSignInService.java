@@ -303,7 +303,10 @@ public final class XboxSignInService extends Service {
                 return "Xbox friends could not be refreshed" + (friendsStatus >= 400 && friendsStatus <= 599
                         ? " (HTTP " + friendsStatus + ")." : ".");
             case "owner": return "Could not identify a separate host. Check your friend’s gamertag or XUID.";
-            case "discovery": return "The selected owner’s compatible world could not be found on Xbox.";
+            case "discovery":
+                return snapshot.optBoolean("retried")
+                        ? "The automatic retry could not find your friend’s world on Xbox."
+                        : "The selected owner’s compatible world could not be found on Xbox.";
             case "connection":
             case "xbox_membership":
             case "world_transport":
@@ -343,7 +346,8 @@ public final class XboxSignInService extends Service {
                 String http = connectionStatus >= 400 && connectionStatus <= 599
                         ? " (HTTP " + connectionStatus + ")" : "";
                 return "World found. Failed during " + connectionStep + http + "."
-                        + (connectionReason.isEmpty() ? "" : " " + connectionReason);
+                        + (connectionReason.isEmpty() ? "" : " " + connectionReason)
+                        + (snapshot.optBoolean("retried") ? " One automatic retry was attempted." : "");
             case "runtime": return "The embedded friend-world runtime could not start.";
             default: break;
         }
