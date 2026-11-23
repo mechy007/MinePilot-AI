@@ -138,7 +138,7 @@ class BedrockGameplayBridge {
       if (!uuid || uuid.length > 64) continue;
       if (removal) { this.playerNames.delete(uuid); continue; }
       const name = p.username;
-      if (typeof name !== 'string' || !/^[a-zA-Z0-9_ -]{1,24}$/.test(name)) continue;
+      if (typeof name !== 'string' || !/^[a-zA-Z0-9_ #.-]{1,32}$/.test(name)) continue;
       if (this.playerNames.size >= MAX_VISIBLE_PLAYERS && !this.playerNames.has(uuid)) continue;
       this.playerNames.set(uuid, name);
     }
