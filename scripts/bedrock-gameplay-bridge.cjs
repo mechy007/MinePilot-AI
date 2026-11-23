@@ -11,7 +11,7 @@ const { randomUUID } = require('node:crypto');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -88,6 +88,7 @@ class BedrockGameplayBridge {
     if (this.closed || this.watch || this.listeners.length) throw new Error('Bridge already used');
     this.bind('start_game', p => this.startGame(p));
     this.bind('spawn', () => { this.spawned = true; });
+    this.bind('set_movement_authority', p => this.authorityChange(p));
     this.bind('level_chunk', p => this.chunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
@@ -126,6 +127,10 @@ class BedrockGameplayBridge {
     if (!packet || typeof packet !== 'object') return;
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
     this.position = safePoint(packet.player_position);
+    const startRotation = packet.rotation;
+    this.pitch = Number.isFinite(startRotation?.x) ? startRotation.x : null;
+    this.yaw = Number.isFinite(startRotation?.z) ? startRotation.z :
+      Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
     const authority = packet.movement_authority;
@@ -136,7 +141,8 @@ class BedrockGameplayBridge {
     this.receivedChunks.clear();
     this.lastWorldAt = this.clock();
     this.spawned = false;
-    this.movement?.stop();
+    if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
+    else this.movement?.stop();
     this.layerOne?.reset();
     this.layerTwo?.reset();
     this.layerThree?.reset();
@@ -147,6 +153,18 @@ class BedrockGameplayBridge {
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
+  }
+  authorityChange(packet) {
+    if (this.closed) return;
+    const authority = packet?.movement_authority;
+    const next = Number.isInteger(authority) && authority >= 0 && authority <= 2 ? authority :
+      ({ client: 0, server: 1, server_with_rewind: 2 })[authority] ?? null;
+    if (next === null) return;
+    if (this.movementAuthority !== next) {
+      // Changing movement prediction authority invalidates the active writer.
+      this.movement?.stop?.('movement_authority_changed', { silent: true });
+      this.movementAuthority = next;
+    }
   }
   attributes(packet) {
     const id = ident(packet?.runtime_entity_id ?? packet?.runtime_id);
@@ -242,6 +260,7 @@ class BedrockGameplayBridge {
       this.position = pos;
       this.lastServerPositionAt = this.clock();
       this.layerOne?.onServerPosition(pos);
+      this.movement?.observeServerPosition?.(pos, this.clock());
       if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
       if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
     } else if (this.players.has(id)) {
@@ -258,6 +277,8 @@ class BedrockGameplayBridge {
     this.position = pos;
     this.lastServerPositionAt = this.clock();
     this.corrections++;
+    if (Number.isFinite(packet.rotation?.x)) this.pitch = packet.rotation.x;
+    if (Number.isFinite(packet.rotation?.z)) this.yaw = packet.rotation.z;
     this.layerOne?.onServerPosition(pos);
     const tick = validTick(packet.tick);
     if (tick !== null && (this.serverTick == null || tick > this.serverTick)) this.serverTick = tick;
@@ -292,7 +313,8 @@ class BedrockGameplayBridge {
     this.serverTick = null;
     this.receivedChunks.clear();
     this.players.clear();
-    this.movement?.stop();
+    if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
+    else this.movement?.stop();
     this.layerOne?.reset();
     this.layerTwo?.dimensionChanged();
     this.layerThree?.dimensionChanged();
@@ -318,6 +340,7 @@ class BedrockGameplayBridge {
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
       movement: this.movement?.capability?.(this) ?? 'unavailable',
+      ...(this.movement?.snapshot ? { motionDiagnostic: this.movement.snapshot() } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
       ...(this.layerTwo ? { layerTwo: this.layerTwo.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerThree ? { layerThree: this.layerThree.snapshot(this.gameplayWorld()) } : {}),
@@ -470,6 +493,30 @@ class BedrockGameplayBridge {
       this.layerSeven?.setMode('off');
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
+    }
+    if (raw.action === 'motion_diagnostic') {
+      if (this.layerOne?.snapshot()?.safetyHold)
+        return { status: 'rejected', reason: 'critical_health' };
+      if (this.layerFour?.critical)
+        return { status: 'rejected', reason: 'survival_hold' };
+      const activeFollow = this.layerTwo?.preview(this.gameplayWorld());
+      if (activeFollow && ['follow', 'return'].includes(activeFollow.goal))
+        return { status: 'rejected', reason: 'planned_navigation_not_executable' };
+      if (this.layerThree && this.layerThree.snapshot(this.gameplayWorld()).route.status !== 'idle')
+        return { status: 'rejected', reason: 'resource_goal_not_executable' };
+      if (this.layerFive && this.layerFive.snapshot(this.gameplayWorld()).kind !== 'none')
+        return { status: 'rejected', reason: 'building_plan_not_executable' };
+      if (this.layerSix && this.layerSix.snapshot(this.gameplayWorld()).kind !== 'none')
+        return { status: 'rejected', reason: 'workflow_not_executable' };
+      if (raw.confirmed !== true)
+        return { status: 'rejected', reason: 'confirmation_required' };
+      if (this.layerEight && !this.layerEight.allowPreview(this.readinessInput()).allowed)
+        return { status: 'rejected', reason: 'server_position_stale' };
+      if (!this.movement || this.movement.capability(this) !== 'experimental' ||
+          typeof this.movement.runDiagnostic !== 'function')
+        return { status: 'rejected', reason: 'movement_unavailable' };
+      // Diagnostic only: deliberately no pathfinder, auto-follow, sprint or block actions.
+      return this.movement.runDiagnostic(this, { mode: raw.mode, ticks: raw.ticks });
     }
     if (raw.action === 'probe_step') {
       if (this.layerOne?.snapshot()?.safetyHold)

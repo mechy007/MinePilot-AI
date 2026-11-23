@@ -79,6 +79,17 @@ public final class WorldSessionProvider extends ContentProvider {
                 }
                 result.putInt("nearby_players", gameplay.optInt("visiblePlayers", 0));
                 result.putInt("corrections", gameplay.optInt("correctionCount", 0));
+                JSONObject diagnostic = gameplay.optJSONObject("motionDiagnostic");
+                if (diagnostic != null) {
+                    result.putString("motion_mode", diagnostic.optString("mode", "idle"));
+                    result.putBoolean("motion_active", diagnostic.optBoolean("active", false));
+                    result.putInt("motion_frames", diagnostic.optInt("framesSent", 0));
+                    result.putInt("motion_server_updates", diagnostic.optInt("serverUpdates", 0));
+                    result.putInt("motion_corrections", diagnostic.optInt("corrections", 0));
+                    result.putString("motion_displacement", diagnostic.optString("observedDisplacement", ""));
+                    result.putString("motion_drift", diagnostic.optString("maxDrift", ""));
+                    result.putString("motion_stop_reason", diagnostic.optString("stoppedReason", ""));
+                }
                 JSONObject layer = gameplay.optJSONObject("layerOne");
                 if (layer != null) {
                     JSONObject task = layer.optJSONObject("task");
@@ -264,9 +275,10 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"plan_craft_planks".equals(action) && !"plan_workflow".equals(action) &&
                 !"review_checkpoint".equals(action) && !"advisor_mode".equals(action) &&
                 !"advisor_review".equals(action) &&
-                !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
+                !"stop_movement".equals(action) && !"probe_step".equals(action) &&
+                !"motion_diagnostic".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
-        if ("probe_step".equals(action) && !confirmed) return;
+        if (("probe_step".equals(action) || "motion_diagnostic".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
         Path temporary = directory.resolve("gameplay-command-" + requestId + ".tmp");
@@ -314,6 +326,14 @@ public final class WorldSessionProvider extends ContentProvider {
                 String mode = extras.getString("item_name", "");
                 if (!"suggestions".equals(mode) && !"off".equals(mode)) return;
                 command.put("mode", mode);
+            }
+            if ("motion_diagnostic".equals(action)) {
+                String mode = extras.getString("motion_mode", "");
+                int ticks = extras.getInt("motion_ticks", -1);
+                if (!"forward".equals(mode) && !"turn_left".equals(mode) &&
+                    !"turn_right".equals(mode)) return;
+                if (ticks < 1 || ticks > 20) return;
+                command.put("confirmed", true).put("mode", mode).put("ticks", ticks);
             }
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
