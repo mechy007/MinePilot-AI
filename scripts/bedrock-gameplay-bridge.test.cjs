@@ -623,3 +623,119 @@ test('Layer 8 enforces fresh world observations and never claims beta or autonom
   bridge.stop();
   assert.equal(bridge.snapshot().layerEight.stage,'disconnected');
 });
+
+
+test('motion diagnostic uses bounded 20 Hz frame sequence and one neutral stop', () => {
+  const client = new Client();
+  let now=1000, pulse;
+  const movement = new ExperimentalPlayerInput(client, true, {
+    clock: () => now, setInterval: callback => { pulse=callback; return 123; },
+    clearInterval: () => {}
+  });
+  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
+  initialized(client, bridge);
+  const cmd = (requestId, extra={}) => bridge.execute({
+    version:'minepilot.gameplay.v1', requestId, action:'motion_diagnostic', ...extra
+  });
+  assert.equal(cmd('without-confirm',{ mode:'forward',ticks:6 }).reason,'confirmation_required');
+  assert.equal(cmd('bad-frames',{ mode:'forward',ticks:21,confirmed:true }).reason,'unsupported_diagnostic');
+  assert.equal(cmd('start',{ mode:'forward',ticks:6,confirmed:true }).status,'accepted');
+  assert.equal(cmd('busy',{ mode:'forward',ticks:6,confirmed:true }).reason,'movement_busy');
+  for(let i=0;i<6;i++){ now+=50;pulse(); }
+  assert.equal(movement.snapshot().framesSent,6);
+  assert.equal(client.sent.length,6);
+  now+=50;pulse();
+  assert.equal(client.sent.length,7,'one neutral end frame');
+  assert.equal(client.sent.at(-1).value.raw_move_vector.z,0);
+  assert.equal(movement.snapshot().active,false);
+  assert.equal(movement.snapshot().stoppedReason,'bounded_sequence_complete');
+  assert.ok(client.sent.every(x=>x.packet==='player_auth_input'));
+  assert.ok(client.sent.every((x,i)=>i===0||x.value.tick>client.sent[i-1].value.tick));
+  assert.equal(movement.snapshot().movementVerified,false);
+  bridge.stop();
+});
+
+test('turn diagnostics change yaw without claiming movement and are serializer-compatible', () => {
+  const client = new Client();
+  let now=2000, pulse;
+  const movement = new ExperimentalPlayerInput(client,true,{
+    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
+  });
+  const bridge = new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  for(const [mode,sign] of [['turn_left',-1],['turn_right',1]]) {
+    const result=bridge.execute({version:'minepilot.gameplay.v1',
+      requestId:mode,action:'motion_diagnostic',mode,ticks:2,confirmed:true});
+    assert.equal(result.status,'accepted');
+    now+=50;pulse();
+    const first=client.sent.at(-1).value;
+    assert.equal(first.raw_move_vector.z,0);
+    assert.deepEqual(first.position,origin);
+    assert.equal(first.yaw,sign===-1?355:5);
+    now+=50;pulse();
+    movement.stop();
+  }
+  const {createSerializer}=require('bedrock-protocol/src/transforms/serializer');
+  const serializer=createSerializer('1.26.60');
+  for(const frame of client.sent) {
+    const encoded=serializer.createPacketBuffer({name:'player_auth_input',params:frame.value});
+    assert.ok(encoded.length>10);
+  }
+  bridge.stop();
+});
+
+test('server correction input can halt excessive prediction drift and reset on disconnect', () => {
+  const client = new Client();
+  let now=1000,pulse;
+  const movement = new ExperimentalPlayerInput(client,true,{
+    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
+  });
+  const bridge = new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'start',
+    action:'motion_diagnostic',mode:'forward',ticks:20,confirmed:true}).status,'accepted');
+  now+=50;pulse();
+  client.emit('correct_player_move_prediction',{position:{x:100,y:64,z:100},tick:104n});
+  assert.equal(movement.snapshot().corrections,1);
+  now+=50;pulse();
+  client.emit('correct_player_move_prediction',{position:{x:200,y:64,z:200},tick:110n});
+  assert.equal(movement.snapshot().stoppedReason,'prediction_diverged');
+  assert.equal(movement.snapshot().active,false);
+  assert.equal(movement.snapshot().movementVerified,false);
+  assert.ok(client.sent.length<=4);
+  bridge.stop();
+  assert.equal(client.listenerCount('correct_player_move_prediction'),0);
+});
+
+test('normal Stop and critical survival continue to override experimental diagnostics', () => {
+  const client=new Client();
+  let pulse,now=1000;
+  const movement=new ExperimentalPlayerInput(client,true,{
+    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  const cmd=(id,action,more={})=>bridge.execute({
+    version:'minepilot.gameplay.v1',requestId:id,action,...more
+  });
+  assert.equal(cmd('one','motion_diagnostic',{confirmed:true,mode:'forward',ticks:6}).status,'accepted');
+  now+=50;pulse();
+  assert.equal(cmd('stop','stop_movement').status,'ok');
+  assert.equal(movement.snapshot().active,false);
+  assert.equal(client.sent.at(-1).value.input_data.length,0);
+  const count=client.sent.length;
+  now+=50;pulse();
+  assert.equal(client.sent.length,count);
+  bridge.stop();
+});
+
+test('motion diagnostics require opt-in and server-authenticated movement authority', () => {
+  const client=new Client();
+  const movement=new ExperimentalPlayerInput(client,false);
+  const bridge=new BedrockGameplayBridge(client,{movement}).start();
+  initialized(client,bridge);
+  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'x',
+    action:'motion_diagnostic',mode:'forward',ticks:6,confirmed:true}).reason,'movement_unavailable');
+  assert.equal(client.sent.length,0);
+  bridge.stop();
+});
