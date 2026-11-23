@@ -264,3 +264,26 @@ test('Layer 2 equipment, target removal and health override are observational', 
   assert.equal(bridge.snapshot().layerTwo.equipment.known, false);
   bridge.stop();
 });
+
+test('nested Bedrock PlayerRecords add/remove resolves names only for visible entities', async () => {
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
+  initialized(client, bridge);
+  client.emit('player_list', { records: { type: 'add', records: [
+    { uuid: 'fixture-uuid-1', username: 'Friend#1234' }
+  ] } });
+  client.emit('add_player', {
+    runtime_entity_id: 200n, uuid: 'fixture-uuid-1',
+    position: { x: 14, y: 64, z: 11 }
+  });
+  assert.deepEqual(bridge.snapshot().layerTwo.visiblePlayerNames, ['Friend#1234']);
+  assert.equal(bridge.execute({ version: 'minepilot.gameplay.v1', requestId: 'follow1',
+    action: 'plan_follow', playerName: 'Friend#1234' }).status, 'accepted');
+  client.emit('player_list', { records: { type: 'remove', records: [
+    { uuid: 'fixture-uuid-1' }
+  ] } });
+  client.emit('remove_actor', { entity_id: 200n });
+  assert.equal(bridge.snapshot().layerTwo.preview.status, 'waiting_for_target');
+  bridge.stop();
+});
