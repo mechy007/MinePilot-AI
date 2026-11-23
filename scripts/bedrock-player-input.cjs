@@ -134,8 +134,9 @@ class ExperimentalPlayerInput {
     if (!world || !world.spawned || !finite3(world.position) || !world.self ||
       ![1, 2].includes(world.movementAuthority) || typeof world.serverTick !== 'bigint' ||
       world.receivedChunks.size === 0 || world.lastServerPositionAt == null ||
-      this.clock() - world.lastServerPositionAt > MAX_FRESH_MS ||
-      this.clock() - world.lastServerPositionAt < 0) return 'unavailable';
+      this.clock() - world.lastServerPositionAt < 0 ||
+      (this.clock() - world.lastServerPositionAt > MAX_FRESH_MS &&
+        !(this.presenceTimer && this.presenceFrames > 0))) return 'unavailable';
     return 'experimental';
   }
   /**
