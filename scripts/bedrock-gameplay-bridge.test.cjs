@@ -890,3 +890,31 @@ test('pinned Bedrock 1.26.60 serializer accepts spawn completion and respawn ack
     assert.ok(Buffer.isBuffer(encoded) && encoded.length>0,frame.name+' serializes');
   }
 });
+
+
+test('addon-derived follow priority is wired to same Xbox world without automatic movement', async()=>{
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { BedrockMotionArbiter } = await import('./gameplay/addon-navigation.js');
+  const client=new Client();
+  const bridge=new BedrockGameplayBridge(client,{
+    layerTwo:new LayerTwoPlanner(),
+    addonNavigation:new BedrockMotionArbiter()
+  }).start();
+  initialized(client,bridge);
+  client.emit('add_player',{
+    runtime_entity_id:456n,username:'BuilderFriend',
+    position:{x:14,y:64,z:10.5}
+  });
+  const follow=bridge.execute({version:'minepilot.gameplay.v1',
+    requestId:'follow-addon',action:'plan_follow',playerName:'BuilderFriend'});
+  assert.equal(follow.status,'accepted');
+  assert.equal(bridge.snapshot().addonNavigation.owner,'follow');
+  assert.equal(bridge.snapshot().addonNavigation.state,'awaiting_server');
+  assert.equal(bridge.snapshot().addonNavigation.reason,'no_verified_collision_map');
+  assert.equal(bridge.snapshot().addonNavigation.executed,false);
+  assert.equal(client.sent.some(s=>s.packet==='player_auth_input'),false);
+  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'addon-stop',
+    action:'stop_movement'}).status,'ok');
+  assert.equal(bridge.snapshot().addonNavigation.owner,null);
+  bridge.stop();
+});
