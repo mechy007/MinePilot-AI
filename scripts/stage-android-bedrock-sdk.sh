@@ -205,6 +205,7 @@ cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
 cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
 cp "$root/scripts/bedrock-local-path.cjs" "$temp/bedrock-local-path.cjs"
+cp "$root/scripts/bedrock-autonomy-runner.cjs" "$temp/bedrock-autonomy-runner.cjs"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
 mkdir -p "$temp/gameplay"
