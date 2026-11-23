@@ -61,6 +61,10 @@ class BedrockGameplayBridge {
     this.layerSeven = options.layerSeven ?? null;
     this.layerEight = options.layerEight ?? null;
     this.addonNavigation = options.addonNavigation ?? null;
+    this.terrain = options.terrain ?? null;
+    this.routePlanner = options.routePlanner ?? null;
+    this.registryResolver = options.registryResolver ?? null;
+    this.navigationRoute = null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -100,7 +104,8 @@ class BedrockGameplayBridge {
     this.bind('set_player_game_type', p => this.gameModeChange(p));
     this.bind('update_player_game_type', p => this.gameModeChange(p));
     this.bind('set_movement_authority', p => this.authorityChange(p));
-    this.bind('level_chunk', p => this.chunk(p));
+    this.bind('level_chunk', p => { this.chunk(p); this.terrain?.levelChunk(p); });
+    this.bind('subchunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
     this.bind('inventory_content', p => {
@@ -117,6 +122,7 @@ class BedrockGameplayBridge {
     });
     this.bind('set_time', p => this.layerFour?.observeTime(p?.time));
     this.bind('update_block', p => {
+      this.terrain?.updateBlock(p, this.dimension);
       this.layerThree?.observeBlock(p, this.dimension);
       this.layerFive?.observeBlockUpdate(p, this.dimension);
       this.layerSix?.observeBlock(p, this.dimension);
@@ -145,6 +151,15 @@ class BedrockGameplayBridge {
       Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
+    this.terrain?.reset(this.dimension);
+    this.navigationRoute = null;
+    if (this.registryResolver && this.terrain) {
+      try {
+        const mapped = this.registryResolver(packet);
+        if (mapped) this.terrain.setRegistry(mapped);
+        else this.terrain.setRegistry(new Map());
+      } catch { this.terrain.setRegistry(new Map()); }
+    }
     this.playerGameMode = this.modeName(packet.player_gamemode);
     this.worldGameMode = this.modeName(packet.world_gamemode);
     this.difficulty = Number.isInteger(packet.difficulty) && packet.difficulty >= 0 &&
@@ -281,7 +296,7 @@ class BedrockGameplayBridge {
       hasPosition: this.position !== null, positionAgeMs: age,
       receivedChunkHeaders: this.receivedChunks.size,
       movementAuthority: this.movementAuthority,
-      blocksDecoded: false,
+      blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       movementCorrections: this.corrections, sessionClosed: this.closed
     };
   }
@@ -400,6 +415,8 @@ class BedrockGameplayBridge {
   dimensionChange(packet) {
     if (this.closed) return;
     this.dimension = validDimension(packet?.dimension);
+    this.terrain?.reset(this.dimension);
+    this.navigationRoute = null;
     this.position = null;
     this.lastServerPositionAt = null;
     this.serverTick = null;
@@ -425,16 +442,24 @@ class BedrockGameplayBridge {
   updateAddonNavigation() {
     if (!this.addonNavigation) return null;
     const preview = this.layerTwo?.preview(this.gameplayWorld());
+    let route = null;
     if (preview?.status === 'route_unverified' && preview.nextPoint) {
-      this.addonNavigation.request('follow', 'walk', preview.nextPoint, 1000);
+      if(this.terrain && this.routePlanner && this.position && this.dimension!=null) {
+        try { route=this.routePlanner(this.terrain,this.dimension,
+          this.position,preview.nextPoint); } catch { route=null; }
+      }
+      if(route?.status==='route_found' && route.waypoint)
+        this.addonNavigation.request('follow', 'walk', route.waypoint, 1000);
+      else this.addonNavigation.release('follow');
     } else {
       this.addonNavigation.release('follow');
     }
+    this.navigationRoute=route;
     return this.addonNavigation.update({
       position: this.position,
       dimension: this.dimension,
       observedAt: this.lastServerPositionAt ?? -1,
-      collisionVerified: false,
+      collisionVerified: route?.status==='route_found',
       safetyHold: this.layerFour?.critical === true ||
         this.layerOne?.snapshot()?.safetyHold === true
     });
@@ -450,7 +475,9 @@ class BedrockGameplayBridge {
       visiblePlayers: this.players.size,
       loadedChunkHeaders: this.receivedChunks.size,
       // A chunk header does NOT prove decoded, navigable block/voxel data.
-      blocksDecoded: false,
+      blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
+      ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
+      ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
       serverPositionAgeMs: age,
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
@@ -722,6 +749,8 @@ class BedrockGameplayBridge {
     this.layerSix?.reset();
     this.layerSeven?.reset();
     this.addonNavigation?.reset();
+    this.terrain?.reset();
+    this.navigationRoute=null;
     this.playerNames.clear();
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
     this.listeners = [];
