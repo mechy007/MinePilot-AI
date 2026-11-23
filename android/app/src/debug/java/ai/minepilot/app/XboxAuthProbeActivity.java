@@ -115,6 +115,10 @@ public final class XboxAuthProbeActivity extends Activity {
         copyCode.setOnClickListener(view -> copyCode());
         accountCard.addView(copyCode);
         layout.addView(accountCard);
+        Button logs = authButton("View logs");
+        logs.setOnClickListener(view -> startActivity(new Intent(this, DashboardActivity.class)
+                .putExtra("open_tab", "Logs")));
+        layout.addView(logs);
 
         close = authButton(joiningIntent() ? "Stop connection" : "Cancel sign-in");
         close.setBackground(rounded(PANEL, 6));
