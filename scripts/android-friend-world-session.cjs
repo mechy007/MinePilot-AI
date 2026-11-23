@@ -90,7 +90,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     layerFive: gameplayOptions.layerFiveFactory?.() ?? null,
     layerSix: gameplayOptions.layerSixFactory?.() ?? null,
     layerSeven: gameplayOptions.layerSevenFactory?.() ?? null,
-    layerEight: gameplayOptions.layerEightFactory?.() ?? null
+    layerEight: gameplayOptions.layerEightFactory?.() ?? null,
+    addonNavigation: gameplayOptions.addonNavigationFactory?.() ?? null
   }).start() : null;
   let startGame = false;
   let spawn = false;
@@ -285,6 +286,7 @@ if (require.main === module) {
     const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
     const { LayerSevenAdvisor } = await import('./gameplay/layer-seven.js');
     const { LayerEightReadiness } = await import('./gameplay/layer-eight.js');
+    const { BedrockMotionArbiter } = await import('./gameplay/addon-navigation.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
@@ -306,7 +308,8 @@ if (require.main === module) {
         layerFiveFactory: () => new LayerFivePlanner(),
         layerSixFactory: () => new LayerSixWorkflow(),
         layerSevenFactory: () => new LayerSevenAdvisor(),
-        layerEightFactory: () => new LayerEightReadiness()
+        layerEightFactory: () => new LayerEightReadiness(),
+        addonNavigationFactory: () => new BedrockMotionArbiter()
       }
     });
   })().catch(() => publish({ phase: 'failed', stage: 'runtime' }))

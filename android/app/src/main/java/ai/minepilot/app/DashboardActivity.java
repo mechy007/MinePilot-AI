@@ -704,6 +704,9 @@ public final class DashboardActivity extends Activity {
         String workflowKind = current.getString("workflow_kind", "none");
         String workflowState = current.getString("workflow_state", "");
         String workflowNext = current.getString("workflow_next", "");
+        String addonNavOwner = current.getString("addon_nav_owner", "none");
+        String addonNavState = current.getString("addon_nav_state", "idle");
+        String addonNavReason = current.getString("addon_nav_reason", "");
         String advisorModeText = current.getString("advisor_mode", "off");
         String advisorAction = current.getString("advisor_action", "none");
         String advisorReason = current.getString("advisor_reason", "");
@@ -744,6 +747,8 @@ public final class DashboardActivity extends Activity {
                             + (current.getBoolean("beta_ready", false) ? " · ready" : " · not device-verified")
                             + (betaPlanReason.isEmpty() ? "" : "\nPlanning gate: " + betaPlanReason)
                             + (betaBlockers.isEmpty() ? "" : "\nMissing verification: " + betaBlockers))
+                        + "\nNavigation owner: " + addonNavOwner + " · " + addonNavState
+                        + (addonNavReason.isEmpty() ? "" : "\nNavigation note: " + addonNavReason)
                         + "\nCompanion advisor: " + advisorModeText
                         + ("off".equals(advisorModeText) ? "" :
                             "\nSuggested next step (not executed): " + advisorAction
