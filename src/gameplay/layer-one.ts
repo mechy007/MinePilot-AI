@@ -144,7 +144,8 @@ export class LayerOneController {
       ...(this.vitals.hunger !== undefined ? { hunger: this.vitals.hunger } : {}),
       ...(this.vitals.maxHealth !== undefined ? { maxHealth: this.vitals.maxHealth } : {})
     }, { type: 'idle' });
-    const reason = assessment.reason === 'Survival override' ? 'inspection_safety_warning' : 'inspection_complete';
+    const reason = assessment.reason === 'Survival override' || assessment.reason === 'Low hunger'
+      ? 'inspection_safety_warning' : 'inspection_complete';
     this.active = { type: 'inspect', state: 'completed', startedAt: now, reason };
     return { status: 'ok', reason };
   }
@@ -201,7 +202,7 @@ export class LayerOneController {
     this.active = this.active ? { ...this.active, state: 'cancelled', reason } : null;
     this.waiting = false;
     this.origin = null;
-    this.safetyHold = false;
+    // User stop cancels movement; it never clears server-reported critical-health state.
   }
 
   snapshot(): {
