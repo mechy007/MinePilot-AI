@@ -36,7 +36,7 @@ test('1.26 network v9 palette exposes known air and ground but never infers unkn
   assert.equal(t.blockId(0,0,63,0),stone);
   assert.equal(t.tile(0,0,64,0),'walkable');
   assert.equal(t.tile(0,32,64,32),'unknown');
-  assert.equal(t.tile(0,0,68,0),'unknown');
+  assert.equal(t.tile(0,0,80,0),'unknown');
   assert.equal(t.snapshot().decodedSections,1);
   t.reset(1);
   assert.equal(t.blockId(1,0,64,0),null);
@@ -96,7 +96,7 @@ test('bounded autonomy performs a real step but never chains without host progre
   const t=terrain();
   const point={x:.5,y:65.62,z:.5};
   const world={
-    movement,terrain,dimension:0,position:point,closed:false,spawned:true,
+    movement,terrain:t,dimension:0,position:point,closed:false,spawned:true,
     movementAuthority:1,lastServerPositionAt:1000,
     layerTwo:{preview:()=>({goal:'follow',status:'route_unverified',
       nextPoint:{x:2.5,y:65.62,z:.5}})},
