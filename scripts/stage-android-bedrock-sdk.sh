@@ -204,6 +204,7 @@ cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cj
 cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
 cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
+cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-12660-states.json"
 cp "$root/scripts/bedrock-local-path.cjs" "$temp/bedrock-local-path.cjs"
 cp "$root/scripts/bedrock-autonomy-runner.cjs" "$temp/bedrock-autonomy-runner.cjs"
 cp "$root/scripts/bedrock-block-break.cjs" "$temp/bedrock-block-break.cjs"
@@ -240,6 +241,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
+        "bedrock-vanilla-12660-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
         "bedrock-block-break.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
