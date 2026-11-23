@@ -11,7 +11,7 @@ const { randomUUID } = require('node:crypto');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'stop_movement', 'probe_step']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'stop_movement', 'probe_step']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -57,6 +57,7 @@ class BedrockGameplayBridge {
     this.layerThree = options.layerThree ?? null;
     this.layerFour = options.layerFour ?? null;
     this.layerFive = options.layerFive ?? null;
+    this.layerSix = options.layerSix ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -93,6 +94,7 @@ class BedrockGameplayBridge {
       this.layerThree?.observeInventory(p);
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
+      this.layerSix?.observeContainer(p);
     });
     this.bind('item_registry', p => {
       this.layerThree?.observeItemRegistry(p);
@@ -103,6 +105,7 @@ class BedrockGameplayBridge {
     this.bind('update_block', p => {
       this.layerThree?.observeBlock(p, this.dimension);
       this.layerFive?.observeBlockUpdate(p, this.dimension);
+      this.layerSix?.observeBlock(p, this.dimension);
     });
     this.bind('add_item_entity', p => this.layerThree?.observeDrop(p, this.dimension));
     this.bind('take_item_entity', p => this.layerThree?.observeTake(p, this.self));
@@ -137,6 +140,7 @@ class BedrockGameplayBridge {
     this.layerThree?.reset();
     this.layerFour?.reset();
     this.layerFive?.reset();
+    this.layerSix?.reset();
     if (Number.isInteger(packet.time)) this.layerFour?.observeTime(packet.time);
     this.playerNames.clear();
     if (this.position) this.layerOne?.onServerPosition(this.position);
@@ -263,6 +267,7 @@ class BedrockGameplayBridge {
     this.layerThree?.dimensionChanged();
     this.layerFour?.dimensionChanged();
     this.layerFive?.dimensionChanged();
+    this.layerSix?.dimensionChanged();
     this.playerNames.clear();
   }
   snapshot() {
@@ -286,6 +291,7 @@ class BedrockGameplayBridge {
       ...(this.layerThree ? { layerThree: this.layerThree.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerFour ? { layerFour: this.layerFour.snapshot() } : {}),
       ...(this.layerFive ? { layerFive: this.layerFive.snapshot(this.gameplayWorld()) } : {}),
+      ...(this.layerSix ? { layerSix: this.layerSix.snapshot(this.gameplayWorld()) } : {}),
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -302,6 +308,23 @@ class BedrockGameplayBridge {
       return this.layerOne?.inspect({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned })
         ?? { status: 'rejected', reason: 'layer_one_unavailable' };
     }
+    if (raw.action === 'review_checkpoint') {
+      return this.layerSix?.reviewCheckpoint(raw.checkpoint, this.gameplayWorld())
+        ?? { status: 'rejected', reason: 'layer_six_unavailable' };
+    }
+    if (raw.action === 'plan_workflow') {
+      const result = this.layerSix?.plan(raw.workflowKind, this.gameplayWorld())
+        ?? { status: 'rejected', reason: 'layer_six_unavailable' };
+      if (result.status === 'accepted') {
+        this.movement?.stop?.();
+        this.layerOne?.stop('workflow_selected');
+        this.layerTwo?.cancel();
+        this.layerThree?.cancel();
+        this.layerFive?.cancel();
+        this.layerFour?.setTask('workflow');
+      }
+      return result;
+    }
     if (raw.action === 'plan_shelter' || raw.action === 'plan_craft_planks') {
       const result = raw.action === 'plan_shelter'
         ? this.layerFive?.planShelter(raw.material, this.gameplayWorld())
@@ -314,6 +337,7 @@ class BedrockGameplayBridge {
         this.layerTwo?.cancel();
         this.layerThree?.cancel();
         this.layerFour?.setTask(raw.action === 'plan_shelter' ? 'build' : 'craft');
+        this.layerSix?.cancel();
       }
       return result;
     }
@@ -337,6 +361,7 @@ class BedrockGameplayBridge {
         this.layerTwo?.cancel();
         this.layerFour?.setTask('collect');
         this.layerFive?.cancel();
+        this.layerSix?.cancel();
       }
       return result;
     }
@@ -352,6 +377,7 @@ class BedrockGameplayBridge {
         this.layerThree?.cancel();
         this.layerFour?.setTask(raw.action === 'plan_follow' ? 'follow' : 'return');
         this.layerFive?.cancel();
+        this.layerSix?.cancel();
       }
       return result;
     }
@@ -364,6 +390,7 @@ class BedrockGameplayBridge {
         this.layerThree?.cancel();
         this.layerFour?.cancel();
         this.layerFive?.cancel();
+        this.layerSix?.cancel();
       }
       return result;
     }
@@ -376,6 +403,7 @@ class BedrockGameplayBridge {
         this.layerThree?.cancel();
         this.layerFour?.cancel();
         this.layerFive?.cancel();
+        this.layerSix?.cancel();
       }
       return result;
     }
@@ -385,6 +413,7 @@ class BedrockGameplayBridge {
       this.layerThree?.cancel();
       this.layerFour?.cancel();
       this.layerFive?.cancel();
+      this.layerSix?.cancel();
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
@@ -403,6 +432,9 @@ class BedrockGameplayBridge {
       if (this.layerFive?.snapshot(this.gameplayWorld()).kind !== undefined &&
           this.layerFive.snapshot(this.gameplayWorld()).kind !== 'none')
         return { status: 'rejected', reason: 'building_plan_not_executable' };
+      if (this.layerSix?.snapshot(this.gameplayWorld()).kind !== undefined &&
+          this.layerSix.snapshot(this.gameplayWorld()).kind !== 'none')
+        return { status: 'rejected', reason: 'workflow_not_executable' };
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       if (raw.direction !== 'forward') return { status: 'rejected', reason: 'unsupported_direction' };
       if (!this.movement || this.movement.capability(this) !== 'experimental') {
@@ -462,6 +494,7 @@ class BedrockGameplayBridge {
     this.layerThree?.reset();
     this.layerFour?.reset();
     this.layerFive?.reset();
+    this.layerSix?.reset();
     this.playerNames.clear();
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
     this.listeners = [];
