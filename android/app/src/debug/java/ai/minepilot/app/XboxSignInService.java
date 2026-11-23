@@ -326,6 +326,17 @@ public final class XboxSignInService extends Service {
                     case "network" -> "The connection to the service or host failed.";
                     case "timeout" -> "The connection timed out.";
                     case "host_disconnect" -> "Minecraft disconnected the bot.";
+                    case "nethernet_closed" -> {
+                        int code = snapshot.optInt("nethernetCode");
+                        yield switch (code) {
+                            case 1 -> "NetherNet could no longer reach the host’s session (code 1).";
+                            case 5, 9 -> "The peer network connection did not finish (NetherNet code " + code + ").";
+                            case 14 -> "The host did not answer the connection offer (NetherNet code 14).";
+                            default -> code > 0 && code <= 255
+                                    ? "NetherNet closed the connection (code " + code + ")."
+                                    : "The NetherNet connection closed before Minecraft login.";
+                        };
+                    }
                     default -> "";
                 };
                 int connectionStatus = snapshot.optInt("httpStatus");
