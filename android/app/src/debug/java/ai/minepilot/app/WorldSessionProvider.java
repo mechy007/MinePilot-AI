@@ -125,6 +125,34 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putString("equipment_item_id", equipment.optString("itemId", ""));
                     }
                 }
+                JSONObject resources = gameplay.optJSONObject("layerThree");
+                if (resources != null) {
+                    result.putInt("resource_drops", resources.optInt("observedDrops", 0));
+                    result.putInt("resource_blocks", resources.optInt("observedBlockUpdates", 0));
+                    result.putInt("resource_items", resources.optInt("registeredItems", 0));
+                    result.putBoolean("resource_inventory_known", resources.optBoolean("inventoryKnown", false));
+                    org.json.JSONArray nearby = resources.optJSONArray("nearbyItemNames");
+                    if (nearby != null) {
+                        StringBuilder labels = new StringBuilder();
+                        for (int i = 0; i < Math.min(nearby.length(), 8); i++) {
+                            String name = nearby.optString(i, "");
+                            if (!name.matches("minecraft:[a-z0-9_./-]{1,80}")) continue;
+                            if (labels.length() > 0) labels.append(", ");
+                            labels.append(name);
+                        }
+                        result.putString("resource_nearby_items", labels.toString());
+                    }
+                    JSONObject route = resources.optJSONObject("route");
+                    if (route != null) {
+                        result.putString("resource_state", route.optString("status", ""));
+                        result.putString("resource_reason", route.optString("reason", ""));
+                        result.putString("resource_target_name", route.optString("itemName", ""));
+                        result.putInt("resource_requested", route.optInt("requested", 0));
+                        result.putInt("resource_observed", route.optInt("observed", 0));
+                        if (!route.isNull("distance")) result.putString("resource_distance", route.optString("distance"));
+                        if (!route.isNull("heading")) result.putString("resource_heading", route.optString("heading"));
+                    }
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
@@ -145,6 +173,7 @@ public final class WorldSessionProvider extends ContentProvider {
         if (!"status".equals(action) && !"inspect".equals(action) && !"wait".equals(action) &&
                 !"stay".equals(action) && !"set_home".equals(action) &&
                 !"plan_follow".equals(action) && !"plan_return".equals(action) &&
+                !"plan_collect".equals(action) && !"inspect_block".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if ("probe_step".equals(action) && !confirmed) return;
@@ -161,6 +190,13 @@ public final class WorldSessionProvider extends ContentProvider {
                 String name = extras.getString("player_name", "");
                 if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) return;
                 command.put("playerName", name);
+            }
+            if ("plan_collect".equals(action)) {
+                String itemName = extras.getString("item_name", "");
+                int itemCount = extras.getInt("item_count", -1);
+                if (!itemName.matches("minecraft:[a-z0-9_./-]{1,80}") ||
+                        itemCount < 1 || itemCount > 64) return;
+                command.put("itemName", itemName).put("count", itemCount);
             }
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
