@@ -44,6 +44,23 @@ patch('bedrock-protocol/src/client/auth.js', [
     '  options.nethernet.networkId = BigInt(networkId)']
 ]);
 patch('bedrock-protocol/src/client.js', [
+  ['this.connection.nethernet.signalHandler = this.nethernet.signalling.write.bind(this.nethernet.signalling)',
+    `this.connection.nethernet.signalHandler = signal => {
+          this.nethernet.signalling.write(signal)
+          if (signal.type === 'CONNECTREQUEST') this.emit('minepilot_join_trace', 'offer_sent')
+        }`],
+  ['if (!this._closed) return this.connection.nethernet.handleSignal(signal)',
+    `if (!this._closed) {
+              if (signal.type === 'CONNECTRESPONSE' && this.connection.nethernet.isExpectedSignal(signal)) {
+                this.emit('minepilot_join_trace', 'answer_received')
+              }
+              return this.connection.nethernet.handleSignal(signal)
+            }`],
+  ['    this.connection.onConnected = () => {',
+    `    this.connection.onConnected = () => {
+      if (this.options.transport === 'nethernet' && this.options.nethernet.signalling === 'services') {
+        this.emit('minepilot_join_trace', 'peer_connected')
+      }`],
   ['new NethernetClient({ networkId, host: this.options.host, webrtcBackend: this.options.nethernet.webrtcBackend })',
     'new NethernetClient({ ...this.options.nethernet, networkId, host: this.options.host })'],
   ['        const { NethernetSignal } = require(\'./nethernet/signalling\')',
