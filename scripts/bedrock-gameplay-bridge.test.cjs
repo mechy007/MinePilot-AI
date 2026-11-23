@@ -370,3 +370,25 @@ test('Layer 3 block updates do not imply mining, and dimension resets resource t
   assert.equal(bridge.snapshot().layerThree.route.status, 'idle');
   bridge.stop();
 });
+
+test('pinned Bedrock SDK serializes break intent fixtures without executing them', () => {
+  // Future mining must choose the host-negotiated authority and confirm updates.
+  // These are codec-only fixtures: no network client or player_action is sent.
+  const { createSerializer } = require('bedrock-protocol/src/transforms/serializer');
+  const serializer = createSerializer('1.26.60');
+  const position = { x: 8, y: 64, z: 10 };
+  for (const action of ['start_break', 'abort_break']) {
+    const legacy = serializer.createPacketBuffer({
+      name: 'player_action',
+      params: { runtime_entity_id: 123n, action, position, result_position: position, face: 1 }
+    });
+    assert.ok(Buffer.isBuffer(legacy) && legacy.length > 10);
+    const auth = buildInputPacket(origin, 0, 103n, false);
+    auth.input_data = [35]; // InputData.block_action (protocol 2225)
+    auth.block_action = [{ action, position, face: 1 }];
+    const encoded = serializer.createPacketBuffer({
+      name: 'player_auth_input', params: auth
+    });
+    assert.ok(Buffer.isBuffer(encoded) && encoded.length > 10);
+  }
+});
