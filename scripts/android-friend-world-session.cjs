@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
-const { verifyXbox } = require('./xbox-auth-probe.cjs');
+const { accountWriter, verifyXbox } = require('./xbox-auth-probe.cjs');
 
 function androidNetworkInterfaces(readInterfaces, readAddresses) {
   return () => {
@@ -159,9 +159,7 @@ if (require.main === module) {
     const configPath = path.join(__dirname, 'device-session.json');
     const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
-    const saveAccount = Number.isInteger(config.saveFd)
-      ? account => writeSync(config.saveFd, JSON.stringify(account) + "\n")
-      : null;
+    const saveAccount = accountWriter(config.saveFd);
     await run({
       ownerXuid: readFileSync(path.join(__dirname, 'owner-xuid'), 'utf8'),
       publish,

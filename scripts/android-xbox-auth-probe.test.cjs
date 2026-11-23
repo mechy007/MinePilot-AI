@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { connectXboxAccount, deviceCodeStatus, loadFriends, verifyXbox } = require('./android-xbox-auth-probe.cjs');
+const { accountWriter, connectXboxAccount, deviceCodeStatus, loadFriends, verifyXbox } = require('./android-xbox-auth-probe.cjs');
 
 test('accepts official verification links and strips query parameters', () => {
   assert.deepEqual(deviceCodeStatus({
@@ -184,4 +184,24 @@ test('lists mutual Xbox friends and keeps hidden presence unknown', async () => 
     { xuid: playing, gamertag: 'Friend', state: 'Online', minecraft: true },
     { xuid: hidden, gamertag: '', state: 'Unknown', minecraft: false }
   ]);
+});
+
+test('writes a complete account record without taking ownership of the descriptor', t => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'minepilot-account-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'handoff');
+  const fd = fs.openSync(file, 'w');
+  const account = { xuid: '1', gamertag: 'TestBot', refreshToken: 'fixture-only' };
+  try {
+    assert.equal(accountWriter(undefined), null);
+    assert.equal(accountWriter(-1), null);
+    accountWriter(fd)(account);
+    assert.ok(fs.fstatSync(fd).isFile());
+  } finally {
+    fs.closeSync(fd);
+  }
+  assert.equal(fs.readFileSync(file, 'utf8'), JSON.stringify(account) + '\n');
 });
