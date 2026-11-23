@@ -327,6 +327,12 @@ test('Layer 3 same-client resource planning, pickup receipts and inventory obser
   assert.equal(execute('probe', 'probe_step', {
     confirmed: true, direction: 'forward'
   }).reason, 'resource_goal_not_executable');
+  assert.equal(execute('wait-now', 'wait').status, 'accepted');
+  assert.equal(bridge.snapshot().layerThree.route.status, 'idle',
+    'Wait cancels resource goals before any input');
+  assert.equal(execute('collect-again', 'plan_collect', {
+    itemName: 'minecraft:oak_log', count: 2
+  }).status, 'accepted');
   client.emit('take_item_entity', { runtime_entity_id: 1000n, target: 123n });
   client.emit('inventory_content', { window_id: 'inventory', input: [
     { network_id: 5, count: 4 }
