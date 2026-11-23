@@ -177,6 +177,7 @@ test('packaged SDK sends the NetherNet offer first and reports the host close co
   context.mock.method(XboxClient.prototype, 'joinSession', async () => membership);
   context.mock.method(NethernetSignal.prototype, 'connect', async function () { this.emit('credentials', []); });
   const sent = [];
+  let client;
   context.mock.method(NethernetSignal.prototype, 'write', function (offer) {
     sent.push(offer);
     if (offer.type !== SignalType.ConnectRequest) return;
@@ -197,11 +198,13 @@ test('packaged SDK sends the NetherNet offer first and reports the host close co
     publish: snapshot => snapshots.push(snapshot),
     signal: AbortSignal.timeout(5000),
     authDependencies: { Authflow, XboxClient, Titles },
-    createClient,
+    createClient: options => { client = createClient(options); return client; },
     pickOwnerWorld
   });
   assert.equal(sent[0]?.type, SignalType.ConnectRequest, JSON.stringify(snapshots));
   assert.match(sent[0].data, /^a=candidate:.*127\.0\.0\.1/m);
+  assert.equal(client.connection.nethernet.responseTimeoutMs, 25000);
+  assert.equal(client.connection.nethernet.inactivityTimeoutMs, 12000);
   assert.deepEqual(snapshots.at(-1), {
     phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37
   });
