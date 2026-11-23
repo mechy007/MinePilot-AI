@@ -127,7 +127,7 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
     { sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225 } }
   ]);
   const membership = context.mock.method(XboxClient.prototype, 'joinSession', async () => {
-    throw new Error('Fixture stops before Xbox membership');
+    throw Object.assign(new Error('Fixture stops before Xbox membership'), { status: 403 });
   });
   class Authflow {
     async getXboxToken() {}
@@ -149,7 +149,7 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
   assert.equal(activity.mock.calls[0].arguments[0], botXuid);
   assert.equal(membership.mock.callCount(), 1, JSON.stringify(snapshots));
   assert.equal(membership.mock.calls[0].arguments[0], 'expected');
-  assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'connection' });
+  assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'connection', httpStatus: 403 });
 });
 
 

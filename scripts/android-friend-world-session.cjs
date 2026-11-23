@@ -31,6 +31,19 @@ function validateOwner(ownerXuid, botXuid) {
   }
 }
 
+function safeJoinFailure(error) {
+  const status = error?.status ?? error?.response?.status;
+  if (Number.isInteger(status) && status >= 400 && status <= 599) return { httpStatus: status };
+  const message = typeof error?.message === 'string' ? error.message : '';
+  if (message === "Couldn't find a Nethernet ID to connect to.") return { reason: 'no_transport' };
+  if (/timed out|timeout/i.test(message)) return { reason: 'timeout' };
+  if (/signalling|websocket|webrtc|\bice\b/i.test(message)) return { reason: 'transport' };
+  const code = error?.cause?.code ?? error?.code;
+  if (['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH',
+    'ECONNRESET', 'ECONNREFUSED'].includes(code)) return { reason: 'network' };
+  return {};
+}
+
 async function observeSession(client, publish, signal, getStage) {
   let startGame = false;
   let spawn = false;
@@ -39,8 +52,9 @@ async function observeSession(client, publish, signal, getStage) {
   let finished = false;
   let timeout;
   let heartbeat;
+  let connectionStage;
   await new Promise(resolve => {
-    function finish(reason) {
+    function finish(reason, details = {}) {
       if (finished) return;
       finished = true;
       clearTimeout(timeout);
@@ -50,8 +64,11 @@ async function observeSession(client, publish, signal, getStage) {
       client.removeListener('start_game', onStartGame);
       client.removeListener('spawn', onSpawn);
       client.removeListener('level_chunk', onChunk);
+      client.removeListener('loggingIn', onLogin);
+      client.removeListener('join', onJoin);
+      client.removeListener('kick', onKick);
       // Keep the error handler through close to suppress late SDK errors.
-      publish({ phase: reason, stage: getStage() });
+      publish({ phase: reason, stage: connectionStage ?? getStage(), ...details });
       try {
         client.close();
       } finally {
@@ -75,12 +92,18 @@ async function observeSession(client, publish, signal, getStage) {
     const onStartGame = () => { startGame = true; checkSpawn(); };
     const onSpawn = () => { spawn = true; checkSpawn(); };
     const onChunk = () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); };
+    const onLogin = () => { connectionStage = 'bedrock_login'; };
+    const onJoin = () => { connectionStage = 'bedrock_spawn'; };
+    const onKick = () => finish('failed', { reason: 'host_disconnect' });
+    client.once('loggingIn', onLogin);
+    client.once('join', onJoin);
+    client.once('kick', onKick);
     client.once('start_game', onStartGame);
     client.once('spawn', onSpawn);
     client.on('level_chunk', onChunk);
     client.once('close', closed);
-    client.on('error', () => finish('failed'));
-    timeout = setTimeout(() => finish('failed'), 90000);
+    client.on('error', error => finish('failed', safeJoinFailure(error)));
+    timeout = setTimeout(() => finish('failed', { reason: 'timeout' }), 90000);
     signal.addEventListener('abort', stop, { once: true });
     if (signal.aborted) stop();
   });
@@ -112,6 +135,8 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
       authTitle: authDependencies.Titles.MinecraftAndroid,
       deviceType: 'Android',
       authflow: auth,
+      // Give the mobile path room for signalling and ICE before the spawn deadline.
+      connectTimeout: 30000,
       nethernet: { webrtcBackend: 'werift' },
       conLog: null,
       world: {
@@ -125,9 +150,9 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
     });
     client.viewDistance = 4;
     await observeSession(client, publish, signal, () => stage);
-  } catch {
+  } catch (error) {
     if (signal.aborted) publish({ phase: 'stopped' });
-    else if (stage !== 'auth') publish({ phase: 'failed', stage });
+    else if (stage !== 'auth') publish({ phase: 'failed', stage, ...safeJoinFailure(error) });
   }
 }
 
