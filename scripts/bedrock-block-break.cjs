@@ -81,7 +81,7 @@ class BedrockBlockBreakExecutor {
   }
   observedBlock(packet,dimension) {
     const a=this.active;
-    if(!a||a.phase!=='waiting_for_server' ||
+    if(!a||a.sent===0 ||
        dimension!==a.dimension||!validBlock(packet?.position) ||
        key(packet.position)!==key(a.position))return;
     const id=packet.block_runtime_id;
