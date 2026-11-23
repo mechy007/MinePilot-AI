@@ -201,6 +201,7 @@ cp "$root/scripts/android-node-bedrock-smoke.cjs" "$temp/node-smoke.cjs"
 cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
 cp "$root/dist/src/connection/prismarine-world-client.js" "$temp/prismarine-world-client.mjs"
+cp "$root/dist/src/core/bot-awareness.js" "$temp/bot-awareness.mjs"
 cp "$root/scripts/android-friend-world-session.test.cjs" "$temp/friend-world-session.test.cjs"
 
 python3 - "$temp" <<'PY'
@@ -211,7 +212,10 @@ import sys
 runtime = Path(sys.argv[1])
 zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
-    for entrypoint in ("node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs", "prismarine-world-client.mjs"):
+    for entrypoint in (
+        "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
+        "prismarine-world-client.mjs", "bot-awareness.mjs",
+    ):
         archive.write(runtime / entrypoint, entrypoint)
     for source in sorted((runtime / "node_modules").rglob("*")):
         if source.is_file() and not source.is_symlink():
