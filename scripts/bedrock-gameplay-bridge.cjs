@@ -11,7 +11,7 @@ const { randomUUID } = require('node:crypto');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'stop_movement', 'probe_step']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stop_movement', 'probe_step']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -47,6 +47,7 @@ class BedrockGameplayBridge {
     this.commandPath = options.commandPath ?? null;
     this.receiptPath = options.receiptPath ?? null;
     this.movement = options.movement ?? null;
+    this.layerOne = options.layerOne ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -77,6 +78,8 @@ class BedrockGameplayBridge {
     this.bind('level_chunk', p => this.chunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
+    this.bind('inventory_content', p => this.layerOne?.onInventory(p));
+    this.bind('update_attributes', p => this.attributes(p));
     this.bind('add_player', p => this.addPlayer(p));
     this.bind('remove_actor', p => this.removeActor(p));
     this.bind('remove_entity', p => this.removeActor(p));
@@ -100,6 +103,20 @@ class BedrockGameplayBridge {
     this.lastWorldAt = this.clock();
     this.spawned = false;
     this.movement?.stop();
+    this.layerOne?.reset();
+    if (this.position) this.layerOne?.onServerPosition(this.position);
+  }
+  attributes(packet) {
+    const id = ident(packet?.runtime_entity_id ?? packet?.runtime_id);
+    if (!id || id !== this.self || !Array.isArray(packet?.attributes)) return;
+    const values = {};
+    for (const attr of packet.attributes.slice(0, 64)) {
+      if (!Number.isFinite(attr?.current)) continue;
+      if (attr.name === 'minecraft:health') values.health = attr.current;
+      if (attr.name === 'minecraft:player.hunger') values.hunger = attr.current;
+      if (attr.name === 'minecraft:player.max_health') values.maxHealth = attr.current;
+    }
+    if (this.layerOne?.onVitals(values)) this.movement?.stop();
   }
   chunk(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.x) || !Number.isInteger(packet.z)) return;
@@ -120,6 +137,7 @@ class BedrockGameplayBridge {
     if (id === this.self) {
       this.position = pos;
       this.lastServerPositionAt = this.clock();
+      this.layerOne?.onServerPosition(pos);
       if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
       if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
     } else if (this.players.has(id)) {
@@ -134,6 +152,7 @@ class BedrockGameplayBridge {
     this.position = pos;
     this.lastServerPositionAt = this.clock();
     this.corrections++;
+    this.layerOne?.onServerPosition(pos);
     const tick = validTick(packet.tick);
     if (tick !== null && (this.serverTick == null || tick > this.serverTick)) this.serverTick = tick;
     this.movement?.correct?.(pos, tick);
@@ -161,6 +180,7 @@ class BedrockGameplayBridge {
     this.receivedChunks.clear();
     this.players.clear();
     this.movement?.stop();
+    this.layerOne?.reset();
   }
   snapshot() {
     const now = this.clock();
@@ -178,6 +198,7 @@ class BedrockGameplayBridge {
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
       movement: this.movement?.capability?.(this) ?? 'unavailable',
+      ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -190,7 +211,17 @@ class BedrockGameplayBridge {
     }
     if (this.closed) return { status: 'rejected', reason: 'session_closed' };
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if (raw.action === 'inspect') {
+      return this.layerOne?.inspect({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned })
+        ?? { status: 'rejected', reason: 'layer_one_unavailable' };
+    }
+    if (raw.action === 'wait') {
+      if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
+      this.movement?.stop();
+      return this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
+    }
     if (raw.action === 'stop_movement') {
+      this.layerOne?.stop();
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
@@ -200,8 +231,17 @@ class BedrockGameplayBridge {
       if (!this.movement || this.movement.capability(this) !== 'experimental') {
         return { status: 'rejected', reason: 'movement_unavailable' };
       }
-      try { return this.movement.probeStep(this); }
-      catch { return { status: 'rejected', reason: 'movement_failed' }; }
+      const preflight = this.layerOne?.beginProbe({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned });
+      if (preflight && preflight.status !== 'accepted') return preflight;
+      try {
+        const result = this.movement.probeStep(this);
+        if (result.status === 'accepted') this.layerOne?.probeQueued();
+        else this.layerOne?.probeFailed(result.reason);
+        return result;
+      } catch {
+        this.layerOne?.probeFailed('movement_failed');
+        return { status: 'rejected', reason: 'movement_failed' };
+      }
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
@@ -240,6 +280,7 @@ class BedrockGameplayBridge {
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
     this.movement?.stop?.();
+    this.layerOne?.stop('session_closed');
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
     this.listeners = [];
     this.players.clear();
