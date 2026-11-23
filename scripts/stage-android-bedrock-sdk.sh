@@ -7,7 +7,7 @@ temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
 
 npm --prefix "$root" run build
-npm install --prefix "$temp" --no-save --ignore-scripts --omit=optional bedrock-protocol@3.61.0 minecraft-data@3.119.0 prismarine-auth@3.1.1
+npm install --prefix "$temp" --no-save --ignore-scripts --omit=optional bedrock-protocol@3.61.0 minecraft-data@3.119.0 prismarine-auth@3.1.1 nethernet@1.1.2
 # Live responses report expires_in in seconds. In 3.1.1 the live cache adds
 # that value directly to Date.now(), which expires a one-hour token in 3.6 seconds.
 node - "$temp/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js" <<'JS'
@@ -23,7 +23,7 @@ JS
 node "$root/scripts/stage-android-bedrock-sdk.mjs" "$temp" 1.26.60
 # Surface the pinned SDK's join stages without forwarding private session data.
 # Publishing the bot's own Xbox activity is optional for joining a host.
-node - "$temp/node_modules/bedrock-protocol/src" <<'JS'
+node - "$temp/node_modules" <<'JS'
 const fs = require('node:fs');
 const path = require('node:path');
 function patch(relativePath, replacements) {
@@ -35,7 +35,7 @@ function patch(relativePath, replacements) {
   }
   fs.writeFileSync(file, source);
 }
-patch('client/auth.js', [
+patch('bedrock-protocol/src/client/auth.js', [
   ['  const session = await xbox.joinSession(world.sessionRef.name, requestOptions)',
     "  client.emit('minepilot_join_step', 'xbox_membership')\n  const session = await xbox.joinSession(world.sessionRef.name, requestOptions)"],
   ['  const networkId = session.current.properties?.custom?.SupportedConnections?.find(e => e.NetherNetId)?.NetherNetId',
@@ -43,11 +43,37 @@ patch('client/auth.js', [
   ['  await session.setActivity()\n  options.nethernet.networkId = BigInt(networkId)',
     '  options.nethernet.networkId = BigInt(networkId)']
 ]);
-patch('client.js', [
+patch('bedrock-protocol/src/client.js', [
+  ['new NethernetClient({ networkId, host: this.options.host, webrtcBackend: this.options.nethernet.webrtcBackend })',
+    'new NethernetClient({ ...this.options.nethernet, networkId, host: this.options.host })'],
   ['        const { NethernetSignal } = require(\'./nethernet/signalling\')',
     "        this.emit('minepilot_join_step', 'nethernet_signalling')\n        const { NethernetSignal } = require('./nethernet/signalling')"],
   ['.then(() => { if (!this._closed) this._connect(sessionData) })',
-    ".then(() => {\n            if (this._closed) return\n            this.emit('minepilot_join_step', 'nethernet_peer')\n            this._connect(sessionData)\n          })"]
+    ".then(() => {\n            if (this._closed) return\n            this.emit('minepilot_join_step', 'nethernet_peer')\n            this._connect(sessionData)\n          })"],
+  ['    this.connection.onCloseConnection = (reason) => {',
+    `    this.connection.onCloseConnection = (reason) => {
+      if (!this._closed && this.status === ClientStatus.Disconnected &&
+          this.options.transport === 'nethernet' && this.options.nethernet.signalling === 'services') {
+        const code = typeof reason === 'string' && /^connecterror:(\\d{1,3})$/.exec(reason)
+        return this.onConnectionError(Object.assign(new Error('NetherNet peer closed'), {
+          nethernetCode: code ? Number(code[1]) : undefined
+        }))
+      }`]
+]);
+patch('bedrock-protocol/src/nethernet/index.js', [
+  ['{ webrtcBackend: options.webrtcBackend }', `{
+        webrtcBackend: options.webrtcBackend,
+        responseTimeoutMs: options.responseTimeoutMs,
+        inactivityTimeoutMs: options.inactivityTimeoutMs
+      }`]
+]);
+// Werift gathers local candidates into its offer. Sending those candidates
+// separately before the offer can reach a host that has no peer to apply them to.
+patch('nethernet/src/client.js', [
+  ['    rtcConnection.onicecandidate = (event) => {\n      if (event.candidate && isCurrent()) {',
+    '    let offerSent = false\n    rtcConnection.onicecandidate = (event) => {\n      if (event.candidate && isCurrent() && (!this._externalSignaling || offerSent)) {'],
+  ['new SignalStructure(SignalType.ConnectRequest, this.connectionId, sdp, this.serverNetworkId)\n      )',
+    'new SignalStructure(SignalType.ConnectRequest, this.connectionId, sdp, this.serverNetworkId)\n      )\n      offerSent = true']
 ]);
 JS
 data_notice="$temp/node_modules/minecraft-data/minecraft-data/README.md"
