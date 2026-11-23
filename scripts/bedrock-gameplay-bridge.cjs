@@ -338,7 +338,8 @@ class BedrockGameplayBridge {
       const plan = this.layerTwo?.preview(this.gameplayWorld());
       if (plan && (plan.goal === 'follow' || plan.goal === 'return'))
         return { status: 'rejected', reason: 'planned_navigation_not_executable' };
-      if (this.layerThree?.snapshot(this.gameplayWorld()).route.status !== 'idle')
+      const resourcePlanState = this.layerThree?.snapshot(this.gameplayWorld()).route.status;
+      if (resourcePlanState && resourcePlanState !== 'idle')
         return { status: 'rejected', reason: 'resource_goal_not_executable' };
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       if (raw.direction !== 'forward' return { status: 'rejected', reason: 'unsupported_direction' };
