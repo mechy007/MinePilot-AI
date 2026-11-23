@@ -84,7 +84,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     receiptPath: gameplayOptions.receiptPath,
     movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true),
     layerOne: gameplayOptions.layerOneFactory?.() ?? null,
-    layerTwo: gameplayOptions.layerTwoFactory?.() ?? null
+    layerTwo: gameplayOptions.layerTwoFactory?.() ?? null,
+    layerThree: gameplayOptions.layerThreeFactory?.() ?? null
   }).start() : null;
   let startGame = false;
   let spawn = false;
@@ -273,6 +274,7 @@ if (require.main === module) {
     const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
     const { LayerOneController } = await import('./gameplay/layer-one.js');
     const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+    const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
@@ -288,7 +290,8 @@ if (require.main === module) {
         receiptPath: path.join(__dirname, 'gameplay-receipt.json'),
         experimentalMovement: config.experimentalMovement === true,
         layerOneFactory: () => new LayerOneController(),
-        layerTwoFactory: () => new LayerTwoPlanner()
+        layerTwoFactory: () => new LayerTwoPlanner(),
+        layerThreeFactory: () => new LayerThreePlanner()
       }
     });
   })().catch(() => publish({ phase: 'failed', stage: 'runtime' }))
