@@ -197,6 +197,12 @@ async function loadFriends(xbox, owner) {
   return { phase: 'friends_loaded', owner, friends, truncated };
 }
 
+// Android owns the descriptor and closes it after the embedded runtime exits.
+function accountWriter(fd) {
+  if (!Number.isInteger(fd) || fd < 0) return null;
+  return account => fs.writeFileSync(fd, JSON.stringify(account) + '\n');
+}
+
 if (require.main === module) {
   process.env.HOME ??= __dirname;
   const status = path.join(__dirname, 'auth-status.json');
@@ -212,9 +218,7 @@ if (require.main === module) {
   const sessionPath = path.join(__dirname, 'device-session.json');
   const session = fs.existsSync(sessionPath) ? JSON.parse(fs.readFileSync(sessionPath, 'utf8')) : {};
   const refreshToken = Number.isInteger(session.fd) ? fs.readFileSync(session.fd, 'utf8') : undefined;
-  const saveAccount = Number.isInteger(session.saveFd)
-    ? account => fs.writeSync(session.saveFd, JSON.stringify(account) + "\n")
-    : null;
+  const saveAccount = accountWriter(session.saveFd);
   const friendsOwner = session.friendsOwner;
   const publishAuth = snapshot => {
     if (friendsOwner && snapshot.phase === 'device_code') throw new Error('Account needs sign-in');
@@ -238,4 +242,4 @@ if (require.main === module) {
     .catch(() => { process.exitCode = 1; });
 }
 
-module.exports = { connectXboxAccount, deviceCodeStatus, loadFriends, verifyXbox };
+module.exports = { accountWriter, connectXboxAccount, deviceCodeStatus, loadFriends, verifyXbox };
