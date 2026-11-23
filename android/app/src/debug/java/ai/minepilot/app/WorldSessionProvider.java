@@ -220,6 +220,25 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putString("advisor_state", recommendation.optString("status", ""));
                     }
                 }
+                JSONObject readiness = gameplay.optJSONObject("layerEight");
+                if (readiness != null) {
+                    result.putString("beta_stage", readiness.optString("stage", "awaiting_world"));
+                    result.putBoolean("beta_ready", readiness.optBoolean("releaseReady", false));
+                    result.putBoolean("beta_autonomous", readiness.optBoolean("autonomousGameplayReady", false));
+                    result.putBoolean("beta_plan_eligible", readiness.optBoolean("commandEligible", false));
+                    result.putString("beta_plan_reason", readiness.optString("commandReason", ""));
+                    org.json.JSONArray blockers = readiness.optJSONArray("blockers");
+                    if (blockers != null) {
+                        StringBuilder reasons = new StringBuilder();
+                        for (int i = 0; i < Math.min(4, blockers.length()); i++) {
+                            String code = blockers.optString(i, "");
+                            if (!code.matches("[a-z_]{1,64}")) continue;
+                            if (reasons.length() > 0) reasons.append(", ");
+                            reasons.append(code);
+                        }
+                        result.putString("beta_blockers", reasons.toString());
+                    }
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
