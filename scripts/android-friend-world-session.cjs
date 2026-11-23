@@ -13,6 +13,7 @@ const { ExperimentalPlayerInput } = require('./bedrock-player-input.cjs');
 const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
 const { createVanillaRuntimeRegistry } = require('./bedrock-runtime-registry.cjs');
 const { planLocalRoute } = require('./bedrock-local-path.cjs');
+const { VerifiedAutonomyRunner } = require('./bedrock-autonomy-runner.cjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -101,7 +102,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     addonNavigation: gameplayOptions.addonNavigationFactory?.() ?? null,
     terrain: new BedrockTerrainCache(),
     registryResolver: createVanillaRuntimeRegistry,
-    routePlanner: planLocalRoute
+    routePlanner: planLocalRoute,
+    autonomy: new VerifiedAutonomyRunner()
   }).start() : null;
   let startGame = false;
   let spawn = false;
