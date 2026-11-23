@@ -102,7 +102,8 @@ class ExperimentalPlayerInput {
     this.initialPosition = { ...world.position };
     this.lastServerPosition = { ...world.position };
     this.lastServerPositionAt = world.lastServerPositionAt;
-    this.lastTick = world.serverTick;
+    this.lastTick = this.lastTick != null && this.lastTick > world.serverTick
+      ? this.lastTick : world.serverTick;
     this.world = world;
     this.lastYaw = Number.isFinite(world.yaw) ? world.yaw : 0;
     this.mode = mode;
@@ -195,13 +196,28 @@ class ExperimentalPlayerInput {
     if (active && opts.silent !== true && world && !world.closed && world.spawned &&
         finite3(world.position) && this.predicted && this.lastTick != null) {
       try {
+        const neutralTick = this.lastTick + 1n;
         this.client.queue('player_auth_input',
-          buildInputPacket(this.predicted, this.lastYaw, this.lastTick + 1n, false));
+          buildInputPacket(this.predicted, this.lastYaw, neutralTick, false));
+        this.lastTick = neutralTick;
       } catch { this.errors++; }
     }
     this.predicted = null;
     this.world = null;
     this.mode = null;
+  }
+  /** New Xbox world session may restart the authoritative tick counter. */
+  resetSession() {
+    this.stop('session_reset', { silent: true });
+    this.lastTick = null;
+    this.predicted = null;
+    this.initialPosition = null;
+    this.lastServerPosition = null;
+    this.lastServerPositionAt = null;
+    this.framesSent = 0;
+    this.serverUpdates = 0;
+    this.corrections = 0;
+    this.maxDrift = 0;
   }
   snapshot() {
     const displacement = this.initialPosition && this.lastServerPosition
