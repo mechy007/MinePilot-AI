@@ -560,3 +560,35 @@ test('Layer 6 previews farming/storage, observes separate container and blocks w
   bridge.stop();
   assert.equal(client.listenerCount('inventory_content'),0);
 });
+
+
+test('Layer 7 optional advisor sees same-client survival and workflow state but never executes actions', async () => {
+  const { LayerOneController } = await import('./gameplay/layer-one.js');
+  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
+  const { LayerSevenAdvisor } = await import('./gameplay/layer-seven.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    layerOne: new LayerOneController(), layerFour: new LayerFourSupervisor(),
+    layerSeven: new LayerSevenAdvisor()
+  }).start();
+  initialized(client, bridge);
+  const cmd = (requestId, action, more = {}) => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId, action, ...more
+  });
+  assert.equal(bridge.snapshot().layerSeven.mode, 'off');
+  assert.equal(cmd('suggest', 'advisor_mode', { mode:'suggestions' }).reason,'suggestions_only');
+  assert.equal(bridge.snapshot().layerSeven.recommendation.action,'inspect');
+  client.emit('update_attributes', { runtime_entity_id:123n, attributes: [
+    { name:'minecraft:health',current:3 },
+    { name:'minecraft:player.hunger',current:4 }
+  ] });
+  assert.equal(bridge.snapshot().layerSeven.recommendation.action,'stop');
+  assert.equal(bridge.snapshot().layerSeven.recommendation.executed,false);
+  assert.equal(cmd('review','advisor_review').status,'ok');
+  assert.equal(bridge.snapshot().layerSeven.journalSize,1);
+  assert.equal(client.sent.length,0);
+  assert.equal(cmd('disable','advisor_mode',{mode:'off'}).status,'accepted');
+  assert.equal(bridge.snapshot().layerSeven.journalSize,0);
+  assert.equal(bridge.snapshot().layerSeven.mode,'off');
+  bridge.stop();
+});

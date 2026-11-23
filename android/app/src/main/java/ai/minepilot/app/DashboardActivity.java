@@ -50,6 +50,8 @@ public final class DashboardActivity extends Activity {
     private Button planPlanks;
     private Button planFarm;
     private Button planStorage;
+    private Button advisorMode;
+    private Button advisorReview;
     private Button stopWorld;
     private Button joinFriend;
     private boolean failuresOnly;
@@ -536,6 +538,14 @@ public final class DashboardActivity extends Activity {
                 () -> requestGameplay("plan_workflow", false, null, "storage_preview", 0));
         planStorage.setVisibility(View.GONE);
         body.addView(planStorage, panelLayout(8));
+        advisorMode = actionButton("Enable suggestions-only companion advisor", false,
+                () -> requestGameplay("advisor_mode", false, null, "suggestions", 0));
+        advisorMode.setVisibility(View.GONE);
+        body.addView(advisorMode, panelLayout(8));
+        advisorReview = actionButton("Review companion's suggested next step", false,
+                () -> requestGameplay("advisor_review", false));
+        advisorReview.setVisibility(View.GONE);
+        body.addView(advisorReview, panelLayout(8));
 
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
@@ -690,6 +700,10 @@ public final class DashboardActivity extends Activity {
         String workflowKind = current.getString("workflow_kind", "none");
         String workflowState = current.getString("workflow_state", "");
         String workflowNext = current.getString("workflow_next", "");
+        String advisorModeText = current.getString("advisor_mode", "off");
+        String advisorAction = current.getString("advisor_action", "none");
+        String advisorReason = current.getString("advisor_reason", "");
+        String advisorState = current.getString("advisor_state", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -698,6 +712,11 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + "\nCompanion advisor: " + advisorModeText
+                        + ("off".equals(advisorModeText) ? "" :
+                            "\nSuggested next step (not executed): " + advisorAction
+                            + " · " + advisorReason + " · " + advisorState
+                            + "\nPrivate session observations: " + current.getInt("advisor_journal_count"))
                         + ("none".equals(workflowKind) ? "" :
                             "\nWorkflow preview: " + workflowKind + " · " + workflowState
                             + "\nReview step: " + current.getInt("workflow_checkpoint")
@@ -756,6 +775,13 @@ public final class DashboardActivity extends Activity {
         planPlanks.setVisibility(playing ? View.VISIBLE : View.GONE);
         planFarm.setVisibility(playing ? View.VISIBLE : View.GONE);
         planStorage.setVisibility(playing ? View.VISIBLE : View.GONE);
+        advisorMode.setVisibility(playing ? View.VISIBLE : View.GONE);
+        advisorReview.setVisibility(playing && "suggestions".equals(advisorModeText)
+                ? View.VISIBLE : View.GONE);
+        advisorMode.setText("suggestions".equals(advisorModeText)
+                ? "Disable companion suggestions" : "Enable companion suggestions (no actions)");
+        advisorMode.setOnClickListener(view -> requestGameplay("advisor_mode", false,
+                null, "suggestions".equals(advisorModeText) ? "off" : "suggestions", 0));
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
