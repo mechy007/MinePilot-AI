@@ -209,6 +209,17 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("workflow_updates", workflow.optInt("recentBlockUpdates", 0));
                     result.putInt("workflow_walkable", workflow.optInt("verifiedWalkableTiles", 0));
                 }
+                JSONObject advisor = gameplay.optJSONObject("layerSeven");
+                if (advisor != null) {
+                    result.putString("advisor_mode", advisor.optString("mode", "off"));
+                    result.putInt("advisor_journal_count", advisor.optInt("journalSize", 0));
+                    JSONObject recommendation = advisor.optJSONObject("recommendation");
+                    if (recommendation != null) {
+                        result.putString("advisor_action", recommendation.optString("action", "none"));
+                        result.putString("advisor_reason", recommendation.optString("reason", ""));
+                        result.putString("advisor_state", recommendation.optString("status", ""));
+                    }
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
@@ -232,7 +243,8 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"plan_collect".equals(action) && !"inspect_block".equals(action) &&
                 !"plan_food".equals(action) && !"plan_shelter".equals(action) &&
                 !"plan_craft_planks".equals(action) && !"plan_workflow".equals(action) &&
-                !"review_checkpoint".equals(action) &&
+                !"review_checkpoint".equals(action) && !"advisor_mode".equals(action) &&
+                !"advisor_review".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if ("probe_step".equals(action) && !confirmed) return;
@@ -278,6 +290,11 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (!"observe".equals(checkpoint) && !"inventory".equals(checkpoint) &&
                         !"terrain".equals(checkpoint) && !"recipe".equals(checkpoint)) return;
                 command.put("checkpoint", checkpoint);
+            }
+            if ("advisor_mode".equals(action)) {
+                String mode = extras.getString("item_name", "");
+                if (!"suggestions".equals(mode) && !"off".equals(mode)) return;
+                command.put("mode", mode);
             }
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
