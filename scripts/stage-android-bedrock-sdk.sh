@@ -260,6 +260,17 @@ PY
 mv "$temp/node_modules" "$temp/installed-modules"
 
 node "$temp/verify/node-smoke.cjs"
+node - "$temp/verify" <<'JS'
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const runtime=process.argv[2];
+const {createVanillaRuntimeRegistry}=require(path.join(runtime,'bedrock-runtime-registry.cjs'));
+const map=createVanillaRuntimeRegistry({engine:'1.26.60',block_properties:[]});
+assert.ok(map instanceof Map,'runtime block registry loads from bundled dependency');
+assert.equal(map.get(18894)?.name,'minecraft:air');
+assert.equal(map.get(3317)?.name,'minecraft:stone');
+console.log('Verified vanilla Bedrock runtime block-state registry in extracted Android SDK');
+JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-autonomy-runtime.test.cjs" "$temp/verify/"
