@@ -35,9 +35,9 @@ test('requires start game and spawn and waits for SDK cleanup when stopped', asy
   controller.abort();
   client.emit('error', new Error('Late SDK error'));
   assert.equal(client.closed, 1);
-  assert.deepEqual(snapshots.at(-1), { phase: 'stopped', stage: 'connection' });
+  assert.equal(snapshots.at(-1).phase, 'spawned');
   completeCleanup();
-  await session;
+  assert.deepEqual(await session, { phase: 'stopped', stage: 'connection' });
 });
 
 test('ignores late spawn events while an aborted client closes', async () => {
@@ -52,8 +52,8 @@ test('ignores late spawn events while an aborted client closes', async () => {
   const snapshots = [];
   const session = observeSession(client, state => snapshots.push(state), controller.signal, () => 'connection');
   controller.abort();
-  await session;
-  assert.deepEqual(snapshots, [{ phase: 'stopped', stage: 'connection' }]);
+  assert.deepEqual(await session, { phase: 'stopped', stage: 'connection' });
+  assert.deepEqual(snapshots, []);
   assert.equal(client.listenerCount('level_chunk'), 0);
 });
 
@@ -62,8 +62,8 @@ test('reports a safe failure on a disconnect before the world starts', async () 
   const snapshots = [];
   const session = observeSession(client, state => snapshots.push(state), new AbortController().signal, () => 'connection');
   client.emit('close');
-  await session;
-  assert.deepEqual(snapshots, [{ phase: 'failed', stage: 'connection' }]);
+  assert.deepEqual(await session, { phase: 'failed', stage: 'connection' });
+  assert.deepEqual(snapshots, []);
 });
 
 test('hands the verified account to the friend-world SDK with exact owner selection', async () => {
@@ -113,6 +113,68 @@ test('hands the verified account to the friend-world SDK with exact owner select
     'bedrock_credentials', 'verified', 'discovery', 'connection', 'spawned', 'disconnected'
   ]);
 });
+
+for (const cancel of [false, true]) {
+  test(cancel ? 'cancel stops a pending retry' : 'a peer timeout gets exactly one fresh join after cleanup', async () => {
+    const controller = new AbortController();
+    const snapshots = [];
+    const clients = [];
+    const selected = [];
+    let finishCleanup;
+    let verified = 0;
+    const membershipCleaned = new Promise(resolve => {
+      finishCleanup = resolve;
+    });
+    class Authflow {
+      async getXboxToken() { verified++; }
+      async getMinecraftBedrockToken() {
+        const payload = Buffer.from(JSON.stringify({ extraData: { XUID: '42' } })).toString('base64url');
+        return { chain: ['fixture', 'header.' + payload + '.signature'], token: 'fixture' };
+      }
+    }
+    class XboxClient {
+      async getProfile() { return { xuid: '42', gamertag: 'Bot' }; }
+    }
+    const session = run({
+      ownerXuid: '84',
+      signal: controller.signal,
+      publish(snapshot) {
+        snapshots.push(snapshot);
+        if (cancel && snapshot.phase === 'retrying') controller.abort();
+      },
+      authDependencies: { Authflow, XboxClient, Titles: { MinecraftAndroid: 'android' } },
+      pickOwnerWorld(sessions, ownerXuid) {
+        assert.equal(ownerXuid, '84');
+        selected.push(sessions[0]);
+        return sessions[0];
+      },
+      createClient(options) {
+        const client = new Client();
+        clients.push(client);
+        if (clients.length === 1) client._nethernetCleanup = membershipCleaned;
+        queueMicrotask(() => {
+          options.world.pickSession([clients.length === 1 ? 'first' : 'fresh']);
+          client.emit('minepilot_join_step', 'nethernet_peer');
+          client.emit('error', Object.assign(new Error('NetherNet peer closed'), { nethernetCode: 14 }));
+        });
+        return client;
+      }
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(clients.length, 1);
+    assert.equal(clients[0].closed, 1);
+    assert.equal(snapshots.some(snapshot => snapshot.phase === 'retrying'), false);
+    finishCleanup();
+    await session;
+    assert.equal(verified, 1);
+    assert.deepEqual(selected, cancel ? ['first'] : ['first', 'fresh']);
+    assert.equal(snapshots.filter(snapshot => snapshot.phase === 'retrying').length, 1);
+    assert.deepEqual(snapshots.at(-1), cancel ? { phase: 'stopped' } : {
+      phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 14, retried: true
+    });
+    assert.equal(snapshots.filter(snapshot => snapshot.phase === 'failed').length, cancel ? 0 : 1);
+  });
+}
 
 test('packaged Bedrock SDK reaches the Xbox membership request for the selected owner', async context => {
   const { createClient } = require('bedrock-protocol');

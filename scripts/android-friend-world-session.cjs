@@ -5,7 +5,12 @@ const path = require('node:path');
 const os = require('node:os');
 const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
+const { setTimeout: delay } = require('node:timers/promises');
 const { accountWriter, verifyXbox } = require('./xbox-auth-probe.cjs');
+
+const ATTEMPT_TIMEOUT_MS = 90_000;
+const JOIN_BUDGET_MS = 120_000;
+const RETRY_DELAY_MS = 1_000;
 
 function androidNetworkInterfaces(readInterfaces, readAddresses) {
   return () => {
@@ -43,14 +48,21 @@ function safeJoinFailure(error) {
   }
   if (message === "Couldn't find a Nethernet ID to connect to.") return { reason: 'no_transport' };
   if (/timed out|timeout/i.test(message)) return { reason: 'timeout' };
-  if (/signalling|websocket|webrtc|\bice\b/i.test(message)) return { reason: 'transport' };
   const code = error?.cause?.code ?? error?.code;
   if (['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH',
     'ECONNRESET', 'ECONNREFUSED'].includes(code)) return { reason: 'network' };
+  if (/signalling|websocket|webrtc|\bice\b/i.test(message)) return { reason: 'transport' };
   return {};
 }
 
-async function observeSession(client, publish, signal, getStage) {
+function shouldRetry(result) {
+  return result.phase === 'failed' &&
+    ['nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
+    (['timeout', 'network'].includes(result.reason) ||
+      (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
+}
+
+async function observeSession(client, publish, signal, getStage, timeoutMs = ATTEMPT_TIMEOUT_MS) {
   let startGame = false;
   let spawn = false;
   let chunks = 0;
@@ -59,7 +71,7 @@ async function observeSession(client, publish, signal, getStage) {
   let timeout;
   let heartbeat;
   let connectionStage;
-  await new Promise(resolve => {
+  const result = await new Promise(resolve => {
     function finish(reason, details = {}) {
       if (finished) return;
       finished = true;
@@ -75,11 +87,10 @@ async function observeSession(client, publish, signal, getStage) {
       client.removeListener('join', onJoin);
       client.removeListener('kick', onKick);
       // Keep the error handler through close to suppress late SDK errors.
-      publish({ phase: reason, stage: connectionStage ?? getStage(), ...details });
       try {
         client.close();
       } finally {
-        resolve();
+        resolve({ phase: reason, stage: connectionStage ?? getStage(), ...details });
       }
     }
     const stop = () => finish('stopped');
@@ -90,7 +101,7 @@ async function observeSession(client, publish, signal, getStage) {
       }
     };
     const checkSpawn = () => {
-      if (finished || !startGame || !spawn) return;
+      if (finished || joinedAt !== undefined || !startGame || !spawn) return;
       clearTimeout(timeout);
       joinedAt = performance.now();
       report();
@@ -116,17 +127,19 @@ async function observeSession(client, publish, signal, getStage) {
     client.once('spawn', onSpawn);
     client.on('level_chunk', onChunk);
     client.once('close', closed);
-    client.on('error', error => finish('failed', safeJoinFailure(error)));
-    timeout = setTimeout(() => finish('failed', { reason: 'timeout' }), 90000);
+    client.on('error', error => finish(joinedAt === undefined ? 'failed' : 'disconnected', safeJoinFailure(error)));
+    timeout = setTimeout(() => finish('failed', { reason: 'timeout' }), timeoutMs);
     signal.addEventListener('abort', stop, { once: true });
     if (signal.aborted) stop();
   });
   // The pinned SDK exposes pending NetherNet/Xbox cleanup internally after close.
   await client._nethernetCleanup;
+  return result;
 }
 
 async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld, saveAccount }) {
   let stage = 'owner';
+  let retried = false;
   try {
     if (!ownerXuid || ownerXuid.length > 32) throw new Error();
     stage = 'auth';
@@ -140,33 +153,50 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
       signal.throwIfAborted();
     }
     validateOwner(ownerXuid, profile.xuid);
-    stage = 'discovery';
-    publish({ phase: 'discovery', gamertag: profile.gamertag });
-    const client = createClient({
-      username: profile.gamertag,
-      offline: false,
-      version: '1.26.60',
-      authTitle: authDependencies.Titles.MinecraftAndroid,
-      deviceType: 'Android',
-      authflow: auth,
-      // Give the mobile path room for signalling and ICE before the spawn deadline.
-      connectTimeout: 45000,
-      nethernet: { webrtcBackend: 'werift', responseTimeoutMs: 25000, inactivityTimeoutMs: 12000 },
-      conLog: null,
-      world: {
-        pickSession(sessions) {
-          const selected = pickOwnerWorld(sessions, ownerXuid);
-          stage = 'connection';
-          publish({ phase: 'connection' });
-          return selected;
+    const deadline = performance.now() + JOIN_BUDGET_MS;
+    async function attempt(timeoutMs) {
+      signal.throwIfAborted();
+      stage = 'discovery';
+      publish({ phase: 'discovery', gamertag: profile.gamertag, ...(retried ? { retried } : {}) });
+      const client = createClient({
+        username: profile.gamertag,
+        offline: false,
+        version: '1.26.60',
+        authTitle: authDependencies.Titles.MinecraftAndroid,
+        deviceType: 'Android',
+        authflow: auth,
+        // Give the mobile path room for signalling and ICE before the spawn deadline.
+        connectTimeout: 45000,
+        nethernet: { webrtcBackend: 'werift', responseTimeoutMs: 25000, inactivityTimeoutMs: 12000 },
+        conLog: null,
+        world: {
+          pickSession(sessions) {
+            const selected = pickOwnerWorld(sessions, ownerXuid);
+            stage = 'connection';
+            publish({ phase: 'connection' });
+            return selected;
+          }
         }
+      });
+      client.viewDistance = 4;
+      return observeSession(client, publish, signal, () => stage, timeoutMs);
+    }
+    let result = await attempt(ATTEMPT_TIMEOUT_MS);
+    signal.throwIfAborted();
+    if (shouldRetry(result) && deadline - performance.now() > RETRY_DELAY_MS) {
+      publish({ phase: 'retrying' });
+      await delay(RETRY_DELAY_MS, undefined, { signal });
+      const remaining = Math.floor(deadline - performance.now());
+      if (remaining > 0) {
+        retried = true;
+        result = await attempt(remaining);
+        signal.throwIfAborted();
       }
-    });
-    client.viewDistance = 4;
-    await observeSession(client, publish, signal, () => stage);
+    }
+    publish({ ...result, ...(retried ? { retried } : {}) });
   } catch (error) {
     if (signal.aborted) publish({ phase: 'stopped' });
-    else if (stage !== 'auth') publish({ phase: 'failed', stage, ...safeJoinFailure(error) });
+    else if (stage !== 'auth') publish({ phase: 'failed', stage, ...safeJoinFailure(error), ...(retried ? { retried } : {}) });
   }
 }
 

@@ -227,7 +227,11 @@ public final class XboxAuthProbeActivity extends Activity {
             copyCode.setVisibility(View.GONE);
             status.setText("Xbox profile verified. Requesting Minecraft Bedrock credentials…");
         } else if ("discovery".equals(phase)) {
-            status.setText("Signed in as " + current.optString("gamertag") + ". Looking for your friend’s world…");
+            status.setText(current.optBoolean("retried")
+                    ? "Retrying. Looking up your friend’s world again…"
+                    : "Signed in as " + current.optString("gamertag") + ". Looking for your friend’s world…");
+        } else if ("retrying".equals(phase)) {
+            status.setText("NetherNet was interrupted. Trying once more…");
         } else if ("connection".equals(phase)) {
             status.setText("Friend’s world found. Waiting for Bedrock to finish joining…");
         } else if ("spawned".equals(phase)) {
