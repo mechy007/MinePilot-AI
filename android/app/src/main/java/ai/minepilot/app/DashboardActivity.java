@@ -671,6 +671,8 @@ public final class DashboardActivity extends Activity {
         worldHunger.setText(current.getString("hunger", "—"));
         String coordinates = current.getString("position", "");
         String movement = current.getString("movement", "unavailable");
+        String effectiveMode = current.getString("effective_gamemode", "unknown");
+        String movementAuthority = current.getString("movement_authority", "unknown");
         String command = current.getString("last_command", "");
         String task = current.getString("gameplay_task", "");
         String taskState = current.getString("gameplay_task_state", "");
@@ -720,6 +722,14 @@ public final class DashboardActivity extends Activity {
                 : "Position: " + coordinates + " · Nearby players: " + current.getInt("nearby_players")
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
+                        + "\nServer game mode: " + effectiveMode
+                        + " · Difficulty: " + (current.containsKey("world_difficulty")
+                            ? String.valueOf(current.getInt("world_difficulty")) : "unknown")
+                        + "\nMovement authority: " + movementAuthority
+                        + "\nLoading handshake: "
+                        + (current.getBoolean("spawn_loading_completed", false) ? "sent" : "not confirmed")
+                        + " · Respawn acks: " + current.getInt("spawn_respawn_acks")
+                        + " · Errors: " + current.getInt("spawn_handshake_errors")
                         + "\nInventory: " + inventory
                         + "\nMotion diagnostic: " + motionMode
                         + (current.getBoolean("motion_active", false) ? " · active" : " · idle")

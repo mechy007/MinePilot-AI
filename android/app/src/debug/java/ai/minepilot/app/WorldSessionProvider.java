@@ -72,6 +72,20 @@ public final class WorldSessionProvider extends ContentProvider {
             if (gameplay != null) {
                 result.putString("gameplay_state", gameplay.optString("state", ""));
                 result.putString("movement", gameplay.optString("movement", "unavailable"));
+                result.putString("player_gamemode", gameplay.optString("playerGameMode", "unknown"));
+                result.putString("world_gamemode", gameplay.optString("worldGameMode", "unknown"));
+                result.putString("effective_gamemode", gameplay.optString("serverGameMode", "unknown"));
+                if (!gameplay.isNull("difficulty"))
+                    result.putInt("world_difficulty", gameplay.optInt("difficulty", -1));
+                if (!gameplay.isNull("movementAuthority"))
+                    result.putString("movement_authority", gameplay.optString("movementAuthority", ""));
+                JSONObject spawnHandshake = gameplay.optJSONObject("spawnHandshake");
+                if (spawnHandshake != null) {
+                    result.putBoolean("spawn_loading_completed", spawnHandshake.optBoolean("loadingCompleted", false));
+                    result.putInt("spawn_loading_packets", spawnHandshake.optInt("loadingPacketsSent", 0));
+                    result.putInt("spawn_respawn_acks", spawnHandshake.optInt("respawnAcknowledged", 0));
+                    result.putInt("spawn_handshake_errors", spawnHandshake.optInt("handshakeErrors", 0));
+                }
                 JSONObject position = gameplay.optJSONObject("position");
                 if (position != null) {
                     result.putString("position", position.optString("x") + ", "

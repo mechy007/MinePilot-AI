@@ -20,6 +20,9 @@ function initialized(client, bridge) {
   client.emit('spawn');
   client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
   assert.equal(bridge.snapshot().state, 'observing');
+  // Strip the two intentional initial loading-screen completion writes;
+  // later tests assert zero unsolicited *gameplay* input packets.
+  client.sent.length = 0;
 }
 
 test('world state mirrors only live packet data, without inventing blocks', () => {
@@ -370,7 +373,9 @@ test('Layer 3 block updates do not imply mining, and dimension resets resource t
   assert.equal(inspected.reason, 'block_observation_only');
   assert.equal(bridge.snapshot().layerThree.route.status, 'route_unverified');
   assert.equal(bridge.snapshot().layerThree.route.executed, false);
-  assert.equal(client.sent.length, 0);
+  assert.deepEqual(client.sent.map(s => s.packet),
+    ['serverbound_loading_screen', 'serverbound_loading_screen'],
+    'spawn initialization packets do not imply gameplay or mining');
   client.emit('change_dimension', { dimension: 1 });
   assert.equal(bridge.snapshot().layerThree.observedBlockUpdates, 0);
   assert.equal(bridge.snapshot().layerThree.route.status, 'idle');
@@ -812,4 +817,76 @@ test('Bedrock input ticks stay monotonic across separate diagnostic commands and
   now+=50;pulse();now+=50;pulse();
   assert.deepEqual(client.sent.slice(-2).map(x=>x.value.tick),[501n,502n]);
   bridge.stop();
+});
+
+
+test('spawn completes loading gate exactly once and does not claim combat/physics readiness', () => {
+  const client=new Client();
+  const bridge=new BedrockGameplayBridge(client).start();
+  client.emit('start_game',{...start,player_gamemode:'fallback',world_gamemode:'survival',difficulty:2});
+  client.emit('respawn',{runtime_entity_id:123n,state:1,
+    position:{x:8.5,y:65,z:10.5}});
+  assert.equal(client.sent.length,1);
+  assert.equal(client.sent[0].packet,'respawn');
+  assert.equal(client.sent[0].value.state,2);
+  assert.equal(bridge.snapshot().position.y,65);
+  client.emit('spawn');
+  client.emit('level_chunk',{x:0,z:0,dimension:0});
+  assert.deepEqual(client.sent.slice(-2).map(x=>x.packet),
+    ['serverbound_loading_screen','serverbound_loading_screen']);
+  assert.deepEqual(client.sent.slice(-2).map(x=>x.value.type),[1,2]);
+  client.emit('spawn');
+  assert.equal(client.sent.length,3,'duplicate spawn does not resend loading');
+  const snap=bridge.snapshot();
+  assert.equal(snap.serverGameMode,'survival');
+  assert.equal(snap.difficulty,2);
+  assert.equal(snap.spawnHandshake.respawnAcknowledged,1);
+  assert.equal(snap.spawnHandshake.loadingPacketsSent,2);
+  assert.equal(snap.spawnHandshake.loadingCompleted,true);
+  assert.equal(snap.blocksDecoded,false);
+  bridge.stop();
+  assert.equal(client.listenerCount('respawn'),0);
+});
+
+test('player game modes are observed but never altered, and other players cannot spoof local mode',()=>{
+  const client=new Client();
+  const bridge=new BedrockGameplayBridge(client).start();
+  client.emit('start_game',{...start,player_gamemode:'creative',world_gamemode:'survival'});
+  client.emit('spawn');
+  assert.equal(bridge.snapshot().serverGameMode,'creative');
+  client.emit('update_player_game_type',{gamemode:'survival',player_unique_id:999n});
+  assert.equal(bridge.snapshot().serverGameMode,'creative');
+  client.emit('set_player_game_type',{gamemode:'survival'});
+  assert.equal(bridge.snapshot().serverGameMode,'survival');
+  client.emit('change_dimension',{dimension:1});
+  assert.equal(bridge.snapshot().spawnHandshake.loadingCompleted,false);
+  client.emit('spawn');
+  assert.equal(bridge.snapshot().spawnHandshake.loadingPacketsSent,2);
+  bridge.stop();
+});
+
+test('spawn frame only writes handshake packets; no automatic walking/mining occurs',()=>{
+  const client=new Client();
+  const bridge=new BedrockGameplayBridge(client).start();
+  client.emit('start_game',start);
+  client.emit('spawn');
+  assert.deepEqual(client.sent.map(x=>x.packet),
+    ['serverbound_loading_screen','serverbound_loading_screen']);
+  assert.equal(client.sent.some(x=>x.packet==='player_auth_input'),false);
+  bridge.stop();
+});
+
+
+test('pinned Bedrock 1.26.60 serializer accepts spawn completion and respawn acknowledgement frames',()=>{
+  const {createSerializer}=require('bedrock-protocol/src/transforms/serializer');
+  const codec=createSerializer('1.26.60');
+  const frames=[
+    {name:'respawn',params:{position:origin,state:2,runtime_entity_id:123n}},
+    {name:'serverbound_loading_screen',params:{type:1}},
+    {name:'serverbound_loading_screen',params:{type:2}}
+  ];
+  for(const frame of frames) {
+    const encoded=codec.createPacketBuffer(frame);
+    assert.ok(Buffer.isBuffer(encoded) && encoded.length>0,frame.name+' serializes');
+  }
 });
