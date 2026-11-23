@@ -330,11 +330,11 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"advisor_review".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action) &&
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
-                !"autonomy_follow".equals(action) && !"autonomy_stop".equals(action) &&
+                !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"experimental_break".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
-                "verified_step".equals(action) || "autonomy_follow".equals(action) ||
+                "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
                 "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
@@ -345,7 +345,7 @@ public final class WorldSessionProvider extends ContentProvider {
                     .put("version", "minepilot.gameplay.v1")
                     .put("requestId", requestId)
                     .put("action", action);
-            if ("plan_follow".equals(action)) {
+            if ("plan_follow".equals(action) || "follow_player".equals(action)) {
                 String name = extras.getString("player_name", "");
                 if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) return;
                 command.put("playerName", name);
@@ -407,6 +407,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 command.put("position", new JSONObject().put("x",bx).put("y",by).put("z",bz));
             }
             if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
+                "follow_player".equals(action) ||
                 "experimental_break".equals(action))
                 command.put("confirmed", true);
             if ("probe_step".equals(action)) {

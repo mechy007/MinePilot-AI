@@ -509,7 +509,7 @@ public final class DashboardActivity extends Activity {
         waitHere.setVisibility(View.GONE);
         body.addView(waitHere, panelLayout(8));
         section("Companion and planning previews");
-        planFollow = actionButton("Plan follow player", false, this::requestFollowPlan);
+        planFollow = actionButton("Follow player (experimental)", false, this::requestFollowPlan);
         planFollow.setVisibility(View.GONE);
         body.addView(planFollow, panelLayout(8));
         markHome = actionButton("Mark current position as home", false, () -> requestGameplay("set_home", false));
@@ -950,12 +950,14 @@ public final class DashboardActivity extends Activity {
         target.setTextColor(INK);
         target.setHintTextColor(MUTED);
         new android.app.AlertDialog.Builder(this)
-                .setTitle("Plan follow — no automatic movement")
-                .setMessage("Enter the exact gamertag of a currently observed player. This makes a navigation plan but does not move the bot until real walking is verified.")
+                .setTitle("Follow player")
+                .setMessage("Enter an exact observed gamertag. Follow is experimental: the bot will attempt short movement steps on verified terrain only, stopping if the host does not confirm progress.")
                 .setView(target)
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Plan follow", (dialog, which) ->
+                .setNeutralButton("Plan only", (dialog, which) ->
                         requestGameplay("plan_follow", false, target.getText().toString().trim()))
+                .setPositiveButton("Start Follow", (dialog, which) ->
+                        requestGameplay("follow_player", true, target.getText().toString().trim()))
                 .show();
     }
 

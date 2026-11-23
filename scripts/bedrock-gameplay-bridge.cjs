@@ -11,7 +11,7 @@ const { randomUUID } = require('node:crypto');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'autonomy_stop', 'verified_step', 'experimental_break']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'verified_step', 'experimental_break']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -538,6 +538,26 @@ class BedrockGameplayBridge {
     if(raw.action === 'autonomy_stop') {
       this.autonomy?.stop('user_stopped');
       return {status:'ok',reason:'autonomy_stopped'};
+    }
+    if(raw.action === 'follow_player') {
+      // User-confirmed target selection plus existing bounded verified Follow.
+      // Never bypass movement authority, terrain or survival safety gates.
+      if(raw.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
+      if(this.autonomy?.snapshot()?.active)
+        return {status:'rejected',reason:'autonomy_already_active'};
+      if(!this.spawned || !this.layerTwo || !this.autonomy)
+        return {status:'rejected',reason:'follow_unavailable'};
+      const plan=this.layerTwo.follow(raw.playerName,this.gameplayWorld());
+      if(plan?.status!=='accepted')
+        return plan??{status:'rejected',reason:'follow_plan_unavailable'};
+      this.movement?.stop?.();
+      this.layerOne?.stop('new_navigation_plan');
+      this.layerThree?.cancel();
+      this.layerFour?.setTask('follow');
+      this.layerFive?.cancel();
+      this.layerSix?.cancel();
+      // Keep the selected plan visible if the path cannot be verified.
+      return this.autonomy.enable(this,{confirmed:true});
     }
     if(raw.action === 'autonomy_follow') {
       if(!this.autonomy)return {status:'rejected',reason:'autonomy_runner_unavailable'};
