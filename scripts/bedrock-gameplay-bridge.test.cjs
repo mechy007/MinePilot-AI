@@ -592,3 +592,34 @@ test('Layer 7 optional advisor sees same-client survival and workflow state but 
   assert.equal(bridge.snapshot().layerSeven.mode,'off');
   bridge.stop();
 });
+
+
+test('Layer 8 enforces fresh world observations and never claims beta or autonomous gameplay', async () => {
+  const { LayerEightReadiness } = await import('./gameplay/layer-eight.js');
+  const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    layerEight: new LayerEightReadiness(), layerSix: new LayerSixWorkflow(()=>now),
+    clock: () => now
+  }).start();
+  initialized(client, bridge);
+  const cmd = (id, action, more = {}) => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: id, action, ...more
+  });
+  assert.equal(bridge.snapshot().layerEight.stage,'planning_preview');
+  assert.equal(bridge.snapshot().layerEight.releaseReady,false);
+  assert.equal(bridge.snapshot().layerEight.liveWalkVerified,false);
+  assert.equal(cmd('farm1','plan_workflow',{workflowKind:'farm_preview'}).status,'accepted');
+  now += 30001;
+  assert.equal(bridge.snapshot().layerEight.commandReason,'server_position_stale');
+  assert.equal(cmd('farm2','plan_workflow',{workflowKind:'storage_preview'}).reason,'server_position_stale');
+  assert.equal(cmd('stop','stop_movement').status,'ok','Stop always works with stale position');
+  client.emit('move_player', { runtime_entity_id:123n, position:{x:9,y:64,z:10.5} });
+  assert.equal(bridge.snapshot().layerEight.commandEligible,true);
+  assert.equal(cmd('farm3','plan_workflow',{workflowKind:'storage_preview'}).status,'accepted');
+  assert.equal(bridge.snapshot().layerEight.autonomousGameplayReady,false);
+  assert.equal(client.sent.length,0);
+  bridge.stop();
+  assert.equal(bridge.snapshot().layerEight.stage,'disconnected');
+});
