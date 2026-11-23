@@ -144,13 +144,14 @@ export class LayerFivePlanner {
     if (!this.plan || this.plan.kind !== 'shelter' || this.plan.dimension !== dimension ||
       !packet || typeof packet !== 'object') return false;
     const p = packet as { position?: unknown; layer?: unknown };
-    if (!finitePosition(p.position) || p.layer !== 0) return false;
-    if (![p.position.x, p.position.y, p.position.z].every(Number.isInteger)) return false;
-    const included = this.plan.steps.some(s => s.x === p.position!.x && s.y === p.position!.y &&
-      s.z === p.position!.z);
+    const position = p.position;
+    if (!finitePosition(position) || p.layer !== 0) return false;
+    if (![position.x, position.y, position.z].every(Number.isInteger)) return false;
+    const included = this.plan.steps.some(step =>
+      step.x === position.x && step.y === position.y && step.z === position.z);
     if (!included) return false;
     if (this.observedUpdates.size < 23)
-      this.observedUpdates.add(p.position.x + ':' + p.position.y + ':' + p.position.z);
+      this.observedUpdates.add(position.x + ':' + position.y + ':' + position.z);
     return true;
   }
 
