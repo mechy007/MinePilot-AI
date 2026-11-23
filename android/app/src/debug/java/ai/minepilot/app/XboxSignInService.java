@@ -87,7 +87,9 @@ public final class XboxSignInService extends Service {
                 accountWriter.start();
                 int exitCode;
                 JSONObject sessionConfig = new JSONObject().put("saveFd", savePipe[1].getFd())
-                        .put("logFile", RuntimeLog.file(this).toString());
+                        .put("logFile", RuntimeLog.file(this).toString())
+                        .put("experimentalMovement", joining && getSharedPreferences(
+                                "minepilot_gameplay", MODE_PRIVATE).getBoolean("allow_experimental_movement", false));
                 RuntimeLog.record(this, "runtime_ready");
                 if (joining || friends) {
                     if (friends) {
