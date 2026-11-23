@@ -739,3 +739,52 @@ test('motion diagnostics require opt-in and server-authenticated movement author
   assert.equal(client.sent.length,0);
   bridge.stop();
 });
+
+
+test('pinned Bedrock authority packet activates diagnostics after StartGame without movement_authority', () => {
+  const client=new Client();
+  let now=1000,pulse;
+  const movement=new ExperimentalPlayerInput(client,true,{
+    clock:()=>now,setInterval:cb=>{pulse=cb;return 1;},clearInterval:()=>{}
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  const actualStart={...start};
+  delete actualStart.movement_authority;
+  actualStart.rotation={x:7,z:90};
+  client.emit('start_game',actualStart);
+  client.emit('spawn');
+  client.emit('level_chunk',{x:0,z:0,dimension:0});
+  assert.equal(bridge.yaw,90);
+  assert.equal(bridge.pitch,7);
+  assert.equal(bridge.movementAuthority,null);
+  assert.equal(movement.capability(bridge),'unavailable');
+  client.emit('set_movement_authority',{movement_authority:'server'});
+  assert.equal(bridge.movementAuthority,1);
+  assert.equal(movement.capability(bridge),'experimental');
+  const cmd={version:'minepilot.gameplay.v1',requestId:'authority',
+    action:'motion_diagnostic',confirmed:true,mode:'forward',ticks:6};
+  assert.equal(bridge.execute(cmd).status,'accepted');
+  now+=50;pulse();
+  assert.ok(client.sent.at(-1).value.position.x<origin.x);
+  client.emit('set_movement_authority',{movement_authority:'client'});
+  assert.equal(movement.snapshot().active,false);
+  assert.equal(movement.snapshot().stoppedReason,'movement_authority_changed');
+  assert.equal(movement.capability(bridge),'unavailable');
+  const written=client.sent.length;
+  now+=50;pulse();
+  assert.equal(client.sent.length,written);
+  bridge.stop();
+  assert.equal(client.listenerCount('set_movement_authority'),0);
+});
+
+test('server correction packet rotation updates yaw in the authenticated session',()=>{
+  const client=new Client();
+  const bridge=new BedrockGameplayBridge(client).start();
+  initialized(client,bridge);
+  client.emit('correct_player_move_prediction',{
+    position:origin,rotation:{x:12,z:135},tick:105n
+  });
+  assert.equal(bridge.pitch,12);
+  assert.equal(bridge.yaw,135);
+  bridge.stop();
+});
