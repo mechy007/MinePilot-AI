@@ -153,6 +153,35 @@ public final class WorldSessionProvider extends ContentProvider {
                         if (!route.isNull("heading")) result.putString("resource_heading", route.optString("heading"));
                     }
                 }
+                JSONObject survival = gameplay.optJSONObject("layerFour");
+                if (survival != null) {
+                    result.putString("survival_level", survival.optString("level", "unknown"));
+                    result.putString("survival_reason", survival.optString("reason", ""));
+                    result.putString("survival_task_status", survival.optString("taskStatus", ""));
+                    result.putString("survival_paused_goal", survival.optString("pausedGoal", ""));
+                    if (!survival.isNull("isNight")) {
+                        result.putString("survival_night", survival.optBoolean("isNight") ? "yes" : "no");
+                    }
+                    org.json.JSONArray foods = survival.optJSONArray("foodOptions");
+                    if (foods != null) {
+                        StringBuilder labels = new StringBuilder();
+                        for (int i = 0; i < Math.min(foods.length(), 8); i++) {
+                            JSONObject food = foods.optJSONObject(i);
+                            if (food == null) continue;
+                            String name = food.optString("item", "");
+                            int count = food.optInt("count");
+                            if (!name.matches("minecraft:[a-z0-9_./-]{1,80}") || count < 1) continue;
+                            if (labels.length() != 0) labels.append(", ");
+                            labels.append(name).append(" x").append(count);
+                        }
+                        result.putString("survival_foods", labels.toString());
+                    }
+                    JSONObject plannedFood = survival.optJSONObject("foodPlan");
+                    if (plannedFood != null) {
+                        String name = plannedFood.optString("item", "");
+                        if (name.matches("minecraft:[a-z0-9_./-]{1,80}")) result.putString("survival_food_plan", name);
+                    }
+                }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
@@ -174,6 +203,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"stay".equals(action) && !"set_home".equals(action) &&
                 !"plan_follow".equals(action) && !"plan_return".equals(action) &&
                 !"plan_collect".equals(action) && !"inspect_block".equals(action) &&
+                !"plan_food".equals(action) &&
                 !"stop_movement".equals(action) && !"probe_step".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if ("probe_step".equals(action) && !confirmed) return;
