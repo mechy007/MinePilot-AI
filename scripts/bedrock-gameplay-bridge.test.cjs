@@ -873,3 +873,18 @@ test('spawn frame only writes handshake packets; no automatic walking/mining occ
   assert.equal(client.sent.some(x=>x.packet==='player_auth_input'),false);
   bridge.stop();
 });
+
+
+test('pinned Bedrock 1.26.60 serializer accepts spawn completion and respawn acknowledgement frames',()=>{
+  const {createSerializer}=require('bedrock-protocol/src/transforms/serializer');
+  const codec=createSerializer('1.26.60');
+  const frames=[
+    {name:'respawn',params:{position:origin,state:2,runtime_entity_id:123n}},
+    {name:'serverbound_loading_screen',params:{type:1}},
+    {name:'serverbound_loading_screen',params:{type:2}}
+  ];
+  for(const frame of frames) {
+    const encoded=codec.createPacketBuffer(frame);
+    assert.ok(Buffer.isBuffer(encoded) && encoded.length>0,frame.name+' serializes');
+  }
+});
