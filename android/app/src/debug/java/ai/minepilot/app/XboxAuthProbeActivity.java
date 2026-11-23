@@ -239,15 +239,29 @@ public final class XboxAuthProbeActivity extends Activity {
         } else if ("connection".equals(phase)) {
             status.setText("Friend’s world found. Waiting for Bedrock to finish joining…");
         } else if ("spawned".equals(phase)) {
-            status.setText("Bedrock spawn received. Ask the host to confirm the bot appears in the player list.\n\n"
+            status.setText("Bot spawned in Minecraft\n\n"
                     + "Connected for " + current.optLong("seconds") + " seconds\n"
-                    + "Level chunk packets received " + current.optLong("chunks"));
+                    + "Level chunk packets received " + current.optLong("chunks") + botAwareness(current.optJSONObject("vitals")));
         } else if ("disconnected".equals(phase) || "failed".equals(phase) || "stopped".equals(phase)) {
             status.setText(XboxSignInService.finalMessage(current, -1));
         } else {
             status.setText("Starting Microsoft sign-in…");
         }
         handler.postDelayed(poll, 350);
+    }
+
+    private static String botAwareness(JSONObject vitals) {
+        if (vitals == null) return "\n\nBot assessment · Waiting for health and hunger";
+        String assessment = switch (vitals.optString("assessment")) {
+            case "dead" -> "Bot is down";
+            case "recover_health" -> "Health is low";
+            case "needs_food" -> "Food is needed";
+            case "ready" -> "Health and hunger are stable";
+            default -> "Waiting for more status data";
+        };
+        String health = vitals.has("health") ? "\nHealth · " + vitals.optString("health") : "";
+        String hunger = vitals.has("hunger") ? "\nHunger · " + vitals.optString("hunger") : "";
+        return "\n\nBot assessment · " + assessment + health + hunger;
     }
 
     private boolean friendsIntent() {
