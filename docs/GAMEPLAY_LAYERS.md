@@ -7,16 +7,18 @@
 - Foundation PR #88: original standalone companion decisions and movement arbitration; merged to main.
 - Gameplay bridge PR #89: one live Android Bedrock session with packets, read-only world telemetry and explicitly gated six-tick diagnostic movement. Draft until real friend-world movement validation.
 - Layer 1 PR #90: stacked **on PR #89**, not independently on main. Read-only inventory and critical-health input; structured Inspect, Wait, Stop and guarded Probe tasks; task state, server-position acknowledgement, Android telemetry and tests.
+- Layer 2 PR #91: stacked **on PR #90**. Named player tracking and read-only Follow, Stay, Return plans; no automatic following.
+- Layer 3 PR #92: stacked **on PR #91**. Read-only item registry, item drops, inventory/pickup correlation, block updates and resource planning; no automatic mining or collecting.
 
-PR #90 is not a second app and does not create another Bedrock connection. When #89 is integrated, retarget #90 to main or merge the changes into the same implementation branch after review. Avoid merging a stacked branch directly to main before its base is ready.
+PRs #89–#92 are staged changes on one Bedrock runtime, not four independent apps. Integrate and retarget the stacked changes in dependency order only when they pass review and the relevant host-observed acceptance gates; do not merge a stacked branch prematurely.
 
 ## Cross-phase layers
 
 | Layer | Navigation B | Gameplay C | Intelligence D | Acceptance |
 | --- | --- | --- | --- | --- |
 | 1 | Navigation authority, stop/short guarded probe | Position/chunk/player/vitals/inventory observation | Inspect/Wait/Stop task states | CI and same-client bridge; physical movement still unverified |
-| 2 | Deterministic walk, facing, jump and bounded follow | Read nearby entity position + held-tool slot | Follow/Stay/Return, cancellation | Host sees repeatable normal movement; server corrections converge |
-| 3 | Approach resource with loaded chunk awareness | Break simple block, pickup and inventory reconciliation | Gather N target resources | Server confirms block and inventory changes |
+| 2 | Bounded follow/return planning only; normal walking still blocked | Read nearby entity positions + held-tool slot | Follow/Stay/Return plans, cancellation | Unit/integration planning checks; real movement still requires host test |
+| 3 | Bounded item/drop and changed-block waypoint previews only | Observe item registry, item entities, block updates and inventory; no mining | Resource goals and server pickup/inventory correlation | Unit/integration observation checks; real collection still blocked |
 | 4 | Hazard avoidance / stuck recovery | Food detection and equipment switching | Pause task for survival, resume when safe | Safe interleaving and honest failures |
 | 5 | Navigate materials/work area | Craft simple recipe and place verified blocks | Plan one small shelter with approval | Actual bill of materials and placed blocks confirmed |
 | 6 | Better pathfinding, water modes, local replan | Farming and chest operations | Checkpoints, retries and task graph | Multistep task survives interruption |
@@ -46,4 +48,4 @@ World observations are bounded and not persisted as private raw protocol dumps. 
 5. Before enabling normal movement, host verifies a short movement and stop command in a private flat world, observes exact player coordinates, detects no significant rubber-banding or disconnect, and confirms input fixes. A compiled APK or successful packet queue **cannot replace** this.
 6. No phone installation is requested until a consolidated milestone is testable. Development can continue on GitHub; any remaining real-device blocker must be documented rather than silently bypassed.
 
-**Feature status:** Layer 1 is a vertical integration framework, not completed autonomous Minecraft gameplay. The next layer must replace the diagnostic pulse with real server-authoritative, collision-aware movement verified on an actual host.
+**Feature status:** Layers 1–3 implement observation and goal-planning infrastructure, not autonomous Minecraft gameplay. Their combined physical gameplay acceptance remains blocked on a verified server-authoritative movement driver, decoded voxel collision and actual block/item interaction. See docs/GAMEPLAY_LAYER_2.md and docs/GAMEPLAY_LAYER_3.md.

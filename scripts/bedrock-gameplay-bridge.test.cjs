@@ -287,3 +287,114 @@ test('nested Bedrock PlayerRecords add/remove resolves names only for visible en
   assert.equal(bridge.snapshot().layerTwo.preview.status, 'waiting_for_target');
   bridge.stop();
 });
+
+test('Layer 3 same-client resource planning, pickup receipts and inventory observations issue zero gameplay packets', async () => {
+  const { LayerOneController } = await import('./gameplay/layer-one.js');
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    layerOne: new LayerOneController(),
+    layerTwo: new LayerTwoPlanner(),
+    layerThree: new LayerThreePlanner()
+  }).start();
+  initialized(client, bridge);
+  const execute = (requestId, action, more = {}) => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId, action, ...more
+  });
+  client.emit('item_registry', { itemstates: [
+    { name: 'minecraft:oak_log', runtime_id: 5 },
+    { name: 'minecraft:stone', runtime_id: 9 }
+  ] });
+  client.emit('inventory_content', { window_id: 'inventory', input: [
+    { network_id: 5, count: 2 }, { network_id: 0, count: 0 }
+  ] });
+  client.emit('add_item_entity', {
+    runtime_entity_id: 1000n, item: { network_id: 5, count: 2 },
+    position: { x: 16, y: 64, z: 10.5 }
+  });
+  const first = bridge.snapshot().layerThree;
+  assert.equal(first.registeredItems, 2);
+  assert.equal(first.observedDrops, 1);
+  assert.deepEqual(first.nearbyItemNames, ['minecraft:oak_log']);
+  assert.equal(execute('collect', 'plan_collect', {
+    itemName: 'minecraft:oak_log', count: 2
+  }).reason, 'collect_plan_only');
+  const planned = bridge.snapshot().layerThree.route;
+  assert.equal(planned.status, 'route_unverified');
+  assert.equal(planned.executed, false);
+  assert.equal(client.sent.length, 0);
+  assert.equal(execute('probe', 'probe_step', {
+    confirmed: true, direction: 'forward'
+  }).reason, 'resource_goal_not_executable');
+  assert.equal(execute('wait-now', 'wait').status, 'accepted');
+  assert.equal(bridge.snapshot().layerThree.route.status, 'idle',
+    'Wait cancels resource goals before any input');
+  assert.equal(execute('collect-again', 'plan_collect', {
+    itemName: 'minecraft:oak_log', count: 2
+  }).status, 'accepted');
+  client.emit('take_item_entity', { runtime_entity_id: 1000n, target: 123n });
+  client.emit('inventory_content', { window_id: 'inventory', input: [
+    { network_id: 5, count: 4 }
+  ] });
+  assert.equal(bridge.snapshot().layerThree.route.status, 'observed_inventory_increase');
+  assert.equal(bridge.snapshot().layerThree.route.observed, 2);
+  assert.equal(bridge.snapshot().layerThree.route.executed, false);
+  assert.equal(client.sent.length, 0);
+  assert.equal(execute('stop', 'stop_movement').reason, 'movement_cancelled');
+  assert.equal(bridge.snapshot().layerThree.route.status, 'idle');
+  bridge.stop();
+  for (const event of ['item_registry', 'add_item_entity', 'take_item_entity', 'update_block']) {
+    assert.equal(client.listenerCount(event), 0);
+  }
+});
+
+test('Layer 3 block updates do not imply mining, and dimension resets resource targets', async () => {
+  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { layerThree: new LayerThreePlanner() }).start();
+  client.emit('start_game', {
+    runtime_entity_id: 123n, player_position: { x: 0, y: 64, z: 0 },
+    dimension: 'overworld', current_tick: 100n, movement_authority: 'server'
+  });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+  assert.equal(bridge.snapshot().dimension, 0);
+  assert.equal(bridge.snapshot().movementAuthority, 1);
+  client.emit('update_block', { position: { x: 8, y: 64, z: 0 }, block_runtime_id: 175,
+    flags: 2, layer: 0 });
+  assert.equal(bridge.snapshot().layerThree.observedBlockUpdates, 1);
+  const inspected = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'inspect-block', action: 'inspect_block'
+  });
+  assert.equal(inspected.reason, 'block_observation_only');
+  assert.equal(bridge.snapshot().layerThree.route.status, 'route_unverified');
+  assert.equal(bridge.snapshot().layerThree.route.executed, false);
+  assert.equal(client.sent.length, 0);
+  client.emit('change_dimension', { dimension: 1 });
+  assert.equal(bridge.snapshot().layerThree.observedBlockUpdates, 0);
+  assert.equal(bridge.snapshot().layerThree.route.status, 'idle');
+  bridge.stop();
+});
+
+test('pinned Bedrock SDK serializes break intent fixtures without executing them', () => {
+  // Future mining must choose the host-negotiated authority and confirm updates.
+  // These are codec-only fixtures: no network client or player_action is sent.
+  const { createSerializer } = require('bedrock-protocol/src/transforms/serializer');
+  const serializer = createSerializer('1.26.60');
+  const position = { x: 8, y: 64, z: 10 };
+  for (const action of ['start_break', 'abort_break']) {
+    const legacy = serializer.createPacketBuffer({
+      name: 'player_action',
+      params: { runtime_entity_id: 123n, action, position, result_position: position, face: 1 }
+    });
+    assert.ok(Buffer.isBuffer(legacy) && legacy.length > 10);
+    const auth = buildInputPacket(origin, 0, 103n, false);
+    auth.input_data = [35]; // InputData.block_action (protocol 2225)
+    auth.block_action = [{ action, position, face: 1 }];
+    const encoded = serializer.createPacketBuffer({
+      name: 'player_auth_input', params: auth
+    });
+    assert.ok(Buffer.isBuffer(encoded) && encoded.length > 10);
+  }
+});
