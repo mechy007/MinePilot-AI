@@ -342,7 +342,7 @@ class BedrockGameplayBridge {
       if (resourcePlanState && resourcePlanState !== 'idle')
         return { status: 'rejected', reason: 'resource_goal_not_executable' };
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
-      if (raw.direction !== 'forward' return { status: 'rejected', reason: 'unsupported_direction' };
+      if (raw.direction !== 'forward') return { status: 'rejected', reason: 'unsupported_direction' };
       if (!this.movement || this.movement.capability(this) !== 'experimental') {
         return { status: 'rejected', reason: 'movement_unavailable' };
       }
