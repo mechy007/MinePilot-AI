@@ -40,6 +40,7 @@ public final class DashboardActivity extends Activity {
     private Button verifiedStep;
     private Button autoFollow;
     private Button autoStop;
+    private Button experimentalBreak;
     private Button stopMovement;
     private Button inspectWorld;
     private Button waitHere;
@@ -570,6 +571,10 @@ public final class DashboardActivity extends Activity {
                 () -> requestGameplay("autonomy_stop", false));
         autoStop.setVisibility(View.GONE);
         body.addView(autoStop, panelLayout(8));
+        experimentalBreak = actionButton("Experimental break one observed block", false,
+                this::showBlockBreakDialog);
+        experimentalBreak.setVisibility(View.GONE);
+        body.addView(experimentalBreak, panelLayout(8));
         boolean experimentEnabled = getSharedPreferences("minepilot_gameplay", MODE_PRIVATE)
                 .getBoolean("allow_experimental_movement", false);
         button(experimentEnabled ? "Disable movement probe for next join" : "Enable experimental movement for next join",
@@ -779,6 +784,11 @@ public final class DashboardActivity extends Activity {
                         + " · Server-confirmed: " + current.getInt("autonomy_verified")
                         + (current.getString("autonomy_reason", "").isEmpty() ? ""
                             : "\nAutonomy reason: " + current.getString("autonomy_reason"))
+                        + "\nBlock action: " + current.getString("block_break_status", "idle")
+                        + " · Frames: " + current.getInt("block_break_frames")
+                        + " · Server block changed: " + current.getBoolean("block_break_changed", false)
+                        + (current.getString("block_break_reason", "").isEmpty() ? ""
+                            : "\nBlock action note: " + current.getString("block_break_reason"))
                         + "\nNavigation owner: " + addonNavOwner + " · " + addonNavState
                         + (addonNavReason.isEmpty() ? "" : "\nNavigation note: " + addonNavReason)
                         + "\nCompanion advisor: " + advisorModeText
@@ -858,6 +868,9 @@ public final class DashboardActivity extends Activity {
         autoFollow.setVisibility(playing && "experimental".equals(movement) && !autonomyActive
                 ? View.VISIBLE : View.GONE);
         autoStop.setVisibility(playing && autonomyActive ? View.VISIBLE : View.GONE);
+        experimentalBreak.setVisibility(playing && "experimental".equals(movement) &&
+                current.getBoolean("terrain_registry_ready", false) && !autonomyActive
+                ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
         stopWorld.setEnabled(canStop);
         joinFriend.setVisibility(playing || "connecting".equals(phase) || "stopping".equals(phase)
@@ -946,6 +959,22 @@ public final class DashboardActivity extends Activity {
                 .show();
     }
 
+    private void showBlockBreakDialog() {
+        EditText coordinate = new EditText(this);
+        coordinate.setSingleLine(true);
+        coordinate.setHint("x,y,z (observed block coordinates)");
+        coordinate.setTextColor(INK);
+        coordinate.setHintTextColor(MUTED);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Experimental block break")
+                .setMessage("Break one known solid block within 4.5 blocks. Only test in a private world with permission. This sends bounded Bedrock input; the host may reject it, and a block update is needed before the app reports a change.")
+                .setView(coordinate)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Attempt break", (dialog, which) ->
+                        requestGameplay("experimental_break", true,
+                                coordinate.getText().toString().trim()))
+                .show();
+    }
     private void showVerifiedStep() {
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Verified-terrain movement step")
@@ -1070,7 +1099,11 @@ public final class DashboardActivity extends Activity {
         Bundle extras = new Bundle();
         extras.putString("action", action);
         extras.putBoolean("confirmed", confirmed);
-        if (playerName != null) extras.putString("player_name", playerName);
+        if (playerName != null) {
+            if ("experimental_break".equals(action))
+                extras.putString("block_position", playerName);
+            else extras.putString("player_name", playerName);
+        }
         if (itemName != null) {
             extras.putString("item_name", itemName);
             extras.putInt("item_count", itemCount);
