@@ -53,6 +53,8 @@ class ExperimentalPlayerInput {
     this.predicted = null;
     this.remaining = 0;
     this.errors = 0;
+    this.world = null;
+    this.lastYaw = 0;
   }
   capability(world) {
     if (!this.enabled || typeof this.client.queue !== 'function') return 'unavailable';
@@ -69,7 +71,9 @@ class ExperimentalPlayerInput {
     this.remaining = PROBE_TICKS;
     this.predicted = { ...world.position };
     this.lastTick = world.serverTick;
+    this.world = world;
     const yaw = Number.isFinite(world.yaw) ? world.yaw : 0;
+    this.lastYaw = yaw;
     const send = () => {
       if (!this.timer) return;
       if (this.remaining <= 0) { this.stop(); return; }
@@ -95,12 +99,21 @@ class ExperimentalPlayerInput {
     if (typeof tick === 'bigint' && tick > (this.lastTick ?? -1n)) this.lastTick = tick;
   }
   stop() {
+    const hadTimer = this.timer != null;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.remaining = 0;
+    // Send a single neutral frame on explicit stop / after the bounded pulse,
+    // not after a dimension switch or connection closure.
+    if (hadTimer && this.world && !this.world.closed && this.world.spawned &&
+        this.world.position && this.predicted && this.lastTick != null) {
+      try {
+        this.client.queue('player_auth_input',
+          buildInputPacket(this.predicted, this.lastYaw, this.lastTick + 1n, false));
+      } catch { this.errors++; }
+    }
     this.predicted = null;
-    // No additional packet is sent here because that would be an unvalidated
-    // movement frame after cancellation; the last input pulse is bounded.
+    this.world = null;
   }
 }
 
