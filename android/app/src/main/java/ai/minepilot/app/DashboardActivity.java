@@ -504,6 +504,7 @@ public final class DashboardActivity extends Activity {
         waitHere = actionButton("Stay here", false, () -> requestGameplay("stay", false));
         waitHere.setVisibility(View.GONE);
         body.addView(waitHere, panelLayout(8));
+        section("Companion and planning previews");
         planFollow = actionButton("Plan follow player", false, this::requestFollowPlan);
         planFollow.setVisibility(View.GONE);
         body.addView(planFollow, panelLayout(8));
@@ -547,6 +548,7 @@ public final class DashboardActivity extends Activity {
         advisorReview.setVisibility(View.GONE);
         body.addView(advisorReview, panelLayout(8));
 
+        section("Stop and experimental connection controls");
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
         body.addView(stopMovement, panelLayout(8));
@@ -704,6 +706,9 @@ public final class DashboardActivity extends Activity {
         String advisorAction = current.getString("advisor_action", "none");
         String advisorReason = current.getString("advisor_reason", "");
         String advisorState = current.getString("advisor_state", "");
+        String betaStage = current.getString("beta_stage", "");
+        String betaBlockers = current.getString("beta_blockers", "");
+        String betaPlanReason = current.getString("beta_plan_reason", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -712,6 +717,11 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + (betaStage.isEmpty() ? "" :
+                            "\nGameplay beta: " + betaStage
+                            + (current.getBoolean("beta_ready", false) ? " · ready" : " · not device-verified")
+                            + (betaPlanReason.isEmpty() ? "" : "\nPlanning gate: " + betaPlanReason)
+                            + (betaBlockers.isEmpty() ? "" : "\nMissing verification: " + betaBlockers))
                         + "\nCompanion advisor: " + advisorModeText
                         + ("off".equals(advisorModeText) ? "" :
                             "\nSuggested next step (not executed): " + advisorAction
