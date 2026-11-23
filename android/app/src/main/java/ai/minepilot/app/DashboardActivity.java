@@ -673,6 +673,7 @@ public final class DashboardActivity extends Activity {
         String movement = current.getString("movement", "unavailable");
         String effectiveMode = current.getString("effective_gamemode", "unknown");
         String movementAuthority = current.getString("movement_authority", "unknown");
+        String movementAuthoritySource = current.getString("movement_authority_source", "unknown");
         String command = current.getString("last_command", "");
         String task = current.getString("gameplay_task", "");
         String taskState = current.getString("gameplay_task_state", "");
@@ -728,7 +729,7 @@ public final class DashboardActivity extends Activity {
                         + "\nServer game mode: " + effectiveMode
                         + " · Difficulty: " + (current.containsKey("world_difficulty")
                             ? String.valueOf(current.getInt("world_difficulty")) : "unknown")
-                        + "\nMovement authority: " + movementAuthority
+                        + "\nMovement authority: " + movementAuthority + " (" + movementAuthoritySource + ")"
                         + "\nLoading handshake: "
                         + (current.getBoolean("spawn_loading_completed", false) ? "sent" : "not confirmed")
                         + " · Respawn acks: " + current.getInt("spawn_respawn_acks")
@@ -736,6 +737,9 @@ public final class DashboardActivity extends Activity {
                         + "\nInventory: " + inventory
                         + "\nMotion diagnostic: " + motionMode
                         + (current.getBoolean("motion_active", false) ? " · active" : " · idle")
+                        + "\nNeutral presence: " + (current.getBoolean("presence_active", false) ? "active" : "stopped")
+                        + " · Heartbeat frames: " + current.getInt("presence_frames")
+                        + (current.getString("presence_error", "").isEmpty() ? "" : " · Error: " + current.getString("presence_error"))
                         + "\nInput frames sent: " + current.getInt("motion_frames")
                         + " · Server updates: " + current.getInt("motion_server_updates")
                         + " · Corrections: " + current.getInt("motion_corrections")

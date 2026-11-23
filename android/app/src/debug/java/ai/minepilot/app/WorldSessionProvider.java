@@ -72,6 +72,7 @@ public final class WorldSessionProvider extends ContentProvider {
             if (gameplay != null) {
                 result.putString("gameplay_state", gameplay.optString("state", ""));
                 result.putString("movement", gameplay.optString("movement", "unavailable"));
+                result.putString("movement_authority_source", gameplay.optString("movementAuthoritySource", "unknown"));
                 result.putString("player_gamemode", gameplay.optString("playerGameMode", "unknown"));
                 result.putString("world_gamemode", gameplay.optString("worldGameMode", "unknown"));
                 result.putString("effective_gamemode", gameplay.optString("serverGameMode", "unknown"));
@@ -98,6 +99,9 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putString("motion_mode", diagnostic.optString("mode", "idle"));
                     result.putBoolean("motion_active", diagnostic.optBoolean("active", false));
                     result.putInt("motion_frames", diagnostic.optInt("framesSent", 0));
+                    result.putBoolean("presence_active", diagnostic.optBoolean("presenceActive", false));
+                    result.putInt("presence_frames", diagnostic.optInt("presenceFrames", 0));
+                    result.putString("presence_error", diagnostic.optString("presenceError", ""));
                     result.putInt("motion_server_updates", diagnostic.optInt("serverUpdates", 0));
                     result.putInt("motion_corrections", diagnostic.optInt("corrections", 0));
                     result.putString("motion_displacement", diagnostic.optString("observedDisplacement", ""));

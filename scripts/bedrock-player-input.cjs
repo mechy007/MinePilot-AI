@@ -50,6 +50,13 @@ class ExperimentalPlayerInput {
   constructor(client, enabled = false, options = {}) {
     this.client = client;
     this.enabled = enabled === true;
+    // Neutral standing-still input is separate from opt-in physical movement.
+    // Enabled only for the real authenticated Android session, never fixtures.
+    this.presenceEnabled = options.presenceEnabled === true;
+    this.presenceTimer = null;
+    this.presenceWorld = null;
+    this.presenceFrames = 0;
+    this.presenceError = null;
     this.interval = options.interval ?? INPUT_TICK_MS;
     this.setInterval = options.setInterval ?? setInterval;
     this.clearInterval = options.clearInterval ?? clearInterval;
@@ -74,13 +81,62 @@ class ExperimentalPlayerInput {
     this.maxDrift = 0;
     this.recentCorrectionCount = 0;
   }
+  /** Continuous *neutral* PlayerAuthInput; no client-predicted locomotion. */
+  startPresence(world) {
+    if (!this.presenceEnabled || this.presenceTimer ||
+        typeof this.client.queue !== 'function') return false;
+    // Spawn alone is not a valid tick source; wait for StartGame and the
+    // explicit server-authoritative movement setting if supplied.
+    if (!world || !world.spawned || !finite3(world.position) || !world.self ||
+        typeof world.serverTick !== 'bigint' || world.serverTick < 0n ||
+        ![1, 2].includes(world.movementAuthority) ||
+        world.closed || world.dimension == null) return false;
+    this.presenceWorld = world;
+    this.lastTick = this.lastTick != null && this.lastTick > world.serverTick
+      ? this.lastTick : world.serverTick;
+    const pulse = () => {
+      const current = this.presenceWorld;
+      if (!current || current.closed || !current.spawned ||
+          ![1, 2].includes(current.movementAuthority) ||
+          !finite3(current.position) || current.self == null ||
+          current.dimension == null) {
+        this.stopPresence('session_or_authority_lost');
+        return;
+      }
+      // The bounded movement diagnostic takes full ownership of the same tick
+      // stream. Presence never emits an overlapping or out-of-order frame.
+      if (this.timer) return;
+      try {
+        const tick = this.lastTick + 1n;
+        const yaw = Number.isFinite(current.yaw) ? current.yaw : this.lastYaw;
+        const packet = buildInputPacket(current.position, yaw, tick, false);
+        this.client.queue('player_auth_input', packet);
+        this.lastTick = tick;
+        this.lastYaw = yaw;
+        this.presenceFrames++;
+      } catch {
+        this.errors++;
+        this.presenceError = 'presence_input_failed';
+        this.stopPresence('packet_write_failed');
+      }
+    };
+    this.presenceTimer = this.setInterval(pulse, this.interval);
+    return true;
+  }
+  stopPresence(reason = 'stopped') {
+    if (this.presenceTimer) this.clearInterval(this.presenceTimer);
+    this.presenceTimer = null;
+    this.presenceWorld = null;
+    if (reason === 'packet_write_failed') this.presenceError = reason;
+  }
   capability(world) {
     if (!this.enabled || typeof this.client.queue !== 'function') return 'unavailable';
     if (!world || !world.spawned || !finite3(world.position) || !world.self ||
       ![1, 2].includes(world.movementAuthority) || typeof world.serverTick !== 'bigint' ||
       world.receivedChunks.size === 0 || world.lastServerPositionAt == null ||
-      this.clock() - world.lastServerPositionAt > MAX_FRESH_MS ||
-      this.clock() - world.lastServerPositionAt < 0) return 'unavailable';
+      this.clock() - world.lastServerPositionAt < 0 ||
+      (this.clock() - world.lastServerPositionAt > MAX_FRESH_MS &&
+        !(this.presenceTimer && this.presenceFrames > 0))) return 'unavailable';
     return 'experimental';
   }
   /**
@@ -208,6 +264,7 @@ class ExperimentalPlayerInput {
   }
   /** New Xbox world session may restart the authoritative tick counter. */
   resetSession() {
+    this.stopPresence('world_reset');
     this.stop('session_reset', { silent: true });
     this.lastTick = null;
     this.predicted = null;
@@ -218,6 +275,8 @@ class ExperimentalPlayerInput {
     this.serverUpdates = 0;
     this.corrections = 0;
     this.maxDrift = 0;
+    this.presenceFrames = 0;
+    this.presenceError = null;
   }
   snapshot() {
     const displacement = this.initialPosition && this.lastServerPosition
@@ -227,6 +286,9 @@ class ExperimentalPlayerInput {
         this.lastServerPosition.z - this.initialPosition.z) : null;
     return {
       mode: this.mode ?? 'idle',
+      presenceActive: this.presenceTimer != null,
+      presenceFrames: this.presenceFrames,
+      presenceError: this.presenceError,
       active: this.timer != null,
       framesSent: this.framesSent,
       serverUpdates: this.serverUpdates,

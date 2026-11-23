@@ -761,8 +761,10 @@ test('pinned Bedrock authority packet activates diagnostics after StartGame with
   client.emit('level_chunk',{x:0,z:0,dimension:0});
   assert.equal(bridge.yaw,90);
   assert.equal(bridge.pitch,7);
-  assert.equal(bridge.movementAuthority,null);
-  assert.equal(movement.capability(bridge),'unavailable');
+  assert.equal(bridge.movementAuthority,1,
+    'modern Bedrock must not depend on deprecated authority packet');
+  assert.equal(bridge.movementAuthoritySource,'protocol_1_26_default');
+  assert.equal(movement.capability(bridge),'experimental');
   client.emit('set_movement_authority',{movement_authority:'server'});
   assert.equal(bridge.movementAuthority,1);
   assert.equal(movement.capability(bridge),'experimental');
@@ -916,5 +918,116 @@ test('addon-derived follow priority is wired to same Xbox world without automati
   assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'addon-stop',
     action:'stop_movement'}).status,'ok');
   assert.equal(bridge.snapshot().addonNavigation.owner,null);
+  bridge.stop();
+});
+
+
+test('neutral presence sends continuous 20Hz frames without moving when experimental locomotion is disabled',()=>{
+  const client=new Client();
+  let now=1000,intervals=new Map(),counter=0;
+  const movement=new ExperimentalPlayerInput(client,false,{
+    presenceEnabled:true,clock:()=>now,
+    setInterval:callback=>{const id=++counter;intervals.set(id,callback);return id;},
+    clearInterval:id=>intervals.delete(id)
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  assert.equal(bridge.movementAuthority,1);
+  assert.equal(movement.snapshot().presenceActive,true);
+  assert.equal(movement.capability(bridge),'unavailable',
+    'presence is independent of opting in to locomotion');
+  for(let i=0;i<10;i++){
+    now+=50;
+    for(const callback of [...intervals.values()])callback();
+  }
+  assert.equal(movement.snapshot().presenceFrames,10);
+  assert.equal(client.sent.length,10);
+  assert.ok(client.sent.every(s=>s.packet==='player_auth_input'));
+  assert.ok(client.sent.every(s=>s.value.input_data.length===0));
+  assert.ok(client.sent.every(s=>s.value.position.x===origin.x && s.value.position.z===origin.z));
+  assert.deepEqual(client.sent.map(s=>s.value.tick),
+    Array.from({length:10},(_,i)=>BigInt(101+i)));
+  bridge.stop();
+  assert.equal(movement.snapshot().presenceActive,false);
+  const before=client.sent.length;
+  for(const callback of [...intervals.values()])callback();
+  assert.equal(client.sent.length,before);
+});
+
+test('presence and opted-in movement share one ordered input stream with no overlap',()=>{
+  const client=new Client();
+  let now=1000,intervals=new Map(),counter=0;
+  const movement=new ExperimentalPlayerInput(client,true,{
+    presenceEnabled:true,clock:()=>now,
+    setInterval:callback=>{const id=++counter;intervals.set(id,callback);return id;},
+    clearInterval:id=>intervals.delete(id)
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  const tick=()=>{now+=50;for(const callback of [...intervals.values()])callback();};
+  tick();tick();
+  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'motion',
+    action:'motion_diagnostic',mode:'forward',ticks:2,confirmed:true}).status,'accepted');
+  tick();tick();tick();tick();
+  const frames=client.sent.filter(s=>s.packet==='player_auth_input');
+  assert.ok(frames.length>=6);
+  assert.ok(frames.every((s,i)=>i===0||s.value.tick>frames[i-1].value.tick));
+  assert.ok(frames.some(s=>s.value.input_data.includes(10)));
+  assert.equal(movement.snapshot().presenceActive,true);
+  client.emit('change_dimension',{dimension:1});
+  assert.equal(movement.snapshot().presenceActive,false);
+  assert.equal(intervals.size,0);
+  bridge.stop();
+});
+
+test('authority inferred from modern protocol, explicit rewind and new dimension reset',()=>{
+  const client=new Client();
+  const bridge=new BedrockGameplayBridge(client).start();
+  client.emit('start_game',{...start,movement_authority:undefined,rewind_history_size:40});
+  assert.equal(bridge.movementAuthority,2);
+  assert.equal(bridge.snapshot().movementAuthoritySource,'protocol_1_26_default');
+  client.emit('change_dimension',{dimension:1});
+  assert.equal(bridge.movementAuthority,null);
+  client.emit('start_game',{...start,movement_authority:undefined,rewind_history_size:0});
+  assert.equal(bridge.movementAuthority,1);
+  bridge.stop();
+});
+
+
+test('neutral presence packets serialize with pinned Bedrock 1.26.60 SDK, no movement flags',()=>{
+  const client=new Client();
+  let pulse;
+  const movement=new ExperimentalPlayerInput(client,false,{
+    presenceEnabled:true,clock:()=>1000,
+    setInterval:cb=>{pulse=cb;return 7;},clearInterval:()=>{}
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>1000}).start();
+  initialized(client,bridge);
+  pulse();
+  const frame=client.sent.at(-1);
+  assert.equal(frame.packet,'player_auth_input');
+  assert.deepEqual(frame.value.input_data,[]);
+  assert.deepEqual(frame.value.position,origin);
+  const {createSerializer}=require('bedrock-protocol/src/transforms/serializer');
+  const serializer=createSerializer('1.26.60');
+  const encoded=serializer.createPacketBuffer({name:frame.packet,params:frame.value});
+  assert.ok(Buffer.isBuffer(encoded)&&encoded.length>10);
+  bridge.stop();
+});
+
+test('neutral presence maintains bot input when idle spawn coordinates have no fresh self movement echo',()=>{
+  const client=new Client();
+  let now=1000,pulse;
+  const movement=new ExperimentalPlayerInput(client,true,{
+    presenceEnabled:true,clock:()=>now,
+    setInterval:cb=>{pulse=cb;return 7;},clearInterval:()=>{}
+  });
+  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
+  initialized(client,bridge);
+  now+=31_000;
+  pulse();
+  assert.equal(movement.snapshot().presenceFrames,1);
+  assert.equal(movement.capability(bridge),'experimental');
+  assert.equal(movement.snapshot().movementVerified,false);
   bridge.stop();
 });

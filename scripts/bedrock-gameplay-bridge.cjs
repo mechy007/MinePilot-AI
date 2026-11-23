@@ -70,6 +70,7 @@ class BedrockGameplayBridge {
     this.pitch = null;
     this.dimension = null;
     this.movementAuthority = null;
+    this.movementAuthoritySource = 'unknown';
     this.serverTick = null;
     this.receivedChunks = new Map();
     this.players = new Map();
@@ -151,9 +152,14 @@ class BedrockGameplayBridge {
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
+    // Protocol 1.26.60 uses server-authoritative movement; the old
+    // set_movement_authority packet was deprecated in 1.21.90.
     const authority = packet.movement_authority;
-    this.movementAuthority = Number.isInteger(authority) ? authority :
-      ({ client: 0, server: 1, server_with_rewind: 2 })[authority] ?? null;
+    const explicit = Number.isInteger(authority) && [0, 1, 2].includes(authority)
+      ? authority : ({ client: 0, server: 1, server_with_rewind: 2 })[authority];
+    this.movementAuthority = explicit ??
+      (Number.isInteger(packet.rewind_history_size) && packet.rewind_history_size > 0 ? 2 : 1);
+    this.movementAuthoritySource = explicit == null ? 'protocol_1_26_default' : 'explicit';
     this.serverTick = validTick(packet.current_tick);
     this.players.clear();
     this.receivedChunks.clear();
@@ -218,13 +224,18 @@ class BedrockGameplayBridge {
     // Player initialization is handled by bedrock-protocol's autoInitPlayer.
     // Bedrock Dedicated Server 1.26.x can require both loading-screen closure
     // packets before simulating movement. Send exactly once per dimension.
-    if (this.spawnTrace.loadingCompleted || typeof this.client.queue !== 'function') return;
+    if (this.spawnTrace.loadingCompleted || typeof this.client.queue !== 'function') {
+      if (this.spawnTrace.loadingCompleted) this.movement?.startPresence?.(this);
+      return;
+    }
     try {
       this.client.queue('serverbound_loading_screen', { type: 1 });
       this.spawnTrace.loadingPacketsSent++;
       this.client.queue('serverbound_loading_screen', { type: 2 });
       this.spawnTrace.loadingPacketsSent++;
       this.spawnTrace.loadingCompleted = true;
+      // Loading-screen completion is queued before the neutral input stream.
+      this.movement?.startPresence?.(this);
     } catch { this.spawnTrace.handshakeErrors++; }
   }
   authorityChange(packet) {
@@ -237,6 +248,9 @@ class BedrockGameplayBridge {
       // Changing movement prediction authority invalidates the active writer.
       this.movement?.stop?.('movement_authority_changed', { silent: true });
       this.movementAuthority = next;
+      this.movementAuthoritySource = 'explicit_authority_update';
+      if (this.spawned && [1,2].includes(next)) this.movement?.startPresence?.(this);
+      else this.movement?.stopPresence?.('authority_changed');
     }
   }
   attributes(packet) {
@@ -389,6 +403,8 @@ class BedrockGameplayBridge {
     this.position = null;
     this.lastServerPositionAt = null;
     this.serverTick = null;
+    this.movementAuthority = null;
+    this.movementAuthoritySource = 'unknown';
     this.spawned = false;
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
@@ -438,6 +454,7 @@ class BedrockGameplayBridge {
       serverPositionAgeMs: age,
       correctionCount: this.corrections,
       movementAuthority: this.movementAuthority,
+      movementAuthoritySource: this.movementAuthoritySource,
       serverGameMode: this.playerGameMode === 'fallback' ? this.worldGameMode : this.playerGameMode,
       playerGameMode: this.playerGameMode,
       worldGameMode: this.worldGameMode,
@@ -695,6 +712,7 @@ class BedrockGameplayBridge {
     this.closed = true;
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
+    this.movement?.stopPresence?.('session_closed');
     this.movement?.stop?.();
     this.layerOne?.stop('session_closed');
     this.layerTwo?.reset();

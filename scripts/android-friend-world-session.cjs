@@ -82,7 +82,11 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   const gameplay = gameplayOptions ? new BedrockGameplayBridge(client, {
     commandPath: gameplayOptions.commandPath,
     receiptPath: gameplayOptions.receiptPath,
-    movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true),
+    movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true, {
+      // Standing-still 20Hz input is standard Bedrock player presence, not
+      // opt-in walking. Same writer/packet tick stream as user diagnostics.
+      presenceEnabled: true
+    }),
     layerOne: gameplayOptions.layerOneFactory?.() ?? null,
     layerTwo: gameplayOptions.layerTwoFactory?.() ?? null,
     layerThree: gameplayOptions.layerThreeFactory?.() ?? null,
