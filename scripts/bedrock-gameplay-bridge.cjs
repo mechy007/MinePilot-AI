@@ -141,7 +141,8 @@ class BedrockGameplayBridge {
     this.receivedChunks.clear();
     this.lastWorldAt = this.clock();
     this.spawned = false;
-    this.movement?.stop();
+    if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
+    else this.movement?.stop();
     this.layerOne?.reset();
     this.layerTwo?.reset();
     this.layerThree?.reset();
@@ -312,7 +313,8 @@ class BedrockGameplayBridge {
     this.serverTick = null;
     this.receivedChunks.clear();
     this.players.clear();
-    this.movement?.stop();
+    if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
+    else this.movement?.stop();
     this.layerOne?.reset();
     this.layerTwo?.dimensionChanged();
     this.layerThree?.dimensionChanged();
