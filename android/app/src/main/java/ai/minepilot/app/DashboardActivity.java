@@ -552,7 +552,7 @@ public final class DashboardActivity extends Activity {
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
         body.addView(stopMovement, panelLayout(8));
-        probeStep = actionButton("Experimental: move forward briefly", false, this::confirmMovementProbe);
+        probeStep = actionButton("Experimental movement diagnostics", false, this::showMovementDiagnostics);
         probeStep.setVisibility(View.GONE);
         body.addView(probeStep, panelLayout(8));
         boolean experimentEnabled = getSharedPreferences("minepilot_gameplay", MODE_PRIVATE)
@@ -709,6 +709,10 @@ public final class DashboardActivity extends Activity {
         String betaStage = current.getString("beta_stage", "");
         String betaBlockers = current.getString("beta_blockers", "");
         String betaPlanReason = current.getString("beta_plan_reason", "");
+        String motionMode = current.getString("motion_mode", "idle");
+        String motionStopReason = current.getString("motion_stop_reason", "");
+        String motionDisplacement = current.getString("motion_displacement", "");
+        String motionDrift = current.getString("motion_drift", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -717,6 +721,14 @@ public final class DashboardActivity extends Activity {
                         + " · Corrections: " + current.getInt("corrections")
                         + "\nMovement: " + movement
                         + "\nInventory: " + inventory
+                        + "\nMotion diagnostic: " + motionMode
+                        + (current.getBoolean("motion_active", false) ? " · active" : " · idle")
+                        + "\nInput frames sent: " + current.getInt("motion_frames")
+                        + " · Server updates: " + current.getInt("motion_server_updates")
+                        + " · Corrections: " + current.getInt("motion_corrections")
+                        + (motionDisplacement.isEmpty() ? "" : "\nObserved displacement (not proof): " + motionDisplacement)
+                        + (motionDrift.isEmpty() ? "" : " · Max drift: " + motionDrift)
+                        + (motionStopReason.isEmpty() ? "" : "\nLast motion stop: " + motionStopReason)
                         + (betaStage.isEmpty() ? "" :
                             "\nGameplay beta: " + betaStage
                             + (current.getBoolean("beta_ready", false) ? " · ready" : " · not device-verified")
@@ -816,6 +828,45 @@ public final class DashboardActivity extends Activity {
                             .putBoolean("allow_experimental_movement", true).commit();
                     show("World");
                 }).show();
+    }
+
+    private void showMovementDiagnostics() {
+        String[] modes = { "Forward — 6 ticks (0.3 s)",
+                "Turn left — 6 ticks (0.3 s)", "Turn right — 6 ticks (0.3 s)",
+                "Forward — 20 ticks (1 s)" };
+        String[] codes = { "forward", "turn_left", "turn_right", "forward" };
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Experimental movement diagnostic")
+                .setMessage("This only tests protocol input, not autonomous gameplay. In a private flat world it may move unexpectedly or disconnect. Server telemetry does not prove causality.")
+                .setItems(modes, (dialog, selected) -> new android.app.AlertDialog.Builder(this)
+                        .setTitle("Confirm experimental movement")
+                        .setMessage("Run a bounded " + modes[selected] + " input sequence? Stop remains available.")
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Run diagnostic", (confirm, which) ->
+                                requestMotionDiagnostic(codes[selected], selected == 3 ? 20 : 6))
+                        .show())
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void requestMotionDiagnostic(String mode, int ticks) {
+        String session = worldSessionId;
+        if (session.isEmpty()) return;
+        Bundle extras = new Bundle();
+        extras.putString("action", "motion_diagnostic");
+        extras.putBoolean("confirmed", true);
+        extras.putString("motion_mode", mode);
+        extras.putInt("motion_ticks", ticks);
+        int generation = worldViewGeneration;
+        worldReader.execute(() -> {
+            Bundle receipt = worldRequest("gameplay", session, extras);
+            runOnUiThread(() -> {
+                if (generation != worldViewGeneration || !dashboardVisible) return;
+                showStatus(receipt != null && receipt.getBoolean("accepted")
+                        ? "Diagnostic queued. Packet acceptance and movement are not yet verified."
+                        : "Movement diagnostic unavailable for this session.");
+            });
+        });
     }
 
     private void confirmMovementProbe() {
