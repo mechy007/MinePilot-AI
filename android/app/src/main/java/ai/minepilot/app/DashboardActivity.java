@@ -13,6 +13,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.view.Gravity;
 import android.os.Bundle;
 import android.view.View;
@@ -21,12 +22,28 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import java.util.concurrent.Executors;
+import org.json.JSONObject;
 
 public final class DashboardActivity extends Activity {
     private LinearLayout body;
     private TextView status;
     private TextView latestRuntimeStatus;
     private TextView runtimeEvents;
+    private TextView worldState;
+    private TextView worldDetail;
+    private TextView worldHealth;
+    private TextView worldHunger;
+    private TextView lastEvent;
+    private Button stopWorld;
+    private Button joinFriend;
+    private boolean failuresOnly;
+    private String worldSessionId = "";
+    private boolean dashboardVisible;
+    private boolean worldRuntimeAvailable;
+    private int worldViewGeneration;
+    private final java.util.concurrent.ExecutorService worldReader = Executors.newSingleThreadExecutor();
+    private final Runnable pollWorld = this::refreshCommandCenter;
     private final android.os.Handler logRefresh = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable updateLogs = new Runnable() {
         @Override public void run() {
@@ -44,12 +61,13 @@ public final class DashboardActivity extends Activity {
     private boolean pendingAuthSwitch;
     private boolean pendingBotFlow;
     private static final int NOTIFICATION_REQUEST = 101;
-    private static final int BG = 0xff151b15;
-    private static final int PANEL = 0xff222c22;
-    private static final int GRASS = 0xffa8d67d;
-    private static final int INK = 0xffeff2e5;
-    private static final int BORDER = 0xff40513c;
-    private static final int MUTED = 0xffbac4b2;
+    private static final int BG = 0xff0d121b;
+    private static final int PANEL = 0xff171f2e;
+    private static final int GRASS = 0xff65e4ad;
+    private static final int INK = 0xffeef4ff;
+    private static final int BORDER = 0xff303d52;
+    private static final int MUTED = 0xffadb9cd;
+    private static final int AMBER = 0xffffc07a;
     private int dp(int value) { return (int)(getResources().getDisplayMetrics().density * value + .5f); }
     private GradientDrawable surface(int color, int radius) {
         GradientDrawable d = new GradientDrawable();
@@ -79,21 +97,29 @@ public final class DashboardActivity extends Activity {
     }
 
     private void action(String name, boolean primary, Runnable callback) {
+        body.addView(actionButton(name, primary, callback), panelLayout(9));
+    }
+
+    private LinearLayout.LayoutParams panelLayout(int margin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(margin);
+        return params;
+    }
+
+    private Button actionButton(String name, boolean primary, Runnable callback) {
         Button button = new Button(this);
         button.setText(name);
         button.setAllCaps(false);
         button.setTextSize(15);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setTextColor(primary ? 0xff182414 : INK);
+        button.setTextColor(primary ? BG : INK);
         button.setGravity(Gravity.CENTER);
         button.setMinimumHeight(dp(50));
         button.setPadding(dp(14), dp(10), dp(14), dp(10));
-        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x20708060),
-                surface(primary ? GRASS : PANEL, 6), null));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.bottomMargin = dp(9);
-        body.addView(button, params);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2673dab6),
+                surface(primary ? GRASS : PANEL, 12), null));
         button.setOnClickListener(view -> callback.run());
+        return button;
     }
 
     private void section(String name) {
@@ -124,9 +150,9 @@ public final class DashboardActivity extends Activity {
         panel.setGravity(Gravity.CENTER_VERTICAL);
         panel.setPadding(dp(16), dp(16), dp(8), dp(16));
         GradientDrawable backdrop = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xff374e31, 0xff252f23});
-        backdrop.setStroke(dp(1), 0xff56734a);
-        backdrop.setCornerRadius(dp(6));
+                new int[]{0xff193a36, 0xff172236});
+        backdrop.setStroke(dp(1), 0xff37645e);
+        backdrop.setCornerRadius(dp(16));
         panel.setBackground(backdrop);
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
@@ -158,6 +184,7 @@ public final class DashboardActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        worldRuntimeAvailable = getPackageManager().resolveContentProvider(getPackageName() + ".world-session", 0) != null;
         if (state != null) {
             currentTab = state.getString("tab", "World");
             xuidDraft = state.getString("xuid_draft");
@@ -176,6 +203,7 @@ public final class DashboardActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume();
+        dashboardVisible = true;
         if ("Xbox".equals(currentTab) || "World".equals(currentTab)) show(currentTab);
         if ("Logs".equals(currentTab)) {
             logRefresh.removeCallbacks(updateLogs);
@@ -184,15 +212,23 @@ public final class DashboardActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        dashboardVisible = false;
+        worldViewGeneration++;
+        logRefresh.removeCallbacks(pollWorld);
         logRefresh.removeCallbacks(updateLogs);
         super.onPause();
+    }
+
+    @Override protected void onDestroy() {
+        worldReader.shutdownNow();
+        super.onDestroy();
     }
 
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         String requestedTab = intent.getStringExtra("open_tab");
-        if ("Xbox".equals(requestedTab) || "Logs".equals(requestedTab)) show(requestedTab);
+        if ("World".equals(requestedTab) || "Xbox".equals(requestedTab) || "Logs".equals(requestedTab)) show(requestedTab);
         showSignInReturnStatus(intent);
     }
 
@@ -271,17 +307,25 @@ public final class DashboardActivity extends Activity {
                 case "Online", "Offline", "Away" -> presence;
                 default -> "Status unavailable";
             };
-            if (friend.optBoolean("minecraft")) {
-                label(name + " · " + state + " · Playing Minecraft", 14);
-                button("Check and join " + name, () -> openBotFlow(xuid, false));
-            } else {
-                label(name + " · " + state, 14);
+            boolean playing = friend.optBoolean("minecraft");
+            LinearLayout card = card();
+            card.addView(text(name, 18, INK, true));
+            card.addView(text(playing ? state + " · Playing Minecraft" : state, 13, playing ? GRASS : MUTED, false));
+            if (playing) {
+                Button join = actionButton("Check and join", false, () -> openBotFlow(xuid, false));
+                join.setContentDescription("Check and join " + name);
+                LinearLayout.LayoutParams action = panelLayout(0);
+                action.topMargin = dp(8);
+                card.addView(join, action);
             }
+            body.addView(card, panelLayout(8));
         }
     }
 
     private void show(String tab) {
         logRefresh.removeCallbacks(updateLogs);
+        logRefresh.removeCallbacks(pollWorld);
+        worldViewGeneration++;
         if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
         xuidInput = null;
         currentTab = tab;
@@ -317,17 +361,23 @@ public final class DashboardActivity extends Activity {
         root.addView(status);
         LinearLayout nav = new LinearLayout(this);
         nav.setPadding(0, dp(8), 0, 0);
-        for (String page : new String[]{"World", "Xbox", "Logs", "Settings"}) {
+        for (String page : new String[]{"World", "Xbox", "Skills", "Logs", "Settings"}) {
             boolean selected = page.equals(tab) || ("Settings".equals(page) && "Diagnostics".equals(tab));
             Button item = new Button(this);
-            item.setText(page.equals("Xbox") ? "Friends" : page);
+            item.setText(switch (page) {
+                case "World" -> "Control";
+                case "Xbox" -> "Friends";
+                case "Logs" -> "Activity";
+                default -> page;
+            });
             item.setAllCaps(false);
-            item.setTextSize(13);
-            item.setTextColor(selected ? 0xff182414 : MUTED);
+            item.setTextSize(12);
+            item.setPadding(dp(2), 0, dp(2), 0);
+            item.setTextColor(selected ? BG : MUTED);
             item.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             item.setSelected(selected);
-            item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x20809070),
-                    surface(selected ? GRASS : PANEL, 6), null));
+            item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2673dab6),
+                    surface(selected ? GRASS : PANEL, 10), null));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
             params.setMargins(dp(3), 0, dp(3), 0);
             nav.addView(item, params);
@@ -338,12 +388,17 @@ public final class DashboardActivity extends Activity {
 
         boolean signedIn = BotAccount.saved(this);
         switch (tab) {
+            case "Skills":
+                showSkills();
+                break;
             case "Logs":
                 showRuntimeLogs(signedIn);
                 break;
             case "Xbox":
                 hero("MULTIPLAYER", "Xbox friends", "See who’s around and check for a world you can join.");
                 if (signedIn) {
+                    showManualJoin();
+                    section("Friends list");
                     showXboxFriends();
                 } else {
                     accountCard(false);
@@ -391,25 +446,172 @@ public final class DashboardActivity extends Activity {
                 });
                 break;
             default:
-                hero("WORLD HUB", "Ready to explore?", "Connect MinePilot to a friend’s Bedrock world.");
-                accountCard(signedIn);
-                if (signedIn) {
-                    primaryButton("Find friends", () -> show("Xbox"));
-                    showManualJoin();
-                } else {
-                    primaryButton("Sign in with Microsoft", () -> openBotFlow(null, false));
-                    String result = XboxSignInReceiver.latest(this);
-                    if (!result.isEmpty()) label(result, 14);
-                }
+                showCommandCenter(signedIn);
         }
     }
 
+    private LinearLayout card() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(15), dp(13), dp(15), dp(13));
+        card.setBackground(surface(PANEL, 14));
+        return card;
+    }
+
+    private void showCommandCenter(boolean signedIn) {
+        hero("BEDROCK · XBOX", "Command Center",
+                signedIn ? "Bot account · " + BotAccount.gamertag(this) : "Connect an Xbox account to join your friends.");
+        LinearLayout session = card();
+        session.addView(text("WORLD SESSION", 11, GRASS, true));
+        worldState = text("Bot on standby", 22, INK, true);
+        worldState.setPadding(0, dp(6), 0, dp(2));
+        session.addView(worldState);
+        worldDetail = text("No active connection", 13, MUTED, false);
+        session.addView(worldDetail);
+        body.addView(session, panelLayout(10));
+
+        LinearLayout vitals = new LinearLayout(this);
+        worldHealth = addVital(vitals, "Health", 8);
+        worldHunger = addVital(vitals, "Hunger", 0);
+        body.addView(vitals, panelLayout(10));
+
+        stopWorld = actionButton("Disconnect bot", false, this::requestWorldStop);
+        stopWorld.setTextColor(AMBER);
+        stopWorld.setVisibility(View.GONE);
+        body.addView(stopWorld, panelLayout(9));
+        joinFriend = actionButton(signedIn ? "Browse friends" : "Sign in with Microsoft", true,
+                () -> { if (signedIn) show("Xbox"); else openBotFlow(null, false); });
+        body.addView(joinFriend, panelLayout(9));
+        section("Latest activity");
+        LinearLayout activity = card();
+        lastEvent = text("", 14, INK, false);
+        activity.addView(lastEvent);
+        body.addView(activity, panelLayout(9));
+        button("Open activity", () -> show("Logs"));
+        refreshCommandCenter();
+    }
+
+    private TextView addVital(LinearLayout row, String title, int gap) {
+        LinearLayout tile = card();
+        tile.addView(text(title, 13, MUTED, true));
+        TextView value = text("—", 23, INK, true);
+        tile.addView(value);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -1, 1);
+        params.setMarginEnd(dp(gap));
+        row.addView(tile, params);
+        return value;
+    }
+
+    private void showSkills() {
+        hero("BOT SKILLS", "Capabilities", "See the actions and observations available to your bot.");
+        skillCard("Vitals awareness", "Available", GRASS,
+                "Reads the bot’s health and hunger while connected and flags low vitals.");
+        section("Planned skills");
+        skillCard("Follow a player", "Planned", AMBER, "Track a selected player and maintain a follow distance.");
+        skillCard("Survival and inventory", "Planned", AMBER, "Respond to low health, eat available food, and manage items.");
+        skillCard("Gather and build", "Planned", AMBER, "Collect materials and carry out building tasks.");
+    }
+
+    private void skillCard(String name, String availability, int color, String description) {
+        LinearLayout card = card();
+        card.addView(text(availability, 12, color, true));
+        TextView title = text(name, 19, INK, true);
+        title.setPadding(0, dp(4), 0, dp(4));
+        card.addView(title);
+        card.addView(text(description, 14, MUTED, false));
+        body.addView(card, panelLayout(10));
+    }
+
+    private Bundle worldRequest(String method, String sessionId) {
+        try {
+            return getContentResolver().call(Uri.parse("content://" + getPackageName() + ".world-session"),
+                    method, sessionId, null);
+        } catch (IllegalArgumentException | IllegalStateException | SecurityException unavailable) {
+            return null;
+        }
+    }
+
+    private void refreshCommandCenter() {
+        if (!dashboardVisible || !"World".equals(currentTab)) return;
+        int generation = worldViewGeneration;
+        worldReader.execute(() -> {
+            Bundle current = worldRuntimeAvailable ? worldRequest("status", null) : null;
+            var events = RuntimeLog.recent(this);
+            String latest = events.isEmpty() ? "No session events yet" : RuntimeLog.describe(events.getLast());
+            runOnUiThread(() -> {
+                if (generation != worldViewGeneration || !dashboardVisible) return;
+                showWorldStatus(current == null ? Bundle.EMPTY : current);
+                lastEvent.setText(latest);
+                if (worldRuntimeAvailable) logRefresh.postDelayed(pollWorld, 1000);
+            });
+        });
+    }
+
+    private void showWorldStatus(Bundle current) {
+        String phase = current.getString("phase", "");
+        worldSessionId = current.getString("session_id", "");
+        boolean playing = "spawned".equals(phase);
+        boolean canStop = (playing || "connecting".equals(phase)) && !worldSessionId.isEmpty();
+        String assessment = switch (current.getString("assessment", "")) {
+            case "dead" -> "Bot is down";
+            case "recover_health" -> "Health is low";
+            case "needs_food" -> "Food is needed";
+            case "ready" -> "Vitals stable";
+            default -> "Waiting for vitals";
+        };
+        worldState.setText(switch (phase) {
+            case "spawned" -> "In your friend’s world";
+            case "connecting" -> "Connecting to world";
+            case "stopping" -> "Disconnecting";
+            default -> "Bot on standby";
+        });
+        worldState.setTextColor(playing ? GRASS : INK);
+        worldDetail.setText(playing
+                ? assessment + " · " + android.text.format.DateUtils.formatElapsedTime(current.getLong("seconds"))
+                        + " connected · " + current.getLong("chunks") + " chunks"
+                : switch (phase) {
+                    case "connecting" -> "Waiting for the Minecraft session";
+                    case "stopping" -> "Finishing the world session";
+                    default -> "No active connection";
+                });
+        worldHealth.setText(current.getString("health", "—"));
+        worldHunger.setText(current.getString("hunger", "—"));
+        stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
+        stopWorld.setEnabled(canStop);
+        joinFriend.setVisibility(playing || "connecting".equals(phase) || "stopping".equals(phase)
+                ? View.GONE : View.VISIBLE);
+    }
+
+    private void requestWorldStop() {
+        String session = worldSessionId;
+        if (session.isEmpty()) return;
+        stopWorld.setEnabled(false);
+        int generation = worldViewGeneration;
+        worldReader.execute(() -> {
+            Bundle receipt = worldRequest("stop", session);
+            runOnUiThread(() -> {
+                if (generation != worldViewGeneration || !dashboardVisible) return;
+                if (receipt == null || !receipt.getBoolean("accepted")) {
+                    showStatus("The world session has ended or could not be stopped.");
+                }
+            });
+        });
+    }
+
     private void showRuntimeLogs(boolean signedIn) {
+        hero("SESSION HISTORY", "Activity", "Inspect Xbox, world connection, and runtime events.");
         section("App status");
         label(signedIn ? "Xbox account connected" : "Xbox account disconnected", 14);
         latestRuntimeStatus = text("", 16, INK, true);
         body.addView(latestRuntimeStatus);
         section("Recent events");
+        android.widget.Switch filter = new android.widget.Switch(this);
+        filter.setText("Failures only");
+        filter.setTextColor(INK);
+        filter.setChecked(failuresOnly);
+        filter.setPadding(dp(12), 0, dp(12), 0);
+        filter.setMinimumHeight(dp(48));
+        body.addView(filter, panelLayout(9));
         button("Copy recent logs", () -> {
             android.content.ClipboardManager clipboard = getSystemService(android.content.ClipboardManager.class);
             var events = RuntimeLog.recent(this);
@@ -420,6 +622,10 @@ public final class DashboardActivity extends Activity {
         runtimeEvents.setTextIsSelectable(true);
         runtimeEvents.setLineSpacing(dp(5), 1f);
         body.addView(runtimeEvents);
+        filter.setOnCheckedChangeListener((view, checked) -> {
+            failuresOnly = checked;
+            refreshRuntimeLogs();
+        });
         updateLogs.run();
     }
 
@@ -427,7 +633,11 @@ public final class DashboardActivity extends Activity {
         var events = RuntimeLog.recent(this);
         String latest = events.isEmpty() ? "Ready" : RuntimeLog.describe(events.getLast());
         latestRuntimeStatus.setText("Latest status · " + latest);
-        String history = formatRuntimeEvents(events);
+        if (failuresOnly) events.removeIf(event -> switch (event.optString("phase")) {
+            case "failed", "runtime_failed", "account_failed", "disconnected", "runtime_interrupted" -> false;
+            default -> true;
+        });
+        String history = events.isEmpty() && failuresOnly ? "No failures in recent events." : formatRuntimeEvents(events);
         if (!android.text.TextUtils.equals(runtimeEvents.getText(), history)) runtimeEvents.setText(history);
     }
 
