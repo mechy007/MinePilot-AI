@@ -40,9 +40,9 @@ public final class XboxAuthProbeActivity extends Activity {
     private static boolean browserOpened;
     private String currentCode;
     private boolean explicitlyClosed;
-    private static final int BG = 0xff151b15;
-    private static final int PANEL = 0xff222c22;
-    private static final int GRASS = 0xffa8d67d;
+    private static final int BG = 0xff0d121b;
+    private static final int PANEL = 0xff171f2e;
+    private static final int GRASS = 0xff65e4ad;
     private int dp(int value) { return (int) (getResources().getDisplayMetrics().density * value + .5f); }
 
     @Override public void onCreate(Bundle savedState) {
@@ -68,7 +68,7 @@ public final class XboxAuthProbeActivity extends Activity {
         heading.addView(mark, new LinearLayout.LayoutParams(dp(46), dp(46)));
         TextView brand = new TextView(this);
         brand.setText("MinePilot");
-        brand.setTextColor(0xffeff2e5);
+        brand.setTextColor(0xffeef4ff);
         brand.setTextSize(20);
         brand.setTypeface(null, Typeface.BOLD);
         heading.addView(brand);
@@ -82,15 +82,15 @@ public final class XboxAuthProbeActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         TextView title = new TextView(this);
-        title.setText(friendsIntent() ? "Refresh Xbox friends" : joiningIntent() ? "Connect to your friend" : "Connect your Xbox account");
-        title.setTextColor(0xffeff2e5);
+        title.setText(friendsIntent() ? "Refresh Xbox friends" : joiningIntent() ? "World Session" : "Connect your Xbox account");
+        title.setTextColor(0xffeef4ff);
         title.setTextSize(26);
         title.setTypeface(null, Typeface.BOLD);
         layout.addView(title);
         TextView description = new TextView(this);
         description.setText(friendsIntent() ? "MinePilot is checking your saved Xbox account for friends and presence."
                 : "MinePilot will open Microsoft sign-in. Approve the bot account there, then return here while MinePilot finishes automatically.");
-        description.setTextColor(0xffbac4b2);
+        description.setTextColor(0xffadb9cd);
         description.setTextSize(15);
         description.setPadding(0, dp(8), 0, dp(18));
         layout.addView(description);
@@ -101,7 +101,7 @@ public final class XboxAuthProbeActivity extends Activity {
         accountCard.setBackground(rounded(PANEL, 6));
         status = new TextView(this);
         status.setTextSize(16);
-        status.setTextColor(0xffeff2e5);
+        status.setTextColor(0xffeef4ff);
         status.setText("Preparing secure Microsoft sign-in…");
         accountCard.addView(status);
 
@@ -115,14 +115,20 @@ public final class XboxAuthProbeActivity extends Activity {
         copyCode.setOnClickListener(view -> copyCode());
         accountCard.addView(copyCode);
         layout.addView(accountCard);
-        Button logs = authButton("View logs");
+        if (joiningIntent()) {
+            Button control = authButton("Open Command Center");
+            control.setOnClickListener(view -> startActivity(new Intent(this, DashboardActivity.class)
+                    .putExtra("open_tab", "World")));
+            layout.addView(control);
+        }
+        Button logs = authButton("Open activity");
         logs.setOnClickListener(view -> startActivity(new Intent(this, DashboardActivity.class)
                 .putExtra("open_tab", "Logs")));
         layout.addView(logs);
 
         close = authButton(joiningIntent() ? "Stop connection" : "Cancel sign-in");
         close.setBackground(rounded(PANEL, 6));
-        close.setTextColor(0xffeff2e5);
+        close.setTextColor(0xffeef4ff);
         close.setOnClickListener(view -> endProbe());
         root.addView(close, new LinearLayout.LayoutParams(-1, dp(54)));
         setContentView(root);
@@ -282,7 +288,7 @@ public final class XboxAuthProbeActivity extends Activity {
     private Button authButton(String title) {
         Button button = new Button(this);
         button.setText(title);
-        button.setTextColor(0xff182414);
+        button.setTextColor(BG);
         button.setTextSize(15);
         button.setAllCaps(false);
         button.setTypeface(null, Typeface.BOLD);
