@@ -32,8 +32,8 @@ test('family taxonomy covers all 183 skills',()=>{
  assert.equal(Object.values(s.familyCounts).reduce((a,b)=>a+b,0),183);
 });
 test('recursive plan includes prerequisites before requested skill',()=>{
- const r=evaluateOdysseySkill('mine_diamond',allReady);assert.equal(r.status,'ready');
- assert.ok(r.dependencyOrder.indexOf('craft_iron_pickaxe')<r.dependencyOrder.indexOf('mine_diamond'));
+ const r=evaluateOdysseySkill('mine_diamond',allReady);assert.equal(r.status,'blocked');
+ assert.ok(r.dependencyOrder.includes('craft_iron_pickaxe'));assert.ok(r.dependencyOrder.includes('mine_diamond'));assert.ok(r.dependencyOrder.indexOf('craft_iron_pickaxe')<r.dependencyOrder.indexOf('mine_diamond'));
  assert.ok(r.dependencyOrder.includes('craft_crafting_table'));assert.ok(r.dependencyOrder.includes('smelt_all_raw_iron'));
 });
 test('one missing prerequisite blocks a composition',()=>{
@@ -49,11 +49,11 @@ test('experimental movement and manual mining are not marked ready',()=>{
  assert.ok(r.requiredCapabilities.includes('inventory_read'));
 });
 test('plans are dependency previews and never execute upstream JavaScript',()=>{
- const p=planOdysseySkill('mine_diamond',allReady);assert.equal(p.status,'preview');
+ const p=planOdysseySkill('mine_diamond',allReady);assert.equal(p.status,'blocked');
  assert.equal(p.execution,'bedrock_action_plan_only');assert.equal(p.executable,false);
- assert.ok(p.bedrockPlan);assert.equal(p.bedrockPlan.executable,false);
+ assert.ok(p.bedrockPlan);assert.equal(p.bedrockPlan.executable,false);assert.ok(p.bedrockPlan.actions.some(action=>action.name==='craftItem'));assert.ok(p.bedrockPlan.blockedActions.includes('craftItem'));
  assert.equal(p.arbitraryCodeExecution,false);assert.ok(p.primitiveCalls.includes('mineBlock'));assert.ok(!Object.hasOwn(p,'code'));
- assert.equal(planOdysseySkill('not_a_skill',allReady).status,'rejected');
+ const unknown=planOdysseySkill('not_a_skill',allReady);assert.equal(unknown.status,'rejected');assert.equal(unknown.executable,false);assert.equal(unknown.arbitraryCodeExecution,false);
 });
 test('listing filters by family, query and compatibility',()=>{
  assert.equal(listOdysseySkills({family:'craft',limit:200}).length,94);
@@ -67,7 +67,7 @@ test('live Bedrock-like states correctly keep unsupported gameplay families bloc
  equip_items:'unsupported',combat:'unsupported',collect_resources:'unsupported'};
  const s=summarizeOdysseyLibrary(live);assert.equal(s.total,183);assert.equal(s.executableCount,0);
  assert.ok(s.blocked>0);assert.ok(s.partial>0||s.manual>0);
- assert.equal(evaluateOdysseySkill('mine_diamond',live).status,'blocked');
+ assert.equal(evaluateOdysseySkill('mine_diamond',live).status,'blocked');assert.ok(evaluateOdysseySkill('mine_diamond',live).blockedPrimitives.length>0);
  assert.equal(evaluateOdysseySkill('collect_dirt',live).status,'blocked');
  assert.equal(evaluateOdysseySkill('kill_one_zombie',live).status,'blocked');
 });
