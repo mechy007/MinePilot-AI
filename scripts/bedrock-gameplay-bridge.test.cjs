@@ -854,7 +854,7 @@ test('Bedrock Dedicated Server zero runtime-id respawn packets are accepted for 
   });
   assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
   assert.equal(bridge.snapshot().respawnRecovery.recovered, 1);
-  assert.equal(bridge.snapshot().position, { x: 12.5, y: 70, z: 8.5 });
+  assert.deepEqual(bridge.snapshot().position, { x: 12.5, y: 70, z: 8.5 });
   bridge.stop();
 });
 
