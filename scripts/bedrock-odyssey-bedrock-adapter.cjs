@@ -3,14 +3,14 @@
 // Maps ODYSSEY's abstract primitive names to MinePilot-owned Bedrock capabilities.
 // This module never imports or evaluates upstream Mineflayer code.
 const PRIMITIVES = Object.freeze({
-  checkBlockAbove: { capability: 'spatial_observation', action: 'inspect_block', mode: 'observe' },
+  checkBlockAbove: { capability: 'spatial_observation', action: 'inspect_block', mode: 'observe', executor: 'odyssey_observe' },
   checkBlocksAround: { capability: 'spatial_observation', action: 'inspect_nearby_blocks', mode: 'observe' },
   findSuitablePosition: { capability: 'spatial_observation', action: 'find_safe_position', mode: 'observe' },
   getLogsCount: { capability: 'inventory_read', action: 'count_inventory_item', mode: 'observe' },
   getPlanksCount: { capability: 'inventory_read', action: 'count_inventory_item', mode: 'observe' },
-  goto: { capability: 'navigation', action: 'navigate_to_observed_target', mode: 'bounded' },
-  exploreUntil: { capability: 'navigation', action: 'explore_verified_terrain', mode: 'bounded' },
-  mineBlock: { capability: 'mine', action: 'break_observed_block', mode: 'manual_experimental' },
+  goto: { capability: 'navigation', action: 'navigate_to_observed_target', mode: 'bounded', executor: 'odyssey_execute' },
+  exploreUntil: { capability: 'navigation', action: 'explore_verified_terrain', mode: 'bounded', executor: 'odyssey_execute' },
+  mineBlock: { capability: 'mine', action: 'break_observed_block', mode: 'manual_experimental', executor: 'odyssey_execute' },
   craftItem: { capability: 'craft', action: 'craft_recipe', mode: 'unsupported' },
   cookFood: { capability: 'cook', action: 'cook_food', mode: 'unsupported' },
   smeltItem: { capability: 'smelt', action: 'smelt_item', mode: 'unsupported' },
@@ -50,7 +50,7 @@ function evaluatePrimitive(name, capabilities = {}) {
     : mode === 'bounded' || capabilityState === 'experimental' ? 'experimental' : 'ready';
   return {
     name, action: definition.action, capability: definition.capability,
-    capabilityState, status, reason: available ? reasonOf(capabilities, definition.capability)
+    capabilityState, status, executor: definition.executor ?? null, reason: available ? reasonOf(capabilities, definition.capability)
       : 'required_bedrock_action_not_implemented_or_unavailable',
     executable: status === 'ready' || status === 'experimental'
   };
