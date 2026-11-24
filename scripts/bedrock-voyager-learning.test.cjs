@@ -263,6 +263,7 @@ test('local autopilot advances through built-in Bedrock tasks without external m
   assert.equal(next.recentRuns.at(-1).outcome, 'verified');
   assert.equal(next.localAutopilot.enabled, true);
   assert.equal(next.activeTask.goal, 'explore');
+  assert.equal(engine.activeRun.owner, 'autopilot');
   assert.equal(world.gameplayAgent.snapshot().goal, 'explore');
   assert.equal(next.localAutopilot.attemptedThisSession, 2);
 });
