@@ -278,6 +278,20 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putString("motion_displacement", diagnostic.optString("observedDisplacement", ""));
                     result.putString("motion_drift", diagnostic.optString("maxDrift", ""));
                     result.putString("motion_stop_reason", diagnostic.optString("stoppedReason", ""));
+                    String motionModel=diagnostic.optString("motionModel","");
+                    if(motionModel.matches("[a-z_]{1,40}"))
+                        result.putString("motion_model",motionModel);
+                    JSONObject inputClock=diagnostic.optJSONObject("inputClock");
+                    if(inputClock!=null&&inputClock.optInt("protocol",-1)==2225) {
+                        result.putInt("input_skipped_ticks",Math.max(0,
+                                inputClock.optInt("skippedTicks",0)));
+                        result.putInt("input_correction_anchors",Math.max(0,
+                                inputClock.optInt("observedCorrections",0)));
+                        result.putInt("input_rejected_anchors",Math.max(0,
+                                inputClock.optInt("rejectedCorrections",0)));
+                        String tick=inputClock.optString("lastTick","");
+                        if(tick.matches("[0-9]{1,20}"))result.putString("input_last_tick",tick);
+                    }
                 }
                 JSONObject layer = gameplay.optJSONObject("layerOne");
                 if (layer != null) {

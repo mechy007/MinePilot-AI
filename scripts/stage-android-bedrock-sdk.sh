@@ -202,6 +202,7 @@ cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
 cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
+cp "$root/scripts/bedrock-auth-input-clock.cjs" "$temp/bedrock-auth-input-clock.cjs"
 cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
 cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-12660-states.json"
@@ -244,7 +245,7 @@ zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
-        "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs",
+        "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs", "bedrock-auth-input-clock.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
@@ -286,9 +287,10 @@ cp "$root/scripts/bedrock-respawn-recovery.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-life-senses.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-intelligence-core.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-gameplay-agent.test.cjs" "$temp/verify/"
+cp "$root/scripts/bedrock-auth-input-clock.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-survival-mission.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-first-person-scene.test.cjs" "$temp/verify/"
-node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs"
+node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-auth-input-clock.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 du -h "$destination/bedrock-sdk.zip"

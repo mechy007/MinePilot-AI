@@ -8,26 +8,31 @@
  * pulse is possible only after a valid StartGame/server-authoritative session.
  * Never use move_player as a client-bound workaround.
  */
-const INPUT_TICK_MS = 50;
+const { AuthInputTickClock, TICK_MS: INPUT_TICK_MS } = require('./bedrock-auth-input-clock.cjs');
 const PROBE_TICKS = 6;
-const PROBE_STEP = 0.065; // Conservative predicted 0.39-block pulse, not a physics engine.
+const PROBE_STEP = 0.065; // User-confirmed diagnostic only.
+const VERIFIED_STEP = 0.11; // Conservative flat-ground target, not full Bedrock physics.
 // A stopped client may receive no periodic self-position echoes. The probe is
 // still explicitly confirmed and only allowed shortly after a real StartGame.
 const MAX_FRESH_MS = 30_000;
 const finite3 = p => p && ['x', 'y', 'z'].every(k => Number.isFinite(p[k]));
-const packetTick = v => v == null ? null : BigInt(v);
 const normalYaw = v => ((v % 360) + 360) % 360;
 
-function buildInputPacket(position, yaw, tick, moving) {
+function buildInputPacket(position, yaw, tick, moving, options = {}) {
   if (!finite3(position) || !Number.isFinite(yaw) || typeof tick !== 'bigint' || tick < 0n)
     throw new TypeError('Invalid player_auth_input state');
+  const step=Number.isFinite(options.step) &&
+    options.step>=0.02 && options.step<=0.13?options.step:PROBE_STEP;
   const angle = yaw * Math.PI / 180;
-  const shift = moving ? { x: -Math.sin(angle) * PROBE_STEP, y: 0, z: Math.cos(angle) * PROBE_STEP }
+  const pitch = Number.isFinite(options.pitch) && Math.abs(options.pitch)<=90
+    ? options.pitch : 0;
+  const vertical = pitch * Math.PI / 180;
+  const shift = moving ? { x: -Math.sin(angle) * step, y: 0, z: Math.cos(angle) * step }
     : { x: 0, y: 0, z: 0 };
   const predicted = { x: position.x + shift.x, y: position.y, z: position.z + shift.z };
   const forward = moving ? 1 : 0;
   return {
-    pitch: 0,
+    pitch,
     yaw: normalYaw(yaw),
     head_yaw: normalYaw(yaw),
     position: predicted,
@@ -37,11 +42,16 @@ function buildInputPacket(position, yaw, tick, moving) {
     input_mode: 'touch',
     play_mode: 'normal',
     interaction_model: 1,
-    interact_rotation: { x: 0, z: normalYaw(yaw) },
+    interact_rotation: { x: pitch, z: normalYaw(yaw) },
     tick,
     delta: shift,
     analogue_move_vector: { x: 0, z: forward },
-    camera_orientation: { x: 0, y: 0, z: 0 },
+    // Protocol 2225 requires a world-space unit forward vector, not an
+    // all-zero placeholder that cannot represent any look direction.
+    camera_orientation: { x: Math.sin(angle)===0?0:
+      -Math.sin(angle)*Math.cos(vertical),
+      y: Math.sin(vertical)===0?0:-Math.sin(vertical),
+      z: Math.cos(angle)*Math.cos(vertical) },
     raw_move_vector: { x: 0, z: forward }
   };
 }
@@ -62,6 +72,7 @@ class ExperimentalPlayerInput {
     this.setInterval = options.setInterval ?? setInterval;
     this.clearInterval = options.clearInterval ?? clearInterval;
     this.clock = options.clock ?? Date.now;
+    this.tickClock = new AuthInputTickClock({clock:this.clock});
     this.timer = null;
     this.lastTick = null;
     this.predicted = null;
@@ -70,6 +81,8 @@ class ExperimentalPlayerInput {
     this.world = null;
     this.lastYaw = 0;
     this.mode = null;
+    this.requireVerifiedTerrain = false;
+    this.predictionStep = PROBE_STEP;
     this.framesSent = 0;
     this.serverUpdates = 0;
     this.corrections = 0;
@@ -93,8 +106,9 @@ class ExperimentalPlayerInput {
         ![1, 2].includes(world.movementAuthority) ||
         world.closed || world.dimension == null) return false;
     this.presenceWorld = world;
-    this.lastTick = this.lastTick != null && this.lastTick > world.serverTick
-      ? this.lastTick : world.serverTick;
+    if(!this.tickClock.seed(world.serverTick,world.serverTickObservedAt??this.clock()))
+      return false;
+    this.lastTick=this.tickClock.lastTick??world.serverTick;
     const pulse = () => {
       const current = this.presenceWorld;
       if (!current || current.closed || !current.spawned ||
@@ -108,9 +122,10 @@ class ExperimentalPlayerInput {
       // stream. Presence never emits an overlapping or out-of-order frame.
       if (this.timer) return;
       try {
-        const tick = this.lastTick + 1n;
+        const tick = this.tickClock.next();
         const yaw = Number.isFinite(current.yaw) ? current.yaw : this.lastYaw;
-        const packet = buildInputPacket(current.position, yaw, tick, false);
+        const packet = buildInputPacket(current.position,yaw,tick,false,
+          {pitch:current.pitch});
         // Bedrock's server-authoritative block break action is an optional
         // field on the SAME movement tick. Never create a competing tick writer.
         const blockAction = this.blockExecutor?.next?.(current);
@@ -169,12 +184,15 @@ class ExperimentalPlayerInput {
     this.initialPosition = { ...world.position };
     this.lastServerPosition = { ...world.position };
     this.lastServerPositionAt = world.lastServerPositionAt;
-    this.lastTick = this.lastTick != null && this.lastTick > world.serverTick
-      ? this.lastTick : world.serverTick;
+    if(!this.tickClock.seed(world.serverTick,world.serverTickObservedAt??this.clock()))
+      return {status:'rejected',reason:'invalid_server_tick'};
+    this.lastTick=this.tickClock.lastTick??world.serverTick;
     this.world = world;
     this.lastYaw = Number.isFinite(options.initialYaw)
       ? normalYaw(options.initialYaw) : Number.isFinite(world.yaw) ? world.yaw : 0;
     this.mode = mode;
+    this.requireVerifiedTerrain=options.verifiedTerrain===true;
+    this.predictionStep=this.requireVerifiedTerrain?VERIFIED_STEP:PROBE_STEP;
     this.framesSent = 0;
     this.serverUpdates = 0;
     this.corrections = 0;
@@ -200,12 +218,19 @@ class ExperimentalPlayerInput {
         return;
       }
       try {
-        const nextTick = this.lastTick + 1n;
+        const nextTick = this.tickClock.next();
         const isMoving = this.mode === 'forward';
         const yaw = this.mode === 'turn_left' ? this.lastYaw - 5
           : this.mode === 'turn_right' ? this.lastYaw + 5 : this.lastYaw;
-        const packet = buildInputPacket(this.predicted, yaw, nextTick, isMoving);
-        // The packet builder does not predict jumping/falling or voxel collisions.
+        const packet = buildInputPacket(this.predicted, yaw, nextTick, isMoving,
+          {pitch:world.pitch,step:this.predictionStep});
+        if(isMoving&&this.requireVerifiedTerrain &&
+          !this.verifiedFlatFootprint(world,this.predicted,packet.position)){
+          this.stop('unverified_or_blocked_next_step');
+          return;
+        }
+        // No jump, flight or speculative vertical physics. Use decoded
+        // walkable AABB footprint for this bounded flat movement segment.
         this.client.queue('player_auth_input', packet);
         this.lastTick = nextTick;
         this.lastYaw = yaw;
@@ -225,6 +250,24 @@ class ExperimentalPlayerInput {
    * The caller must validate terrain and obtain user approval before invocation.
    * This does not assert server acceptance or actual locomotion.
    */
+  verifiedFlatFootprint(world,from,to) {
+    if(!finite3(from)||!finite3(to)||!world?.terrain ||
+      !Number.isInteger(world.dimension))return false;
+    if(Math.abs(to.y-from.y)>0.01)return false;
+    const y=Math.floor(to.y-1.62+0.01);
+    if(!Number.isInteger(y))return false;
+    // Check path and body corners: moving diagonally near a wall must not
+    // consider only the center cell and walk through its solid neighbor.
+    for(const factor of [0.5,1]){
+      const x=from.x+(to.x-from.x)*factor;
+      const z=from.z+(to.z-from.z)*factor;
+      for(const dx of [-0.29,0,0.29])for(const dz of [-0.29,0,0.29]){
+        if(world.terrain.tile(world.dimension,Math.floor(x+dx),y,
+          Math.floor(z+dz))!=='walkable')return false;
+      }
+    }
+    return true;
+  }
   runVerifiedStep(world, target, ticks = 8) {
     if (!finite3(world?.position) || !finite3(target) ||
         !Number.isInteger(ticks) || ticks < 1 || ticks > 12)
@@ -234,7 +277,11 @@ class ExperimentalPlayerInput {
     if (distance<0.08 || distance>2.1 || Math.abs(target.y-world.position.y)>0.85)
       return {status:'rejected', reason:'waypoint_outside_verified_step'};
     const yaw=normalYaw(Math.atan2(-dx,dz)*180/Math.PI);
-    const result=this.runDiagnostic(world,{mode:'forward',ticks,initialYaw:yaw});
+    if(!this.verifiedFlatFootprint(world,world.position,target))
+      return {status:'rejected',reason:'unverified_waypoint_footprint'};
+    const result=this.runDiagnostic(world,{
+      mode:'forward',ticks,initialYaw:yaw,verifiedTerrain:true
+    });
     return result.status==='accepted'
       ? {status:'accepted',reason:'verified_waypoint_queued_not_host_confirmed'}
       : result;
@@ -262,6 +309,9 @@ class ExperimentalPlayerInput {
     }
   }
   correct(position, tick) {
+    // Reconcile the shared input clock even during neutral presence; previous
+    // implementation ignored every correction unless movement was running.
+    if(typeof tick==='bigint')this.tickClock.correction(tick);
     if (!this.timer) return;
     this.corrections++;
     if (finite3(position)) {
@@ -269,7 +319,7 @@ class ExperimentalPlayerInput {
       this.observeServerPosition(position, this.clock());
       if (this.timer) this.predicted = { ...position };
     }
-    if (typeof tick === 'bigint' && tick > (this.lastTick ?? -1n)) this.lastTick = tick;
+    if(this.tickClock.lastTick!=null)this.lastTick=this.tickClock.lastTick;
   }
   /** Explicit stop emits one neutral frame, unless connection/world ended. */
   stop(reason = 'user_stopped', opts = {}) {
@@ -284,7 +334,7 @@ class ExperimentalPlayerInput {
     if (active && opts.silent !== true && world && !world.closed && world.spawned &&
         finite3(world.position) && this.predicted && this.lastTick != null) {
       try {
-        const neutralTick = this.lastTick + 1n;
+        const neutralTick = this.tickClock.next();
         // On stopping, never echo a speculative locomotion position back to the
         // server. Prefer the latest authoritative world position (which may
         // have been corrected during the diagnostic), then the observed
@@ -294,18 +344,22 @@ class ExperimentalPlayerInput {
           ? world.position : finite3(this.lastServerPosition)
             ? this.lastServerPosition : null;
         if (neutralPosition) this.client.queue('player_auth_input',
-          buildInputPacket(neutralPosition, this.lastYaw, neutralTick, false));
+          buildInputPacket(neutralPosition, this.lastYaw, neutralTick, false,
+            {pitch:world.pitch}));
         this.lastTick = neutralTick;
       } catch { this.errors++; }
     }
     this.predicted = null;
     this.world = null;
     this.mode = null;
+    this.requireVerifiedTerrain=false;
+    this.predictionStep=PROBE_STEP;
   }
   /** New Xbox world session may restart the authoritative tick counter. */
   resetSession() {
     this.stopPresence('world_reset');
     this.stop('session_reset', { silent: true });
+    this.tickClock.reset();
     this.lastTick = null;
     this.predicted = null;
     this.initialPosition = null;
@@ -334,8 +388,11 @@ class ExperimentalPlayerInput {
       serverUpdates: this.serverUpdates,
       corrections: this.corrections,
       maxDrift: Math.round(this.maxDrift * 1000) / 1000,
+      motionModel: this.requireVerifiedTerrain?'verified_flat_footprint':'bounded_diagnostic',
+      predictedStepSize: this.predictionStep,
       observedDisplacement: displacement === null ? null : Math.round(displacement * 1000) / 1000,
       stoppedReason: this.lastEndReason,
+      inputClock: this.tickClock.snapshot(),
       packetErrors: this.errors,
       movementVerified: false,
       gameplayAutonomyReady: false
