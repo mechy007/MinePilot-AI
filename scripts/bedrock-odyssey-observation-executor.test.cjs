@@ -36,7 +36,7 @@ test('rejects missing, stale, and unknown inventory instead of returning zero', 
     'inventory_observation_unavailable');
   assert.equal(executeBedrockObservation(bridge({ lastServerPositionAt: 1 }), 'getLogsCount').reason,
     'server_position_stale');
-  const b = bridge({ layerThree: { inventoryItems: () => ({ known: true, observedAt: 1, counts: {} }) } });
+  const b = bridge({ layerThree: { inventoryItems: () => ({ known: true, observedAt: -1, counts: {} }) } });
   assert.equal(executeBedrockObservation(b, 'getLogsCount').reason, 'inventory_observation_stale');
 });
 
