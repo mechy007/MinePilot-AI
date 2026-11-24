@@ -801,6 +801,13 @@ public final class DashboardActivity extends Activity {
                         .replace('_', ' '));
             }
         }
+        if (learningState != null && playing) {
+            learningState.append("\\nODYSSEY library: " + current.getInt("odyssey_total")
+                    + " skills · " + current.getInt("odyssey_ready") + " ready · "
+                    + current.getInt("odyssey_partial") + " partial · "
+                    + current.getInt("odyssey_manual") + " manual · "
+                    + current.getInt("odyssey_blocked") + " blocked");
+        }
         if (learningStart != null) learningStart.setVisibility(
                 playing && !learningActive && !learningNextTaskId.isEmpty() ? View.VISIBLE : View.GONE);
         if (learningStop != null) learningStop.setVisibility(
