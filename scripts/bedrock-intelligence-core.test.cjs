@@ -94,3 +94,11 @@ test('Bedrock session bridge presents real intelligence status and stops active 
   assert.equal(stopped.length,2,'no repeated stop on unchanged threat');
   bridge.stop();
 });
+
+
+test('bounded goto is a recognized intelligence goal without granting autonomous privileges', () => {
+  const brain = new MinePilotIntelligence({ clock: () => 1000 });
+  assert.equal(brain.setGoal('goto').status, 'accepted');
+  assert.equal(brain.snapshot().goal, 'goto');
+  assert.equal(brain.setGoal('standby').status, 'accepted');
+});
