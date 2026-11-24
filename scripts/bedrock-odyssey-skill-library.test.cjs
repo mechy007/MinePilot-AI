@@ -37,10 +37,11 @@ test('one missing prerequisite blocks a composition',()=>{
 });
 test('experimental movement and manual mining are not marked ready',()=>{
  const caps={...allReady,navigation:{state:'experimental',reason:'bounded_navigation'},mine:{state:'manual_experimental',reason:'single_block_only'},equip_items:'unsupported'};
- const r=evaluateOdysseySkill('mine_wood_log',caps);assert.equal(r.status,'blocked');
+ const r=evaluateOdysseySkill('mine_diamond',caps);assert.equal(r.status,'blocked');
  assert.ok(r.partialCapabilities.some(x=>x.name==='navigation'));
  assert.ok(r.manualCapabilities.some(x=>x.name==='mine'));
  assert.ok(r.blockedCapabilities.some(x=>x.name==='equip_items'));
+ assert.ok(r.requiredCapabilities.includes('inventory_read'));
 });
 test('plans are dependency previews and never execute upstream JavaScript',()=>{
  const p=planOdysseySkill('mine_diamond',allReady);assert.equal(p.status,'preview');
