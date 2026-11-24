@@ -8,12 +8,12 @@
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
-const { gameplaySkillManifest, startLearningTask, stopLearningTask, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
+const { gameplaySkillManifest, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -706,6 +706,12 @@ class BedrockGameplayBridge {
     if (raw.action === 'learning_stop') {
       return stopLearningTask(this, 'learning_user_stopped');
     }
+    if (raw.action === 'learning_autopilot_start') {
+      return startLocalAutopilot(this, { confirmed: raw.confirmed });
+    }
+    if (raw.action === 'learning_autopilot_stop') {
+      return stopLocalAutopilot(this, 'user_disabled_autopilot');
+    }
     if (raw.action === 'learning_propose') {
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       return proposeLearningSkill(this, raw.skill);
@@ -948,6 +954,9 @@ class BedrockGameplayBridge {
   }
   poll() {
     if (this.closed || !this.commandPath || !this.receiptPath) return;
+    // This local deterministic tick advances the built-in curriculum without
+    // any external model request. It remains inert until the user enables it.
+    try { gameplaySkillManifest(this); } catch {}
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
