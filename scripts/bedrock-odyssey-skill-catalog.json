@@ -204,7 +204,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -315,7 +315,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -406,7 +406,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "equip_items",
+        "hotbar_selection",
         "mine",
         "navigation",
         "spatial_observation"
@@ -496,7 +496,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "equip_items",
+        "hotbar_selection",
         "mine",
         "navigation",
         "spatial_observation"
@@ -3338,7 +3338,7 @@
       ],
       "requiredCapabilities": [
         "block_placement",
-        "equip_items",
+        "hotbar_selection",
         "farming",
         "navigation",
         "spatial_observation"
@@ -3363,7 +3363,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3387,7 +3387,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3411,7 +3411,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3435,7 +3435,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3459,7 +3459,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3483,7 +3483,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3507,7 +3507,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3531,7 +3531,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3555,7 +3555,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3579,7 +3579,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3603,7 +3603,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3627,7 +3627,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3651,7 +3651,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3675,7 +3675,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3699,7 +3699,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3723,7 +3723,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3747,7 +3747,7 @@
       ],
       "requiredCapabilities": [
         "combat",
-        "equip_items",
+        "hotbar_selection",
         "navigation",
         "spatial_observation"
       ]
@@ -3860,7 +3860,7 @@
         "world_query"
       ],
       "requiredCapabilities": [
-        "equip_items",
+        "hotbar_selection",
         "mine",
         "navigation",
         "spatial_observation"
@@ -3982,7 +3982,7 @@
         "world_query"
       ],
       "requiredCapabilities": [
-        "equip_items",
+        "hotbar_selection",
         "mine",
         "navigation",
         "spatial_observation"
