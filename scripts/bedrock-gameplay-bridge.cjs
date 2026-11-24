@@ -8,6 +8,7 @@
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { executeBedrockObservation } = require('./bedrock-odyssey-observation-executor.cjs');
+const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 const { gameplaySkillManifest, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
 
@@ -96,6 +97,9 @@ class BedrockGameplayBridge {
     this.worldGameMode = 'unknown';
     this.difficulty = null;
     this.itemStackNetManager = null;
+    this.stackRequests = new BedrockStackRequestManager(this.client, {
+      isEnabled: () => this.itemStackNetManager === true, timeoutMs: 5000
+    });
     this.selectedHotbarSlot = null;
     this.pendingHotbarSelection = null;
     this.lastHotbarSelection = null;
@@ -735,6 +739,7 @@ class BedrockGameplayBridge {
       worldGameMode: this.worldGameMode,
       difficulty: this.difficulty,
       itemStackNetManager: this.itemStackNetManager,
+      stackRequests: this.stackRequests.snapshot(),
       hotbarSelection: this.hotbarSelectionSnapshot(),
       inventoryTransactionMode: this.itemStackNetManager === true ? 'server_authoritative'
         : this.itemStackNetManager === false ? 'legacy' : 'unknown',
@@ -1122,6 +1127,7 @@ class BedrockGameplayBridge {
     this.watch = null;
     this.gameplayAgent?.stop('session_closed');
     this.pendingHotbarSelection = null;
+    this.stackRequests.close('bedrock_session_closed');
     this.selectedHotbarSlot = null;
     this.lastHotbarSelection = null;
     this.autonomy?.stop('session_closed');
