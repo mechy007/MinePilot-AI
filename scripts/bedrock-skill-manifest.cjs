@@ -81,6 +81,10 @@ function odysseyCapabilityStates(world, manifest) {
     ? world?.layerThree?.snapshot?.(world.gameplayWorld?.()) ?? {} : {};
   const existing = name => manifest?.skills?.find(item => item.name === name) ?? {};
   const state = (value, reason) => ({ state: value, reason });
+  const hotbar = world?.layerThree?.hotbarItems?.() ?? {};
+  const now = typeof world?.clock === 'function' ? world.clock() : Date.now();
+  const hotbarFresh = hotbar.known === true && Number.isFinite(hotbar.observedAt) &&
+    now - hotbar.observedAt >= 0 && now - hotbar.observedAt <= 10000;
   return {
     world_observation: state(manifest?.worldReady ? 'ready' : 'blocked',
       manifest?.worldReady ? 'authenticated_bedrock_world' : 'world_not_ready'),
@@ -103,8 +107,8 @@ function odysseyCapabilityStates(world, manifest) {
     block_placement: state(existing('build_shelter').state ?? 'blocked',
       existing('build_shelter').reason ?? 'verified_block_placement_unavailable'),
     equip_items: state('unsupported', 'armor_equipment_transaction_unavailable'),
-    hotbar_selection: state(world?.layerThree?.hotbarItems?.()?.known === true ? 'experimental' : 'blocked',
-      world?.layerThree?.hotbarItems?.()?.known === true ? 'server_observed_hotbar_and_server_equipment_confirmation' : 'fresh_hotbar_inventory_unavailable'),
+    hotbar_selection: state(hotbarFresh ? 'experimental' : 'blocked',
+      hotbarFresh ? 'fresh_server_observed_hotbar_and_server_equipment_confirmation' : 'fresh_hotbar_inventory_unavailable'),
     collect_resources: state('unsupported', 'only_observed_ground_drop_collection_exists_not_resource_harvesting'),
     breed_animals: state('unsupported', 'animal_interaction_executor_unavailable'),
     fishing: state('unsupported', 'fishing_executor_unavailable'),
