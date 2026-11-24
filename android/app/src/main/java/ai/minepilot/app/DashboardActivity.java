@@ -741,8 +741,15 @@ public final class DashboardActivity extends Activity {
                 + "\nAttempted: " + current.getInt("agent_attempted")
                 + " · Server-verified: " + current.getInt("agent_verified")
                 + " · Failures: " + current.getInt("agent_failures")
+                + "\nVerified drop pickups: " + current.getInt("agent_collected")
                 + "\nStatus: " + current.getString("agent_reason", "waiting").replace('_',' ')
                 : "Gameplay agent inactive · " + current.getString("agent_reason", "ready").replace('_',' '));
+            if (playing && current.containsKey("gameplay_skill_ready")) {
+                gameplayAgentState.append("\nCapabilities: "
+                        + current.getInt("gameplay_skill_ready") + " available/experimental · "
+                        + current.getInt("gameplay_skill_limited") + " limited · "
+                        + current.getInt("gameplay_skill_unsupported") + " unsupported");
+            }
         }
         if (brainStatus != null) {
             if (!playing || !current.getBoolean("brain_available", false)) {
@@ -1065,12 +1072,13 @@ public final class DashboardActivity extends Activity {
     }
 
     private void chooseIntelligentGameplayGoal() {
-        final String[] goals = {"Explore verified terrain", "Follow a player",
+        final String[] goals = {"Survive: explore and collect observed drops",
+                "Explore verified terrain", "Follow a player",
                 "Return to marked home", "Collect an observed item drop"};
-        final String[] ids = {"explore","follow","return_home","gather"};
+        final String[] ids = {"survive","explore","follow","return_home","gather"};
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Gameplay Intelligence")
-                .setMessage("Choose one goal. Movement is experimental and limited to verified terrain and short server-confirmed steps. Danger may stop the bot. No automatic combat, eating or mining.")
+                .setMessage("Choose one goal. Survive may automatically approach and collect server-observed item drops. Test only in a world where the host permits this. Terrain, movement and pickup must be verified. No automatic combat, eating or mining.")
                 .setItems(goals, (dialog, which) -> {
                     String goal=ids[which];
                     if ("follow".equals(goal)) {
