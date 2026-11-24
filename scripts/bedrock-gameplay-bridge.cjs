@@ -1120,6 +1120,8 @@ class BedrockGameplayBridge {
     this.watch = null;
     this.gameplayAgent?.stop('session_closed');
     this.pendingHotbarSelection = null;
+    this.selectedHotbarSlot = null;
+    this.lastHotbarSelection = null;
     this.autonomy?.stop('session_closed');
     this.blockBreaker?.abort('session_closed');
     this.movement?.stopPresence?.('session_closed');
