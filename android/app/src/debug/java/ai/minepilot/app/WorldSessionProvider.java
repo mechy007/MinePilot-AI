@@ -131,6 +131,21 @@ public final class WorldSessionProvider extends ContentProvider {
                         }
                     }
                 }
+                JSONObject agent = gameplay.optJSONObject("gameplayAgent");
+                if (agent != null) {
+                    result.putBoolean("agent_active", agent.optBoolean("active",false));
+                    for(String key : new String[]{"goal","phase","reason","execution"}) {
+                        String value=agent.optString(key,"");
+                        if (value.matches("[a-z_]{1,72}"))
+                            result.putString("agent_" + key,value);
+                    }
+                    result.putInt("agent_attempted",Math.max(0,
+                            Math.min(40,agent.optInt("attemptedSteps",0))));
+                    result.putInt("agent_verified",Math.max(0,
+                            Math.min(40,agent.optInt("serverVerifiedSteps",0))));
+                    result.putInt("agent_failures",Math.max(0,
+                            Math.min(2,agent.optInt("failures",0))));
+                }
                 JSONObject intelligence = gameplay.optJSONObject("intelligence");
                 if (intelligence != null) {
                     result.putBoolean("brain_available", true);
@@ -464,10 +479,12 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"stop_movement".equals(action) && !"probe_step".equals(action) &&
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
+                !"agent_start".equals(action) && !"agent_stop".equals(action) &&
                 !"experimental_break".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
                 "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
+                "agent_start".equals(action) ||
                 "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
@@ -482,6 +499,19 @@ public final class WorldSessionProvider extends ContentProvider {
                 String name = extras.getString("player_name", "");
                 if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) return;
                 command.put("playerName", name);
+            }
+            if ("agent_start".equals(action)) {
+                String goal=extras.getString("agent_goal","");
+                if (!"explore".equals(goal) && !"follow".equals(goal) &&
+                        !"return_home".equals(goal) && !"gather".equals(goal)) return;
+                command.put("goal",goal);
+                if ("follow".equals(goal)) {
+                    String name=extras.getString("player_name","");
+                    if (!name.isEmpty()) {
+                        if (!name.matches("[a-zA-Z0-9_ #.\\\\-]{1,32}")) return;
+                        command.put("playerName",name);
+                    }
+                }
             }
             if ("plan_collect".equals(action)) {
                 String itemName = extras.getString("item_name", "");
@@ -540,7 +570,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 command.put("position", new JSONObject().put("x",bx).put("y",by).put("z",bz));
             }
             if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
-                "follow_player".equals(action) ||
+                "follow_player".equals(action) || "agent_start".equals(action) ||
                 "experimental_break".equals(action))
                 command.put("confirmed", true);
             if ("probe_step".equals(action)) {
