@@ -68,3 +68,15 @@ test('invalid skill definitions are rejected without creating actions', () => {
     status: 'rejected', reason: 'invalid_skill_definition', executable: false, actions: []
   });
 });
+
+
+test('live primitive executor declarations are explicit and do not promote compositions to executable', () => {
+  assert.equal(evaluatePrimitive('getLogsCount', { inventory_read: 'ready' }).executor, 'odyssey_observe');
+  assert.equal(evaluatePrimitive('findSuitablePosition', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
+  assert.equal(evaluatePrimitive('goto', { navigation: 'experimental' }).executor, 'odyssey_execute');
+  assert.equal(evaluatePrimitive('exploreUntil', { navigation: 'experimental' }).executor, 'odyssey_execute');
+  assert.equal(evaluatePrimitive('mineBlock', { mine: 'manual_experimental' }).executor, 'odyssey_execute');
+  const plan = buildBedrockPrimitivePlan({ id: 'test', primitiveCalls: ['goto'] },
+    { navigation: 'experimental' });
+  assert.equal(plan.executable, false, 'single primitive IPC does not imply composition orchestration');
+});
