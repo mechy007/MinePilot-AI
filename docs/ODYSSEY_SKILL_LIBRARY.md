@@ -53,3 +53,16 @@ Research: ODYSSEY paper, IJCAI 2025: https://ijcai.org/proceedings/2025/22
 ## Validation boundary
 
 Automated tests validate catalog completeness, metadata safety, dependency integrity, recursive evaluation, the 20-name primitive mapping, conservative action status and the rule that planning never executes code. They do not prove that the 183 skills can run in a Bedrock world. The remaining implementation work is concrete Bedrock packet/action handlers plus transaction acknowledgements and world/inventory verification for each action family, followed by private-world/device testing. A skill is not complete until every primitive in its dependency closure has a tested Bedrock executor and authoritative success criteria.
+
+
+## First live Bedrock primitive executors
+
+The bridge now exposes a deliberately narrow, read-only command: `odyssey_observe`. It dispatches five primitives against the existing authenticated Bedrock session:
+
+- `getLogsCount` and `getPlanksCount` read item totals from a recent server-delivered player inventory snapshot and a known item registry. Missing or stale inventory is rejected; it is never reported as zero.
+- `checkBlockAbove` and `checkBlocksAround` read only decoded subchunk cells or explicit server block updates. Unknown/unloaded cells are omitted rather than inferred.
+- `findSuitablePosition` searches a small bounded area and accepts only cells classified as walkable by the version-matched collision registry. Unknown cells are unsafe.
+
+The command requires explicit confirmation, a live world, a fresh server position, and (for terrain primitives) decoded terrain plus a registry. It sends no Bedrock packets and performs no movement or interaction. Each successful result identifies its observation source and is marked `readOnly: true` and `executed: false`. The new module and tests are staged into the Android Node runtime bundle.
+
+These five primitives are now actual read-only observation operations; this does not make all 183 ODYSSEY compositions runnable. Navigation, mining, crafting, equipment and other state-changing primitives remain governed by their existing capability gates and missing executor/verification requirements.
