@@ -73,3 +73,10 @@ The default mode recommends tasks and waits for the player to confirm each run. 
 The Node test suite scripts/bedrock-voyager-learning.test.cjs covers primitive/composite registration, safety preflight, curriculum prioritization, confirmation, actor execution, critic outcomes, interruption, declarative proposal validation, persistence/migration and verified-counter tracking.
 
 The Android SDK staging script includes the new module and the focused tests. A passing CI run and a real Bedrock private-world test are still required before this integration can be called device-verified.
+
+
+## Full ODYSSEY catalog integration
+
+The full upstream set of 183 compositional skill definitions is now represented in MinePilot as a metadata-only catalog with normalized IDs, descriptions, source paths, primitive-call references and a validated recursive dependency graph. The catalog is not an executable Mineflayer bundle. Runtime capability evaluation reports each skill as ready, partial, manual or blocked based on MinePilot's live Bedrock observations and action gates. See [ODYSSEY_SKILL_LIBRARY.md](ODYSSEY_SKILL_LIBRARY.md).
+
+The catalog is deliberately not counted as 183 runnable skills. The five MinePilot-native compositions above remain the only learning tasks that the current Bedrock gameplay agent can start. All other ODYSSEY items remain previews until their required Bedrock-native action executors and authoritative outcome checks exist.
