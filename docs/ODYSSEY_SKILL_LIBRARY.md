@@ -97,3 +97,10 @@ Protocol references for the pinned Bedrock 1.26.60 / protocol 2225 schema:
 Four equipment primitives (`equipAxe`, `equipHoe`, `equipPickaxe`, `equipSword`) now have a deliberately narrow implementation: they select a matching tool only when it is already present in the nine-slot hotbar. The hotbar is derived from a complete server inventory snapshot plus subsequent server inventory-slot updates. MinePilot sends the Bedrock `player_hotbar` selection packet and does not report success until a self `mob_equipment` update confirms both the selected slot and the expected item network ID. Missing/stale inventory, absent tools, packet errors, and missing server confirmation fail closed.
 
 This does not move tools from main inventory, equip armor, or make a full equipment skill executable. The separate `equip_items` capability remains hard-blocked; only `hotbar_selection` is experimental. Skill compositions that require additional unsupported capabilities remain blocked.
+
+
+## Server-authoritative inventory request foundation
+
+MinePilot now has a narrow Bedrock 1.26.60 item-stack request manager. It is enabled only when StartGame explicitly advertises `enable_item_stack_net_manager: true`; legacy or unknown modes cannot send these requests. It correlates one in-flight request at a time with `item_stack_response`, uses the protocol-2225 legacy action IDs, validates every slot/count/recipe identifier, rejects server errors, and times out or cancels on disconnect. Its current action allowlist is intentionally limited to `take`, `place`, `swap`, and `craft_recipe`; destructive drop/destroy and item-use actions are not exposed.
+
+This manager is protocol infrastructure, not yet a skill executor. No ODYSSEY crafting, armor, container, food, or bucket skill is marked ready from the presence of the manager alone. Each future action must add a server-observed slot model, transaction planning, matching response handling, and independent inventory/world postcondition verification.
