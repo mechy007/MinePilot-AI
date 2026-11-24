@@ -18,8 +18,11 @@ test('imports all 183 upstream compositions as metadata only',()=>{
  const diamond=CATALOG.compositions.find(s=>s.id==='mine_diamond');
  assert.ok(diamond.directBotApis.includes('equip'));
  assert.ok(diamond.directBotApis.includes('inventory'));
- assert.ok(diamond.requiredCapabilities.includes('hotbar_selection'));
+ assert.ok(diamond.requiredCapabilities.includes('equip_items'));
  assert.ok(diamond.requiredCapabilities.includes('inventory_read'));
+ assert.ok(!diamond.requiredCapabilities.includes('hotbar_selection'));
+ const hotbarSkill=CATALOG.compositions.find(s=>s.id==='mine_five_coal_ores');
+ assert.ok(hotbarSkill.requiredCapabilities.includes('hotbar_selection'));
 });
 test('all transitive dependencies resolve and order is acyclic',()=>{
  const ids=new Set(CATALOG.compositions.map(s=>s.id));assert.equal(ids.size,183);
