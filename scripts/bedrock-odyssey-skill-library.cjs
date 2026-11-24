@@ -56,7 +56,7 @@ function evaluateOdysseySkill(skillId, capabilities = {}) {
     dependencyOrder:closure.order,missingDependencies:closure.missing,dependencyCycle:closure.cycle,
     requiredCapabilities:[...required].sort(),primitiveCalls,blockedCapabilities:blocked,
     partialCapabilities:partial,manualCapabilities:manual,blockedPrimitives,partialPrimitives,manualPrimitives,executable:false,
-    reason:status==='ready'?'catalog_prerequisites_ready_but_no_odyssey_executor_is_connected'
+    reason:status==='ready'?'catalog_prerequisites_ready_but_composition_orchestrator_is_not_connected'
       :status==='partial'?'one_or_more_bedrock_capabilities_are_experimental'
       :status==='manual'?'one_or_more_bedrock_capabilities_require_user_confirmation'
       :'one_or_more_bedrock_capabilities_or_dependencies_are_unavailable'
@@ -84,7 +84,7 @@ function summarizeOdysseyLibrary(capabilities = {}) {
     total:CATALOG.compositions.length,primitiveSkills:CATALOG.publishedCounts.primitiveSkills,
     compositionalSkills:CATALOG.publishedCounts.compositionalSkills,...counts,
     familyCounts:{...CATALOG.familyCounts},executableCount:0,
-    executionMode:'metadata_planning_only_no_mineflayer_executor'
+    executionMode:'bedrock_native_primitive_executors_with_gated_compositions'
   };
 }
 function planOdysseySkill(skillId, capabilities = {}) {
