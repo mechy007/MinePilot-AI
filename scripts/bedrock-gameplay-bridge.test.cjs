@@ -1037,10 +1037,8 @@ test('ODYSSEY read-only observation results survive the private IPC receipt boun
   const dir = mkdtempSync(join(tmpdir(), 'minepilot-odyssey-observe-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const commandPath = join(dir, 'command.json'), receiptPath = join(dir, 'receipt.json');
-  const { LayerThreePlanner } = require('../dist/src/gameplay/layer-three.js');
-  const layerThree = new LayerThreePlanner(() => 10000);
-  layerThree.observeItemRegistry({ items: [{ network_id: 1, name: 'minecraft:oak_log' }] });
-  layerThree.observeInventory({ window_id: 0, input: [{ network_id: 1, count: 4 }] });
+  const layerThree = { reset() {}, inventoryItems: () => ({ known: true, observedAt: 10000,
+    counts: { 'minecraft:oak_log': 4 } }) };
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath, layerThree,
     clock: () => 10000 }).start();
