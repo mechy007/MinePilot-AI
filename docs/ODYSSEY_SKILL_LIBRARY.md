@@ -38,7 +38,7 @@ The CommonJS module scripts/bedrock-odyssey-skill-library.cjs exports:
 - summarizeOdysseyLibrary(capabilityStates)
 - validateOdysseyCatalog()
 
-planOdysseySkill is a dependency-aware planning preview. It returns the ordered prerequisite IDs, required capabilities and a Bedrock primitive plan. The adapter lives in scripts/bedrock-odyssey-bedrock-adapter.cjs and maps the 20 referenced upstream primitive names to MinePilot-owned action names, capability requirements and execution modes. It deliberately refuses to mark unsupported handlers executable. The plan does not dispatch gameplay actions, run JavaScript, or call Mineflayer. Every result has executable=false and arbitraryCodeExecution=false. Tests verify that every primitive reference in all 183 compositions has an explicit mapping and that unsupported actions remain blocked even if a caller incorrectly advertises the capability as ready.
+planOdysseySkill is a dependency-aware planning preview. It returns the ordered prerequisite IDs, required capabilities and a Bedrock primitive plan. The adapter lives in scripts/bedrock-odyssey-bedrock-adapter.cjs and maps the 20 referenced upstream primitive names to MinePilot-owned action names, capability requirements and execution modes. It deliberately refuses to mark unsupported handlers executable. The plan does not dispatch gameplay actions, run JavaScript, or call Mineflayer. Successful previews and rejected unknown-skill responses both return executable=false and arbitraryCodeExecution=false. Tests verify that every primitive reference in all 183 compositions has an explicit mapping and that unsupported actions remain blocked even if a caller incorrectly advertises the capability as ready.
 
 ## What is not imported
 
