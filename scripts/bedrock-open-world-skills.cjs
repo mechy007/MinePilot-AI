@@ -24,6 +24,7 @@ const PRIMITIVES = Object.freeze([
   { id: 'collect_selected_drop', kind: 'agent_goal', goal: 'gather', description: 'Approach an observed drop and verify the inventory increase.' }
 ]);
 const PRIMITIVE_BY_ID = new Map(PRIMITIVES.map(item => [item.id, item]));
+const LEGACY_STEP_IDS = new Set(['observe_world', 'plan_local_route', 'request_bounded_step', 'verify_server_position', 'stop_on_hazard']);
 
 const COMPOSITE_SKILLS = Object.freeze([
   {
@@ -176,7 +177,7 @@ class BedrockOpenWorldLearningEngine {
             ['survive', 'explore', 'follow', 'return_home', 'gather'].includes(item.goal) &&
             item.status === 'verified' && finiteInt(item.verifiedRuns, 100000) &&
             item.verifiedRuns >= 1 && Array.isArray(item.steps) && item.steps.length <= 16 &&
-            item.steps.every(step => typeof step === 'string' && /^[a-z][a-z0-9_]{1,47}$/.test(step)))
+            item.steps.every(step => typeof step === 'string' && LEGACY_STEP_IDS.has(step)))
           .map(item => ({ id: item.id, title: item.title, goal: item.goal,
             status: 'verified', verifiedRuns: item.verifiedRuns,
             steps: item.steps.slice(), updatedAt: finiteInt(item.updatedAt) ? item.updatedAt : 0 }));
@@ -192,7 +193,7 @@ class BedrockOpenWorldLearningEngine {
             ['survive', 'explore', 'follow', 'return_home', 'gather'].includes(item.goal) &&
             item.status === 'verified' && finiteInt(item.verifiedRuns, 100000) &&
             item.verifiedRuns >= 1 && Array.isArray(item.steps) && item.steps.length <= 16 &&
-            item.steps.every(step => typeof step === 'string' && /^[a-z][a-z0-9_]{1,47}$/.test(step)))
+            item.steps.every(step => typeof step === 'string' && LEGACY_STEP_IDS.has(step)))
           .map(item => ({ id: item.id, title: item.title, goal: item.goal,
             status: 'verified', verifiedRuns: item.verifiedRuns,
             steps: item.steps.slice(), updatedAt: finiteInt(item.updatedAt) ? item.updatedAt : 0 }));
