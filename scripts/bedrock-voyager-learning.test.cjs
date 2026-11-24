@@ -147,6 +147,10 @@ test('proposed skills are declarative only and reject executable model output', 
   const { world } = worldFixture();
   const accepted = proposeLearningSkill(world, good);
   assert.equal(accepted.status, 'accepted');
+  const rejectedStart = require('./bedrock-skill-manifest.cjs').startLearningTask(world, good.id, { confirmed: true });
+  assert.equal(rejectedStart.status, 'rejected');
+  assert.equal(rejectedStart.reason, 'learning_task_not_builtin');
+  assert.equal(world.gameplayAgent.snapshot().active, false);
   const state = gameplaySkillManifest(world).learning;
   assert.equal(state.proposedSkillCount, 1);
   assert.equal(state.arbitraryCodeExecution, false);
@@ -292,4 +296,48 @@ test('local autopilot halts instead of advancing after an unverified task outcom
   assert.equal(state.localAutopilot.reason, 'stopped_after_unverified_task');
   assert.equal(state.activeTask, null);
   assert.equal(state.recentRuns.at(-1).outcome, 'failed');
+});
+
+
+test('survival and exploration require the minimum verified step count even at budget exhaustion', () => {
+  const engine = new BedrockOpenWorldLearningEngine();
+  const explore = COMPOSITE_SKILLS.find(item => item.id === 'safe_exploration');
+  const survive = COMPOSITE_SKILLS.find(item => item.id === 'survival_patrol');
+  for (const task of [explore, survive]) {
+    const insufficient = engine.critic(task, {
+      reason: 'gameplay_run_budget_exhausted', serverVerifiedSteps: 2
+    }, { requestedStop: false });
+    assert.equal(insufficient.outcome, 'failed');
+    const sufficient = engine.critic(task, {
+      reason: 'gameplay_run_budget_exhausted', serverVerifiedSteps: 3
+    }, { requestedStop: false });
+    assert.equal(sufficient.outcome, 'verified');
+  }
+});
+
+test('disabling inactive autopilot never stops a manually started learning task', () => {
+  const { world } = worldFixture();
+  const engine = new BedrockOpenWorldLearningEngine();
+  const manifest = gameplaySkillManifest(world);
+  assert.equal(engine.start(world, manifest, 'safe_exploration', { confirmed: true }).status, 'accepted');
+  assert.equal(engine.activeRun.owner, 'manual');
+  const disabled = engine.disableAutopilot(world, 'user_disabled_autopilot');
+  assert.equal(disabled.status, 'ok');
+  assert.equal(world.gameplayAgent.snapshot().active, true);
+  assert.equal(engine.snapshot(world, manifest).activeTask.id, 'safe_exploration');
+});
+
+test('verified step totals retain the previous run and count the first post-reset sample', () => {
+  const { world, setAgent } = worldFixture();
+  const engine = new BedrockOpenWorldLearningEngine();
+  const manifest = gameplaySkillManifest(world);
+  setAgent({ active: false, serverVerifiedSteps: 4 });
+  engine.updateCounters(world);
+  assert.equal(engine.totalVerifiedSteps, 4);
+  assert.equal(engine.lastCounters.gameplayAgent, 4);
+  assert.equal(engine.start(world, manifest, 'safe_exploration', { confirmed: true }).status, 'accepted');
+  assert.equal(engine.lastCounters.gameplayAgent, 0);
+  setAgent({ active: true, serverVerifiedSteps: 2 });
+  engine.observe(world, manifest);
+  assert.equal(engine.totalVerifiedSteps, 6);
 });
