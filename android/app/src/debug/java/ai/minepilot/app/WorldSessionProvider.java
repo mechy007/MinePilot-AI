@@ -175,6 +175,12 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putInt("learning_proposed", Math.max(0, Math.min(64, learning.optInt("proposedSkillCount", 0))));
                         result.putInt("learning_verified_total", Math.max(0, Math.min(10000000, learning.optInt("totalVerifiedNavigationSteps", 0))));
                         result.putInt("learning_legacy_records", Math.max(0, Math.min(128, learning.optInt("legacyVoyagerRecordCountMigrated", 0))));
+                        JSONObject localAutopilot = learning.optJSONObject("localAutopilot");
+                        if (localAutopilot != null) {
+                            result.putBoolean("learning_autopilot_enabled", localAutopilot.optBoolean("enabled", false));
+                            String autopilotReason = localAutopilot.optString("reason", "disabled");
+                            if (autopilotReason.matches("[a-z_]{1,64}")) result.putString("learning_autopilot_reason", autopilotReason);
+                        }
                         JSONObject next = learning.optJSONObject("nextCurriculumTask");
                         if (next != null) {
                             String taskId = next.optString("id", "");
@@ -564,12 +570,13 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
                 !"experimental_break".equals(action) && !"learning_start".equals(action) &&
-                !"learning_stop".equals(action) && !"learning_propose".equals(action)) return;
+                !"learning_stop".equals(action) && !"learning_propose".equals(action) &&
+                !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
                 "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
                 "agent_start".equals(action) || "learning_start".equals(action) ||
-                "learning_propose".equals(action) ||
+                "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
                 "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
