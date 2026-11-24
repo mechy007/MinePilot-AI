@@ -44,6 +44,7 @@ test('block observation never invents unknown cells or writes gameplay packets',
   const b = bridge();
   const above = executeBedrockObservation(b, 'checkBlockAbove', { position: { x: 0, y: 63, z: 0 } });
   assert.equal(above.result.name, 'minecraft:stone');
+  assert.equal(above.observedAt, null);
   const nearby = executeBedrockObservation(b, 'checkBlocksAround');
   assert.equal(nearby.result.blocks.length, 1);
   assert.equal(nearby.result.unknownCellsOmitted, true);
