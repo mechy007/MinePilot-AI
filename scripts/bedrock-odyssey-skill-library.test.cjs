@@ -18,7 +18,7 @@ test('imports all 183 upstream compositions as metadata only',()=>{
  const diamond=CATALOG.compositions.find(s=>s.id==='mine_diamond');
  assert.ok(diamond.directBotApis.includes('equip'));
  assert.ok(diamond.directBotApis.includes('inventory'));
- assert.ok(diamond.requiredCapabilities.includes('equip_items'));
+ assert.ok(diamond.requiredCapabilities.includes('hotbar_selection'));
  assert.ok(diamond.requiredCapabilities.includes('inventory_read'));
 });
 test('all transitive dependencies resolve and order is acyclic',()=>{
