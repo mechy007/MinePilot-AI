@@ -159,6 +159,9 @@ class BedrockOpenWorldLearningEngine {
     this.lastCounters = { gameplayAgent: 0, autonomy: 0 };
     this.lastPersistError = null;
     this.activeRun = null;
+    this.autopilotEnabled = false;
+    this.autopilotReason = 'disabled';
+    this.sessionAttempted = new Set();
     this.legacySkills = [];
     this.load();
   }
@@ -322,6 +325,7 @@ class BedrockOpenWorldLearningEngine {
     if (plan.status !== 'ready') return plan;
     const started = world.gameplayAgent.start(world, { confirmed: true, goal: plan.goal });
     if (started?.status !== 'accepted') return started ?? { status: 'rejected', reason: 'gameplay_agent_start_failed' };
+    if (this.autopilotEnabled) this.sessionAttempted.add(plan.taskId);
     this.activeRun = {
       taskId: plan.taskId,
       goal: plan.goal,
@@ -340,7 +344,44 @@ class BedrockOpenWorldLearningEngine {
     return { status: 'accepted', reason: 'learning_actor_started', taskId: plan.taskId, plan };
   }
 
+  enableAutopilot(world, manifest, options = {}) {
+    if (options.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+    if (this.autopilotEnabled) return { status: 'rejected', reason: 'autopilot_already_enabled' };
+    if (this.activeRun || world?.gameplayAgent?.snapshot?.()?.active)
+      return { status: 'rejected', reason: 'gameplay_agent_busy' };
+    this.sessionAttempted.clear();
+    this.autopilotEnabled = true;
+    this.autopilotReason = 'selecting_local_task';
+    const next = this.curriculum(world, manifest);
+    if (!next) {
+      this.autopilotEnabled = false;
+      this.autopilotReason = 'no_eligible_local_task';
+      return { status: 'rejected', reason: 'no_eligible_local_task' };
+    }
+    const started = this.start(world, manifest, next.id, { confirmed: true });
+    if (started?.status !== 'accepted') {
+      this.autopilotEnabled = false;
+      this.autopilotReason = started?.reason ?? 'local_task_start_failed';
+      return started;
+    }
+    this.autopilotReason = 'running_local_curriculum';
+    return { status: 'accepted', reason: 'local_autopilot_started', taskId: next.id };
+  }
+
+  disableAutopilot(world, reason = 'user_disabled_autopilot') {
+    this.autopilotEnabled = false;
+    this.autopilotReason = reason;
+    if (this.activeRun) {
+      this.activeRun.requestedStop = true;
+      world?.gameplayAgent?.stop?.(reason);
+      this.observe(world, null);
+    }
+    return { status: 'ok', reason: 'local_autopilot_disabled' };
+  }
+
   stop(world, reason = 'learning_user_stopped') {
+    this.autopilotEnabled = false;
+    this.autopilotReason = reason;
     if (!this.activeRun) return { status: 'ok', reason: 'no_learning_task_active' };
     this.activeRun.requestedStop = true;
     world?.gameplayAgent?.stop?.(reason);
@@ -445,6 +486,18 @@ class BedrockOpenWorldLearningEngine {
         this.activeRun = null;
       }
     }
+    if (this.autopilotEnabled && !this.activeRun) {
+      const next = this.curriculum(world, manifest);
+      if (next) {
+        const started = this.start(world, manifest, next.id, { confirmed: true });
+        this.autopilotReason = started?.status === 'accepted'
+          ? 'running_local_curriculum' : (started?.reason ?? 'local_task_start_failed');
+        if (started?.status !== 'accepted') this.autopilotEnabled = false;
+      } else {
+        this.autopilotEnabled = false;
+        this.autopilotReason = 'local_curriculum_exhausted_or_blocked';
+      }
+    }
     return this.snapshot(world, manifest);
   }
 
@@ -461,13 +514,14 @@ class BedrockOpenWorldLearningEngine {
       life.nearbyEntities.some(item => item?.hostile === true && Number.isFinite(item.distance) && item.distance <= 8);
     const candidates = [];
     for (const task of COMPOSITE_SKILLS) {
-      if (this.learned.has(task.id)) continue;
+      if (this.learned.has(task.id) || (this.autopilotEnabled && this.sessionAttempted.has(task.id))) continue;
       const blocker = taskPreflight(world, manifest, task);
       if (!blocker) candidates.push({ id: task.id, title: task.title, goal: task.goal,
         priority: task.id === 'survival_patrol' && threatened ? 200 : task.priority,
         status: 'recommended' });
     }
     for (const proposal of this.proposals.values()) {
+      if (this.autopilotEnabled) continue; // Offline autopilot only runs built-in, reviewed tasks.
       if (proposal.status !== 'proposed' || this.learned.has(proposal.id)) continue;
       const task = this.taskById(proposal.id);
       if (task && !taskPreflight(world, manifest, task))
@@ -494,6 +548,8 @@ class BedrockOpenWorldLearningEngine {
       version: VERSION,
       architecture: ['automatic_curriculum', 'primitive_and_compositional_skills', 'planner_actor_critic', 'persistent_verified_skill_memory'],
       mode: 'bedrock_native_voyager_odyssey',
+      localAutopilot: { enabled: this.autopilotEnabled, reason: this.autopilotReason,
+        attemptedThisSession: this.sessionAttempted.size },
       primitiveSkillCount: PRIMITIVES.length,
       compositionalSkillCount: COMPOSITE_SKILLS.length + this.proposals.size,
       proposedSkillCount: [...this.proposals.values()].filter(item => item.status === 'proposed').length,
