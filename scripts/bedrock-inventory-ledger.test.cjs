@@ -23,7 +23,7 @@ test('decodes Bedrock 1.26.60 ItemV4 stack IDs and full container identity', () 
   assert.equal(normalizeItem(item(0, 0)).empty, true);
   assert.equal(normalizeItem({ network_id: 5, count: 1, metadata: 0, has_stack_id: true }), null);
   assert.equal(normalizeItem({ network_id: 5, count: 1, metadata: 0,
-    has_stack_id: false, stack_id: 99 }), null === undefined ? false : false);
+    has_stack_id: false, stack_id: 99 }), null);
 });
 
 test('full inventory snapshot distinguishes known empty slots from unknown inventory', () => {
