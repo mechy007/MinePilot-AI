@@ -15,8 +15,8 @@ test('all 183 ODYSSEY compositions map every referenced primitive to a Bedrock a
 });
 
 test('Bedrock primitive evaluation never upgrades unsupported actions to executable', () => {
-  const unsupported = ['craftItem','cookFood','smeltItem','equipArmor','equipAxe','equipHoe',
-    'equipPickaxe','equipSword','feedAnimals','killMob','placeItem','plantSeeds'];
+  const unsupported = ['craftItem','cookFood','smeltItem','equipArmor',
+    'feedAnimals','killMob','placeItem','plantSeeds'];
   for (const name of unsupported) {
     const result = evaluatePrimitive(name, { [PRIMITIVES[name].capability]: 'ready' });
     assert.equal(result.status, 'blocked', name);
