@@ -8,6 +8,8 @@ const { runtimeLogger } = require('./xbox-auth-probe.cjs');
 
 class Client extends EventEmitter {
   closed = 0;
+  sent = [];
+  queue(packet, value) { this.sent.push({ packet, value }); }
   close() {
     this.closed++;
     this.emit('close');
