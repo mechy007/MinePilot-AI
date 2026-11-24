@@ -189,12 +189,12 @@ public final class WorldSessionProvider extends ContentProvider {
                             result.putBoolean("learning_active", activeTask.optBoolean("active", false));
                             String taskId = activeTask.optString("id", "");
                             String goal = activeTask.optString("goal", "");
-                            String phase = activeTask.optString("phase", "");
+                            String taskPhase = activeTask.optString("phase", "");
                             String reason = activeTask.optString("reason", "");
                             String title = activeTask.optString("title", "");
                             if (taskId.matches("[a-z][a-z0-9_]{2,47}")) result.putString("learning_active_task_id", taskId);
                             if (goal.matches("[a-z_]{1,32}")) result.putString("learning_active_goal", goal);
-                            if (phase.matches("[a-z_]{1,32}")) result.putString("learning_active_phase", phase);
+                            if (taskPhase.matches("[a-z_]{1,32}")) result.putString("learning_active_phase", taskPhase);
                             if (reason.matches("[a-z_]{1,72}")) result.putString("learning_active_reason", reason);
                             if (title.length() <= 100) result.putString("learning_active_title", title);
                             result.putInt("learning_active_verified", Math.max(0, Math.min(40, activeTask.optInt("verifiedSteps", 0))));
