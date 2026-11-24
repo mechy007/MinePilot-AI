@@ -14,7 +14,7 @@ const { gameplaySkillManifest, startLearningTask, stopLearningTask, startLocalAu
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -697,6 +697,30 @@ class BedrockGameplayBridge {
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
       return executeBedrockObservation(this, raw.primitive, raw.args ?? {});
+    }
+    if (raw.action === 'odyssey_execute') {
+      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+      if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
+      const args = raw.args && typeof raw.args === 'object' && !Array.isArray(raw.args) ? raw.args : {};
+      if (raw.primitive === 'exploreUntil') {
+        return this.gameplayAgent?.start(this, { confirmed: true, goal: 'explore' }) ??
+          { status: 'rejected', reason: 'gameplay_agent_unavailable' };
+      }
+      if (raw.primitive === 'goto') {
+        if (!finitePosition(args.targetPosition))
+          return { status: 'rejected', reason: 'valid_target_position_required' };
+        return this.gameplayAgent?.start(this, {
+          confirmed: true, goal: 'goto', targetPosition: args.targetPosition
+        }) ?? { status: 'rejected', reason: 'gameplay_agent_unavailable' };
+      }
+      if (raw.primitive === 'mineBlock') {
+        const p = args.position;
+        if (!p || !['x','y','z'].every(k => Number.isInteger(p[k])))
+          return { status: 'rejected', reason: 'integer_block_position_required' };
+        return this.blockBreaker?.start(this, p, true) ??
+          { status: 'rejected', reason: 'block_break_unavailable' };
+      }
+      return { status: 'rejected', reason: 'primitive_executor_unavailable' };
     }
     if (raw.action === 'agent_stop') {
       const learning = gameplaySkillManifest(this).learning;
