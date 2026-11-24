@@ -699,10 +699,15 @@ class BedrockGameplayBridge {
       return executeBedrockObservation(this, raw.primitive, raw.args ?? {});
     }
     if (raw.action === 'agent_stop') {
+      const learning = gameplaySkillManifest(this).learning;
+      if (learning?.activeTask) return { status: 'rejected', reason: 'learning_task_owned_use_learning_stop' };
       return this.gameplayAgent?.stop('user_stopped') ??
         {status:'rejected',reason:'gameplay_agent_unavailable'};
     }
     if (raw.action === 'agent_start') {
+      // Reconcile a completed learning run against its own task before a new goal can replace its snapshot.
+      const learning = gameplaySkillManifest(this).learning;
+      if (learning?.activeTask) return { status: 'rejected', reason: 'learning_task_owned_stop_or_finish_first' };
       return this.gameplayAgent?.start(this,{
         confirmed:raw.confirmed,goal:raw.goal,playerName:raw.playerName
       })??{status:'rejected',reason:'gameplay_agent_unavailable'};
