@@ -224,6 +224,7 @@ For deeper diagnostics see [Android app test guide](docs/ANDROID-APP-STATUS.md) 
 - [Desktop friend-world diagnostic](docs/friend-world-live-join.md)
 - [Gameplay planning integration](docs/CRAFTMIND_GAMEPLAY_INTEGRATION.md)
 - [Voyager + ODYSSEY Bedrock-native learning integration](docs/VOYAGER_ODYSSEY_INTEGRATION.md)
+  - Includes an optional, user-enabled local autopilot that sequences supported built-in tasks without external AI prompts or Kaggle.
 
 ## Contributions and issue reports
 
