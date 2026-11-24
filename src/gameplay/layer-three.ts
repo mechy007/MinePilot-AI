@@ -254,7 +254,7 @@ export class LayerThreePlanner {
     if (id != null && typeof count === 'number' && Number.isInteger(count) && count > 0 && count <= 127)
       this.hotbar.set(slot, { networkId: id, count });
     else this.hotbar.delete(slot);
-    this.hotbarSeenAt = this.now();
+    // Incremental slot updates do not refresh the full-snapshot freshness timestamp.
     return true;
   }
 
