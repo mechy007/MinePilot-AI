@@ -776,21 +776,21 @@ public final class DashboardActivity extends Activity {
                 learningState.setText("Connect to a Bedrock world to load reusable skills and curriculum.");
             } else if (learningActive) {
                 learningState.setText("RUNNING · " + current.getString("learning_active_title", "Learning task")
-                        + "\\nGoal: " + current.getString("learning_active_goal", "unknown").replace('_', ' ')
+                        + "\nGoal: " + current.getString("learning_active_goal", "unknown").replace('_', ' ')
                         + " · Phase: " + current.getString("learning_active_phase", "starting").replace('_', ' ')
-                        + "\\nServer-verified steps: " + current.getInt("learning_active_verified")
-                        + "\\nStatus: " + current.getString("learning_active_reason", "running").replace('_', ' '));
+                        + "\nServer-verified steps: " + current.getInt("learning_active_verified")
+                        + "\nStatus: " + current.getString("learning_active_reason", "running").replace('_', ' '));
             } else if (!learningNextTaskId.isEmpty()) {
                 learningState.setText("Recommended next task · " + current.getString("learning_next_task_title", learningNextTaskId)
-                        + "\\nGoal: " + current.getString("learning_next_task_goal", "unknown").replace('_', ' ')
-                        + "\\nMastered skills: " + current.getInt("learning_learned")
+                        + "\nGoal: " + current.getString("learning_next_task_goal", "unknown").replace('_', ' ')
+                        + "\nMastered skills: " + current.getInt("learning_learned")
                         + " · Verified navigation steps: " + current.getInt("learning_verified_total")
-                        + "\\nProposals awaiting review: " + current.getInt("learning_proposed"));
+                        + "\nProposals awaiting review: " + current.getInt("learning_proposed"));
             } else {
                 learningState.setText("No currently eligible learning task. Mastered skills: "
                         + current.getInt("learning_learned")
                         + " · Verified navigation steps: " + current.getInt("learning_verified_total")
-                        + "\\nLast result: " + current.getString("learning_last_outcome", "none")
+                        + "\nLast result: " + current.getString("learning_last_outcome", "none")
                         .replace('_', ' ') + " · " + current.getString("learning_last_reason", "no recent run")
                         .replace('_', ' '));
             }
@@ -1295,8 +1295,8 @@ public final class DashboardActivity extends Activity {
         String title = learningState == null ? taskId : learningState.getText().toString();
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Start MinePilot learning")
-                .setMessage("Run the recommended, bounded Bedrock task?\\n\\n"
-                        + title + "\\n\\nMinePilot uses its existing gameplay safety checks. "
+                .setMessage("Run the recommended, bounded Bedrock task?\n\n"
+                        + title + "\n\nMinePilot uses its existing gameplay safety checks. "
                         + "The task stops on unsafe state, failed server confirmation or its run budget. "
                         + "You can stop it at any time. It will not execute generated code.")
                 .setNegativeButton("Cancel", null)
