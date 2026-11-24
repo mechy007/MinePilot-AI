@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mkdtempSync, rmSync } = require('node:fs');
+const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const {
@@ -189,4 +189,53 @@ test('verified counters from the gameplay agent and autonomy runner are tracked 
   world.gameplayAgent.snapshot = () => ({ active: false, serverVerifiedSteps: 1 });
   state = engine.observe(world, gameplaySkillManifest(world));
   assert.equal(state.totalVerifiedNavigationSteps, 8);
+});
+
+
+test('legacy Voyager records migrate only when every stored step is in the previous allowlist', () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'minepilot-voyager-migration-'));
+  try {
+    const storagePath = path.join(directory, 'learning.json');
+    writeFileSync(storagePath, JSON.stringify({
+      version: 'minepilot.voyager-learning.v1',
+      totalVerifiedSteps: 17,
+      skills: [
+        {
+          id: 'legacy_safe_route',
+          title: 'Legacy safe route',
+          goal: 'explore',
+          status: 'verified',
+          verifiedRuns: 3,
+          steps: ['observe_world', 'plan_local_route', 'request_bounded_step', 'verify_server_position'],
+          updatedAt: 123
+        },
+        {
+          id: 'legacy_unsafe_route',
+          title: 'Legacy unsafe route',
+          goal: 'explore',
+          status: 'verified',
+          verifiedRuns: 5,
+          steps: ['observe_world', 'eval_generated_code'],
+          updatedAt: 124
+        }
+      ]
+    }));
+    const engine = new BedrockOpenWorldLearningEngine({ storagePath, sessionId: 'migration-session' });
+    let state = engine.snapshot(null, null);
+    assert.equal(state.totalVerifiedNavigationSteps, 17);
+    assert.equal(state.legacyVoyagerRecordCountMigrated, 1);
+
+    const task = COMPOSITE_SKILLS.find(item => item.id === 'safe_exploration');
+    engine.recordRun(task, { outcome: 'verified', reason: 'gameplay_run_budget_exhausted', verified: 3 },
+      { sessionId: 'migration-session' });
+    const persisted = JSON.parse(readFileSync(storagePath, 'utf8'));
+    assert.equal(persisted.version, 'minepilot.voyager-odyssey.v1');
+    assert.equal(persisted.legacySkills.length, 1);
+    assert.equal(persisted.legacySkills[0].id, 'legacy_safe_route');
+    assert.ok(persisted.legacySkills[0].steps.every(step =>
+      ['observe_world', 'plan_local_route', 'request_bounded_step',
+        'verify_server_position', 'stop_on_hazard'].includes(step)));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
