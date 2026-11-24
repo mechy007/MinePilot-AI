@@ -96,6 +96,9 @@ class BedrockGameplayBridge {
     this.worldGameMode = 'unknown';
     this.difficulty = null;
     this.itemStackNetManager = null;
+    this.selectedHotbarSlot = null;
+    this.pendingHotbarSelection = null;
+    this.lastHotbarSelection = null;
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
@@ -120,6 +123,7 @@ class BedrockGameplayBridge {
     this.bind('subchunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
+    this.bind('inventory_slot', p => this.layerThree?.observeInventorySlot(p));
     this.bind('inventory_content', p => {
       this.layerOne?.onInventory(p);
       this.layerThree?.observeInventory(p);
@@ -152,6 +156,7 @@ class BedrockGameplayBridge {
     this.bind('move_actor_delta', p => this.lifeSenses?.moveEntity(p));
     this.bind('player_list', p => this.playerList(p));
     this.bind('mob_equipment', p => this.equipment(p));
+    this.bind('player_hotbar', p => this.playerHotbar(p));
     this.bind('remove_actor', p => this.removeActor(p));
     this.bind('remove_entity', p => this.removeActor(p));
     this.bind('change_dimension', p => this.dimensionChange(p));
@@ -174,6 +179,9 @@ class BedrockGameplayBridge {
     this.dimension = validDimension(packet.dimension);
     this.itemStackNetManager = typeof packet.enable_item_stack_net_manager === 'boolean'
       ? packet.enable_item_stack_net_manager : null;
+    this.selectedHotbarSlot = null;
+    this.pendingHotbarSelection = null;
+    this.lastHotbarSelection = null;
     this.terrain?.reset(this.dimension);
     this.intelligence?.reset(this.dimension);
     this.navigationRoute = null;
@@ -458,9 +466,76 @@ class BedrockGameplayBridge {
       this.playerNames.set(uuid, name);
     }
   }
+  playerHotbar(packet) {
+    if (this.closed || (packet?.window_id !== 0 && packet?.window_id !== 'inventory') ||
+        packet?.select_slot !== true || !Number.isInteger(packet?.selected_slot) ||
+        packet.selected_slot < 0 || packet.selected_slot > 8) return;
+    this.selectedHotbarSlot = packet.selected_slot;
+    if (this.pendingHotbarSelection?.slot === packet.selected_slot)
+      this.pendingHotbarSelection.playerHotbarAckAt = this.clock();
+  }
   equipment(packet) {
     if (this.closed || ident(packet?.runtime_entity_id ?? packet?.runtime_id) !== this.self) return;
-    this.layerTwo?.observeEquipment(packet?.slot, packet?.item?.network_id ?? packet?.item?.id ?? null);
+    const selected = packet?.selected_slot;
+    const itemId = packet?.item?.network_id ?? packet?.item?.id ?? null;
+    this.layerTwo?.observeEquipment(selected ?? packet?.slot, itemId);
+    if (!Number.isInteger(selected) || selected < 0 || selected > 8) return;
+    this.selectedHotbarSlot = selected;
+    const pending = this.pendingHotbarSelection;
+    if (pending && pending.slot === selected && Number(itemId) === pending.networkId) {
+      this.lastHotbarSelection = { ...pending, status: 'verified',
+        verifiedAt: this.clock(), reason: 'server_mob_equipment_confirmed' };
+      this.pendingHotbarSelection = null;
+    }
+  }
+  hotbarSelectionSnapshot() {
+    const pending = this.pendingHotbarSelection;
+    if (pending && this.clock() - pending.requestedAt > 5000) {
+      this.lastHotbarSelection = { ...pending, status: 'timed_out',
+        reason: 'server_equipment_confirmation_timeout' };
+      this.pendingHotbarSelection = null;
+    }
+    return {
+      selectedSlot: this.selectedHotbarSlot,
+      pending: this.pendingHotbarSelection ? { ...this.pendingHotbarSelection } : null,
+      last: this.lastHotbarSelection ? { ...this.lastHotbarSelection } : null
+    };
+  }
+  selectHotbarTool(primitive) {
+    const suffix = ({ equipAxe: '_axe', equipHoe: '_hoe',
+      equipPickaxe: '_pickaxe', equipSword: '_sword' })[primitive];
+    if (!suffix) return { status: 'rejected', reason: 'unsupported_hotbar_tool' };
+    const inventory = this.layerThree?.hotbarItems?.();
+    if (!inventory?.known || !Number.isFinite(inventory.observedAt) ||
+        this.clock() - inventory.observedAt < 0 || this.clock() - inventory.observedAt > 10000)
+      return { status: 'rejected', reason: 'fresh_hotbar_inventory_required' };
+    if (this.pendingHotbarSelection && this.clock() - this.pendingHotbarSelection.requestedAt <= 5000)
+      return { status: 'rejected', reason: 'hotbar_selection_pending' };
+    const candidate = inventory.slots.find(item => item.itemName.endsWith(suffix));
+    if (!candidate) return { status: 'rejected', reason: 'matching_tool_not_in_hotbar' };
+    if (this.selectedHotbarSlot === candidate.slot &&
+        this.lastHotbarSelection?.status === 'verified' &&
+        this.lastHotbarSelection?.itemName === candidate.itemName)
+      return { status: 'ok', reason: 'requested_tool_already_server_selected',
+        primitive, itemName: candidate.itemName, selectedSlot: candidate.slot,
+        awaitingServerConfirmation: false };
+    if (typeof this.client.queue !== 'function')
+      return { status: 'rejected', reason: 'bedrock_packet_queue_unavailable' };
+    const pending = { primitive, itemName: candidate.itemName, networkId: candidate.networkId,
+      slot: candidate.slot, requestedAt: this.clock(), playerHotbarAckAt: null,
+      status: 'awaiting_server_confirmation' };
+    this.pendingHotbarSelection = pending;
+    try {
+      this.client.queue('player_hotbar', {
+        selected_slot: candidate.slot, window_id: 0, select_slot: true
+      });
+    } catch {
+      this.pendingHotbarSelection = null;
+      return { status: 'rejected', reason: 'hotbar_selection_packet_failed' };
+    }
+    return { status: 'accepted', reason: 'hotbar_selection_sent_waiting_server_equipment',
+      primitive, itemName: candidate.itemName, selectedSlot: candidate.slot,
+      awaitingServerConfirmation: true };
   }
   chunk(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.x) || !Number.isInteger(packet.z)) return;
@@ -658,6 +733,7 @@ class BedrockGameplayBridge {
       worldGameMode: this.worldGameMode,
       difficulty: this.difficulty,
       itemStackNetManager: this.itemStackNetManager,
+      hotbarSelection: this.hotbarSelectionSnapshot(),
       inventoryTransactionMode: this.itemStackNetManager === true ? 'server_authoritative'
         : this.itemStackNetManager === false ? 'legacy' : 'unknown',
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
@@ -719,6 +795,8 @@ class BedrockGameplayBridge {
           confirmed: true, goal: 'goto', targetPosition: args.targetPosition
         }) ?? { status: 'rejected', reason: 'gameplay_agent_unavailable' };
       }
+      if (['equipAxe','equipHoe','equipPickaxe','equipSword'].includes(raw.primitive))
+        return this.selectHotbarTool(raw.primitive);
       if (raw.primitive === 'mineBlock') {
         const p = args.position;
         if (!p || !['x','y','z'].every(k => Number.isInteger(p[k])))
@@ -1037,6 +1115,7 @@ class BedrockGameplayBridge {
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
     this.gameplayAgent?.stop('session_closed');
+    this.pendingHotbarSelection = null;
     this.autonomy?.stop('session_closed');
     this.blockBreaker?.abort('session_closed');
     this.movement?.stopPresence?.('session_closed');
