@@ -25,13 +25,15 @@ function normalizeSlotInfo(info, label) {
     throw new TypeError(`stack request: missing ${label}`);
   const containerId = info.slot_type?.container_id ?? info.container_id;
   const slot = info.slot;
-  const stackId = info.stack_id ?? info.stack_network_id ?? 0;
+  const stackId = info.stack_id ?? info.stack_network_id;
   if (typeof containerId !== 'string' || !/^[a-z0-9_]{1,64}$/.test(containerId))
     throw new TypeError(`stack request: invalid ${label} container`);
   if (!Number.isInteger(slot) || slot < 0 || slot > 255)
     throw new TypeError(`stack request: invalid ${label} slot`);
-  if (!Number.isInteger(stackId) || stackId < -0x7fffffff || stackId > 0x7fffffff)
-    throw new TypeError(`stack request: invalid ${label} stack id`);
+  // StackRequestSlotInfo requires the exact server-issued stack ID. Defaulting
+  // a missing ID to zero can move the wrong stack or be rejected by the host.
+  if (!Number.isInteger(stackId) || stackId < -0x80000000 || stackId > 0x7fffffff)
+    throw new TypeError(`stack request: invalid or missing ${label} stack id`);
   const result = { slot_type: { container_id: containerId }, slot, stack_id: stackId };
   const dynamic = info.slot_type?.dynamic_container_id;
   if (dynamic !== undefined) {
