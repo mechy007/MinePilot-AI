@@ -95,6 +95,7 @@ class BedrockGameplayBridge {
     this.playerGameMode = 'unknown';
     this.worldGameMode = 'unknown';
     this.difficulty = null;
+    this.itemStackNetManager = null;
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
@@ -171,6 +172,8 @@ class BedrockGameplayBridge {
       Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
+    this.itemStackNetManager = typeof packet.enable_item_stack_net_manager === 'boolean'
+      ? packet.enable_item_stack_net_manager : null;
     this.terrain?.reset(this.dimension);
     this.intelligence?.reset(this.dimension);
     this.navigationRoute = null;
@@ -654,6 +657,9 @@ class BedrockGameplayBridge {
       playerGameMode: this.playerGameMode,
       worldGameMode: this.worldGameMode,
       difficulty: this.difficulty,
+      itemStackNetManager: this.itemStackNetManager,
+      inventoryTransactionMode: this.itemStackNetManager === true ? 'server_authoritative'
+        : this.itemStackNetManager === false ? 'legacy' : 'unknown',
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       respawnRecovery: { ...this.respawnRecovery },
       movement: this.movement?.capability?.(this) ?? 'unavailable',
