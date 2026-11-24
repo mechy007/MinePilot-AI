@@ -802,7 +802,7 @@ public final class DashboardActivity extends Activity {
             }
         }
         if (learningState != null && playing) {
-            learningState.append("\\nODYSSEY library: " + current.getInt("odyssey_total")
+            learningState.append("\nODYSSEY library: " + current.getInt("odyssey_total")
                     + " skills · " + current.getInt("odyssey_ready") + " ready · "
                     + current.getInt("odyssey_partial") + " partial · "
                     + current.getInt("odyssey_manual") + " manual · "
