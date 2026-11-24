@@ -1340,7 +1340,7 @@ test('bridge mirrors full Bedrock inventory content and incremental slots withou
     worldReady: true, localNavigationReady: false, skills: []
   }).inventory_read.state, 'ready');
 
-  now = 12000;
+  now = 20000;
   client.emit('inventory_slot', { window_id: 0, slot: 0,
     item: { network_id: 5, count: 3, metadata: 0, has_stack_id: true,
       stack_id: 23, block_runtime_id: 0 } });
