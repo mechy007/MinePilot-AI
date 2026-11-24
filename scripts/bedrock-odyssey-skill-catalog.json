@@ -382,7 +382,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "item_use",
+        "bucket_use",
         "equip_items",
         "inventory_read",
         "navigation",
@@ -610,7 +610,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "item_use",
+        "bucket_use",
         "equip_items",
         "inventory_read",
         "navigation",
@@ -4240,7 +4240,7 @@
       ],
       "requiredCapabilities": [
         "block_placement",
-        "item_use",
+        "bucket_use",
         "equip_items",
         "inventory_read"
       ]
