@@ -19,6 +19,10 @@ test('normalizes Bedrock 1.26.60 action IDs and validates slot addresses', () =>
   const action = normalizeAction({ type_id: 'take', count: 1,
     source: slot('inventory', 9, 31), destination: slot('hotbar', 0, 0) });
   assert.equal(action.legacy_type_id, 0);
+  const strict = normalizeAction({ type_id: 'take', legacy_type_id: 255, count: 1,
+    source: slot('inventory', 9, 31), destination: slot('hotbar', 0, 0), injected: 'ignored' });
+  assert.equal(strict.legacy_type_id, 0);
+  assert.equal(Object.hasOwn(strict, 'injected'), false);
   assert.deepEqual(action.source, { slot_type: { container_id: 'inventory' }, slot: 9, stack_id: 31 });
   assert.equal(normalizeAction({ type_id: 'craft_recipe', recipe_network_id: 42 }).legacy_type_id, 12);
   assert.equal(normalizeAction({ type_id: 'craft_recipe', recipe_network_id: 42 }).times_crafted, 1);
