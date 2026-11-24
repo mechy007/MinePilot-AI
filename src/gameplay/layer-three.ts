@@ -252,7 +252,7 @@ export class LayerThreePlanner {
     const id = idNumber(p.item?.network_id);
     const count = p.item?.count;
     if (id != null && typeof count === 'number' && Number.isInteger(count) && count > 0 && count <= 127)
-      this.hotbar.set(slot, id);
+      this.hotbar.set(slot, { networkId: id, count });
     else this.hotbar.delete(slot);
     this.hotbarSeenAt = this.now();
     return true;
