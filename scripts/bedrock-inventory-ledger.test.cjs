@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { BedrockInventoryLedger, normalizeContainer, normalizeItem, planPlayerInventorySwap } = require('./bedrock-inventory-ledger.cjs');
+const { normalizeAction } = require('./bedrock-stack-request-manager.cjs');
 
 const container = { container_id: 'hotbar_and_inventory' };
 const item = (network_id, count = 1, stack_id = 7) => ({
@@ -138,6 +139,8 @@ test('player inventory swap planning requires fresh resolved server stacks and p
   assert.deepEqual(plan.action.destination, {
     slot_type: { container_id: 'hotbar_and_inventory' }, slot: 9, stack_id: 77
   });
+  assert.equal(normalizeAction(plan.action).type_id, 'swap',
+    'the preflight plan must serialize through the same allowlisted request validator');
   assert.deepEqual(plan.expected.source, {
     networkId: 8, count: 1, metadata: 0, blockRuntimeId: 0
   });
