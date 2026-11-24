@@ -16,7 +16,7 @@ const TYPES=Object.freeze([
 
 const CURRICULUM=Object.freeze([
   {id:'observe_world',goal:'survive',title:'Learn the current world state',requires:['observe_world'],priority:100},
-  {id:'safe_navigation',goal:'explore',title:'Practice verified local navigation',requires:['explore'],priority:90},
+  {id:'safe_navigation',goal:'explore',title:'Practice verified local navigation',requires:['explore'],priority:110},
   {id:'player_escort',goal:'follow',title:'Practice following a visible player',requires:['follow_player'],priority:70},
   {id:'home_return',goal:'return_home',title:'Practice returning to a marked home',requires:['return_home'],priority:65},
   {id:'resource_collection',goal:'gather',title:'Practice collecting observed drops',requires:['collect_observed_drops'],priority:50}
