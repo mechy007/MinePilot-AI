@@ -6,6 +6,7 @@ const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { test } = require('node:test');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
+const { learningEngineFor } = require('./bedrock-skill-manifest.cjs');
 const { ExperimentalPlayerInput, buildInputPacket } = require('./bedrock-player-input.cjs');
 
 class Client extends EventEmitter {
@@ -1055,5 +1056,53 @@ test('ODYSSEY read-only observation results survive the private IPC receipt boun
   assert.equal(receipt.verifiedBy, 'server_inventory_content');
   assert.equal(receipt.readOnly, true);
   assert.equal(receipt.executed, false);
+  bridge.stop();
+});
+
+
+test('general gameplay start reconciles learning results and generic stop cannot take ownership', () => {
+  const client = new Client();
+  let agent = { active: false, goal: 'none', reason: 'gameplay_run_budget_exhausted', serverVerifiedSteps: 3 };
+  let starts = 0, stops = 0;
+  const gameplayAgent = {
+    snapshot: () => ({ ...agent }),
+    start(_world, options) {
+      starts++;
+      agent = { active: true, goal: options.goal, reason: 'running', serverVerifiedSteps: 0 };
+      return { status: 'accepted', reason: 'started' };
+    },
+    stop(reason) {
+      stops++;
+      agent = { ...agent, active: false, reason };
+      return { status: 'ok', reason };
+    }
+  };
+  const bridge = new BedrockGameplayBridge(client, { gameplayAgent }).start();
+  initialized(client, bridge);
+  const engine = learningEngineFor(bridge);
+  engine.activeRun = {
+    taskId: 'safe_exploration', goal: 'explore', title: 'Safe exploration',
+    steps: [], startedAt: 1, sessionId: 'test-session',
+    requestedStop: false, owner: 'manual', seenActive: true
+  };
+  const start = bridge.execute({ version: 'minepilot.gameplay.v1', requestId: 'new-goal',
+    action: 'agent_start', confirmed: true, goal: 'survive' });
+  assert.equal(start.status, 'accepted');
+  assert.equal(engine.activeRun, null);
+  assert.equal(engine.recentRuns.at(-1).taskId, 'safe_exploration');
+  assert.equal(engine.recentRuns.at(-1).outcome, 'verified');
+  assert.equal(starts, 1);
+
+  engine.activeRun = {
+    taskId: 'safe_exploration', goal: 'explore', title: 'Safe exploration',
+    steps: [], startedAt: 2, sessionId: 'test-session',
+    requestedStop: false, owner: 'manual', seenActive: true
+  };
+  const beforeStops = stops;
+  const stop = bridge.execute({ version: 'minepilot.gameplay.v1', requestId: 'wrong-stop',
+    action: 'agent_stop' });
+  assert.equal(stop.status, 'rejected');
+  assert.equal(stop.reason, 'learning_task_owned_use_learning_stop');
+  assert.equal(stops, beforeStops);
   bridge.stop();
 });
