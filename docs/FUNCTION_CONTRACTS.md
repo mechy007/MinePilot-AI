@@ -47,8 +47,9 @@ This catalog assigns purpose and side-effect rules to the public functions in th
 | `removeActor(packet)` | Remove entity/player observations from bounded caches. | No action is inferred from removal. |
 | `dimensionChange(packet)` | Apply a validated dimension transition. | Clears terrain, route, memory and incompatible pending work. |
 | `updateAddonNavigation()` | Update the optional add-on-derived navigation observation. | Advisory/observation only; cannot bypass the native action gate. |
-| `intelligenceTick()` | Run the deterministic local intelligence observer over current vitals, threat and world freshness. | May stop unsafe active movement; does not grant new gameplay permissions. |
-| `snapshot()` | Return the bounded state used by Android and logs. | Pure read; must never start/finish a task or send a packet. |
+| `intelligenceTick()` | Run the deterministic local intelligence observer over current vitals, threat and world freshness. | State-changing decision tick; may stop unsafe active movement. Called only by the control loop or active gameplay agent. |
+| `tickControlPlane()` | Refresh safety/intelligence and optional add-on navigation state once per explicit bridge poll. | Owns control-side mutations and records stable tick health. |
+| `snapshot()` | Return the bounded state used by Android and logs. | Pure read; never starts/finishes a task, updates navigation intents or sends a packet. |
 | `execute(raw)` | Validate the command envelope, whitelist, consent, readiness, and action ownership, then dispatch one operation. | Returns typed receipt; dispatch is not verified success. |
 | `tickLearning()` | Explicitly advance the one learning/autopilot state machine and record tick health. | Called by the runtime control loop; errors become a stable diagnostic state. |
 | `poll()` | Tick the learning controller once and process at most one IPC command/receipt. | Runs on the private timer; errors are recorded, not silently swallowed. |
