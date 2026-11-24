@@ -71,3 +71,12 @@ test('live Bedrock-like states correctly keep unsupported gameplay families bloc
  assert.equal(evaluateOdysseySkill('collect_dirt',live).status,'blocked');
  assert.equal(evaluateOdysseySkill('kill_one_zombie',live).status,'blocked');
 });
+
+test('bucket item activation requires item_use, never the unrelated eat_food capability',()=>{
+ const water=CATALOG.compositions.find(s=>s.id==='place_water');
+ assert.ok(water.requiredCapabilities.includes('item_use'));
+ assert.ok(!water.requiredCapabilities.includes('eat_food'));
+ const r=evaluateOdysseySkill('place_water',{...allReady,item_use:'unsupported'});
+ assert.equal(r.status,'blocked');
+ assert.ok(r.blockedCapabilities.some(x=>x.name==='item_use'));
+});
