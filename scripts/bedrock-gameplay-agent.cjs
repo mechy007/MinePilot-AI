@@ -22,7 +22,11 @@ const MAX_FAILURES=2;
 const ACK_MS=4500;
 const POSITION_TTL_MS=7000;
 const MIN_PROGRESS=0.08;
-const GOALS=new Set(['explore','follow','return_home','gather']);
+const GOALS=new Set(['survive','explore','follow','return_home','gather']);
+const FOOD_ITEMS=new Set(['minecraft:apple','minecraft:bread','minecraft:carrot',
+  'minecraft:potato','minecraft:baked_potato','minecraft:cooked_beef',
+  'minecraft:cooked_porkchop','minecraft:cooked_chicken','minecraft:cooked_mutton',
+  'minecraft:golden_carrot','minecraft:melon_slice','minecraft:cooked_salmon']);
 const CARDINAL=[[1,0],[0,1],[-1,0],[0,-1]];
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 const finite=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k])&&Math.abs(p[k])<=30000000);
@@ -49,6 +53,9 @@ class BedrockGameplayAgent {
     this.lastPlan=null;
     this.recentCells=new Map();
     this.nextActionAt=0;
+    this.subgoal=null;
+    this.collected=0;
+    this.ignoredDrops=new Map();
   }
   readiness(world) {
     if(!world||world.closed||!world.spawned||!finite(world.position) ||
@@ -108,6 +115,7 @@ class BedrockGameplayAgent {
     this.attempted=0;this.verified=0;this.failures=0;
     this.awaiting=null;this.lastVerifiedAt=null;this.lastPlan=null;
     this.nextActionAt=0;this.recentCells.clear();
+    this.subgoal=null;this.collected=0;this.ignoredDrops.clear();
     world.intelligence.setGoal(opts.goal);
     this.interval=this.setInterval(()=>this.pulse(),INTERVAL_MS);
     return {status:'accepted',reason:'gameplay_agent_enabled_not_yet_moving'};
@@ -119,6 +127,9 @@ class BedrockGameplayAgent {
     const wasActive=this.active;
     this.active=false;this.world=null;this.awaiting=null;
     this.phase='idle';this.reason=reason;this.nextActionAt=0;
+    if(wasActive&&this.subgoal&&world?.layerThree?.cancel)
+      world.layerThree.cancel();
+    this.subgoal=null;
     if(wasActive&&world?.movement?.snapshot?.()?.active)
       world.movement.stop('gameplay_agent_stopped');
     if(wasActive&&world?.intelligence)world.intelligence.setGoal('standby');
@@ -176,7 +187,72 @@ class BedrockGameplayAgent {
     targets.sort((a,b)=>b.score-a.score);
     return targets[0]?.plan?.waypoint??null;
   }
+  opportunisticDrop(world,foodOnly=false) {
+    if(!world.layerThree?.snapshot || !world.layerThree?.planCollect)return false;
+    const data=world.layerThree.snapshot(world.gameplayWorld());
+    if(!data?.inventoryKnown||!Array.isArray(data.nearbyItemNames))return false;
+    const now=this.clock();
+    for(const name of data.nearbyItemNames.slice(0,12)) {
+      if(typeof name!=='string'||!/^minecraft:[a-z0-9_./-]{1,80}$/.test(name))
+        continue;
+      if(foodOnly&&!FOOD_ITEMS.has(name))continue;
+      if((this.ignoredDrops.get(name)??0)>now)continue;
+      const result=world.layerThree.planCollect(name,1,world.gameplayWorld());
+      if(result?.status!=='accepted')continue;
+      this.subgoal={kind:'pickup',item:name,startedAt:now};
+      return true;
+    }
+    return false;
+  }
+  survivalGoal(world) {
+    const now=this.clock();
+    const hunger=world.lifeSenses?.snapshot?.({
+      position:world.position,dimension:world.dimension,spawned:world.spawned,
+      closed:world.closed,respawnState:world.respawnRecovery.state,
+      terrain:world.terrain
+    })?.hunger;
+    const needsFood=hunger!==null&&hunger!==undefined&&hunger<=6;
+    if(this.subgoal) {
+      const progress=world.layerThree?.preview?.(world.gameplayWorld());
+      if(progress?.status==='observed_inventory_increase') {
+        this.collected++;
+        world.layerThree?.cancel?.();
+        this.ignoredDrops.set(this.subgoal.item,now+30000);
+        this.subgoal=null;
+        this.nextActionAt=now+500;
+      }else if(now-this.subgoal.startedAt>10000) {
+        // A disappearing drop without an inventory delta is not a confirmed
+        // pickup. Don't loop forever attempting to collect it.
+        this.ignoredDrops.set(this.subgoal.item,now+30000);
+        world.layerThree?.cancel?.();
+        this.subgoal=null;
+      }else if(progress?.status==='route_unverified' && finite(progress.nextPoint)) {
+        const nav=world.routePlanner(world.terrain,world.dimension,
+          world.position,progress.nextPoint);
+        if(nav?.status==='route_found'&&finite(nav.waypoint))
+          return {status:'ready',waypoint:nav.waypoint,reason:'observed_drop_path_verified'};
+        return {status:'paused',reason:nav?.reason??'drop_route_unverified'};
+      }else{
+        return {status:'paused',reason:progress?.status==='within_range'?
+          'await_server_pickup_and_inventory_delta':
+          'await_updated_drop_or_inventory'};
+      }
+    }
+    if(!this.subgoal) {
+      const picked=this.opportunisticDrop(world,needsFood);
+      if(picked)return this.survivalGoal(world);
+    }
+    if(needsFood){
+      world.layerFour?.planFood?.();
+      return {status:'paused',reason:'food_needed_no_verified_item_use'};
+    }
+    const waypoint=this.localTarget(world);
+    return waypoint?{status:'ready',waypoint,reason:'survival_explore_safe_ground'}:
+      {status:'paused',reason:'survival_no_verified_path'};
+  }
+
   targetFromGoal(world) {
+    if(this.goal==='survive')return this.survivalGoal(world);
     const state=world.gameplayWorld();
     if(this.goal==='explore') {
       const waypoint=this.localTarget(world);
@@ -294,7 +370,7 @@ class BedrockGameplayAgent {
       // Standing still while critically injured is safer than selecting an
       // arbitrary direction. Only move on *observed* retreat routes.
       this.pause('critical_vitals_wait_for_safe_recovery');return;
-    }else if(hunger) {
+    }else if(hunger && this.goal!=='survive') {
       world.layerFour?.planFood?.();
       this.pause('low_hunger_requires_verified_food_interaction');return;
     }else{
@@ -334,6 +410,8 @@ class BedrockGameplayAgent {
       target:this.awaiting?{...this.awaiting.target}:null,
       lastPlan:this.lastPlan?{target:{...this.lastPlan.target},kind:this.lastPlan.kind}:null,
       execution:this.active?'experimental_verified_movement':'inactive',
+      collectedDrops:this.collected,
+      currentSubgoal:this.subgoal?{kind:this.subgoal.kind,item:this.subgoal.item}:null,
       autonomousCombat:false,autonomousMining:false,autonomousEating:false,
       serverVerified:this.verified>0};
   }
