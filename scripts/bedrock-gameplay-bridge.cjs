@@ -12,7 +12,7 @@ const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'verified_step', 'experimental_break']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -70,6 +70,7 @@ class BedrockGameplayBridge {
     this.blockBreaker = options.blockBreaker ?? null;
     this.lifeSenses = options.lifeSenses ?? null;
     this.intelligence = options.intelligence ?? null;
+    this.gameplayAgent = options.gameplayAgent ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -156,6 +157,7 @@ class BedrockGameplayBridge {
   }
   startGame(packet) {
     if (!packet || typeof packet !== 'object') return;
+    this.gameplayAgent?.stop('new_world_session');
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
     this.selfUnique = ident(packet.entity_id);
     this.position = safePoint(packet.player_position);
@@ -238,6 +240,7 @@ class BedrockGameplayBridge {
       // Ignore duplicate zero-health updates and initial login fixtures.
       if (!this.spawned || this.respawnRecovery.state !== 'alive') return;
       this.respawnRecovery.state = 'dead_waiting_for_server';
+      this.gameplayAgent?.stop('player_died');
       this.respawnRecovery.deaths++;
       this.spawned = false;
       this.autonomy?.stop('player_died');
@@ -521,6 +524,7 @@ class BedrockGameplayBridge {
   }
   dimensionChange(packet) {
     if (this.closed) return;
+    this.gameplayAgent?.stop('dimension_changed');
     this.dimension = validDimension(packet?.dimension);
     this.terrain?.reset(this.dimension);
     this.navigationRoute = null;
@@ -588,7 +592,8 @@ class BedrockGameplayBridge {
     // The planner may record results, but it never claims that queued input
     // means movement succeeded. Only verified host feedback counts.
     if(!this._lastIntelligenceVerified) this._lastIntelligenceVerified=0;
-    const verified=Number.isInteger(outcome?.verifiedSteps)?outcome.verifiedSteps:0;
+    const verified=Number.isInteger(outcome?.serverVerifiedSteps)?outcome.serverVerifiedSteps:0;
+    if(verified<this._lastIntelligenceVerified)this._lastIntelligenceVerified=0;
     if(verified>this._lastIntelligenceVerified)
       for(let i=this._lastIntelligenceVerified;i<Math.min(verified,this._lastIntelligenceVerified+20);i++)
         this.intelligence.noteOutcome('verified');
@@ -622,6 +627,7 @@ class BedrockGameplayBridge {
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
       ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
       ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
+      ...(this.gameplayAgent ? { gameplayAgent: this.gameplayAgent.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
       firstPerson: buildFirstPersonScene(this),
       ...(this.intelligence ? { intelligence: this.intelligenceTick() } : {}),
@@ -662,6 +668,10 @@ class BedrockGameplayBridge {
       return { status: 'rejected', reason: 'invalid_command' };
     }
     if (this.closed) return { status: 'rejected', reason: 'session_closed' };
+    if (this.gameplayAgent?.snapshot()?.active && ![
+      'status','inspect','agent_stop','autonomy_stop','stop_movement','advisor_review'
+    ].includes(raw.action))
+      return {status:'rejected',reason:'gameplay_agent_busy_stop_first'};
     // Layer 8 enforces a fresh authenticated world for *new* plans.
     // Stop, status and disabling suggestions remain possible when stale.
     if (this.layerEight && [
@@ -673,6 +683,15 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: preflight.reason };
     }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if (raw.action === 'agent_stop') {
+      return this.gameplayAgent?.stop('user_stopped') ??
+        {status:'rejected',reason:'gameplay_agent_unavailable'};
+    }
+    if (raw.action === 'agent_start') {
+      return this.gameplayAgent?.start(this,{
+        confirmed:raw.confirmed,goal:raw.goal,playerName:raw.playerName
+      })??{status:'rejected',reason:'gameplay_agent_unavailable'};
+    }
     if(raw.action === 'experimental_break') {
       if (raw.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
       if (this.autonomy?.snapshot()?.active)return {status:'rejected',reason:'autonomy_busy'};
@@ -680,6 +699,7 @@ class BedrockGameplayBridge {
         ?? {status:'rejected',reason:'block_break_unavailable'};
     }
     if(raw.action === 'autonomy_stop') {
+      this.gameplayAgent?.stop('user_stopped');
       this.autonomy?.stop('user_stopped');
       return {status:'ok',reason:'autonomy_stopped'};
     }
@@ -831,6 +851,7 @@ class BedrockGameplayBridge {
       return result;
     }
     if (raw.action === 'stop_movement') {
+      this.gameplayAgent?.stop('user_stop');
       this.layerOne?.stop();
       this.layerTwo?.cancel();
       this.layerThree?.cancel();
@@ -941,6 +962,7 @@ class BedrockGameplayBridge {
     this.closed = true;
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
+    this.gameplayAgent?.stop('session_closed');
     this.autonomy?.stop('session_closed');
     this.blockBreaker?.abort('session_closed');
     this.movement?.stopPresence?.('session_closed');
