@@ -328,7 +328,7 @@ function planPlayerInventoryMove(ledger, sourceSlot, destinationSlot, count = 1,
   if (!source.known || !destination.known || !source.fresh || !destination.fresh ||
       !source.fullSnapshotFresh || !destination.fullSnapshotFresh)
     return { status: 'blocked', reason: 'fresh_source_and_destination_slots_required', executable: false };
-  if (source.item.empty || destination.item.empty)
+  if (source.item.empty || !destination.item.empty)
     return { status: 'blocked', reason: 'move_requires_occupied_source_and_empty_destination', executable: false };
   if (source.item.hasStackId !== true || !Number.isInteger(source.item.stackId))
     return { status: 'blocked', reason: 'server_source_stack_id_required', executable: false };
