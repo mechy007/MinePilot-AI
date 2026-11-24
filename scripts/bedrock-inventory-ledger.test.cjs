@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { BedrockInventoryLedger, normalizeContainer, normalizeItem, planPlayerInventorySwap } = require('./bedrock-inventory-ledger.cjs');
+const { BedrockInventoryLedger, normalizeContainer, normalizeItem, planPlayerInventorySwap, planPlayerInventoryMove } = require('./bedrock-inventory-ledger.cjs');
 const { normalizeAction } = require('./bedrock-stack-request-manager.cjs');
 
 const container = { container_id: 'hotbar_and_inventory' };
@@ -191,4 +191,46 @@ test('player inventory swap planning blocks stale, empty, unresolved and no-op s
   same.observeContent(full(sameSlots));
   assert.equal(planPlayerInventorySwap(same, 0, 1).reason,
     'swap_has_no_observable_inventory_change');
+});
+
+
+test('player inventory move planning requires a server-identified empty destination and emits a take plan', () => {
+  const ledger = new BedrockInventoryLedger({ clock: () => 1000 });
+  ledger.observeItemRegistry({ itemstates: [
+    { runtime_id: 5, name: 'minecraft:oak_log' }
+  ] });
+  const emptyWithNetIdZero = () => ({ network_id: 0, count: 0, metadata: 0,
+    has_stack_id: true, stack_id: 0, block_runtime_id: 0 });
+  const slots = Array.from({ length: 36 }, emptyWithNetIdZero);
+  slots[9] = item(5, 12, 41);
+  ledger.observeContent(full(slots));
+  const plan = planPlayerInventoryMove(ledger, 9, 0, 4);
+  assert.equal(plan.status, 'ready');
+  assert.equal(plan.executable, false);
+  assert.equal(plan.action.type_id, 'take');
+  assert.equal(plan.action.count, 4);
+  assert.equal(normalizeAction(plan.action).type_id, 'take');
+  assert.deepEqual(plan.action.source, {
+    slot_type: { container_id: 'hotbar_and_inventory' }, slot: 9, stack_id: 41
+  });
+  assert.deepEqual(plan.action.destination, {
+    slot_type: { container_id: 'hotbar_and_inventory' }, slot: 0, stack_id: 0
+  });
+  assert.deepEqual(plan.expected.source, {
+    empty: false, networkId: 5, count: 8, metadata: 0, blockRuntimeId: 0
+  });
+  assert.deepEqual(plan.expected.destination, {
+    empty: false, networkId: 5, count: 4, metadata: 0, blockRuntimeId: 0
+  });
+  assert.equal(planPlayerInventoryMove(ledger, 9, 0, 13).reason,
+    'transfer_count_exceeds_source_stack');
+  assert.equal(planPlayerInventoryMove(ledger, 9, 36, 1).reason,
+    'invalid_player_inventory_slot');
+  const slotsWithoutDestinationId = [...slots];
+  slotsWithoutDestinationId[1] = item(0, 0);
+  const noEmptyNetId = new BedrockInventoryLedger({ clock: () => 1000 });
+  noEmptyNetId.observeItemRegistry({ itemstates: [{ runtime_id: 5, name: 'minecraft:oak_log' }] });
+  noEmptyNetId.observeContent(full(slotsWithoutDestinationId));
+  assert.equal(planPlayerInventoryMove(noEmptyNetId, 9, 1, 1).reason,
+    'server_empty_destination_stack_id_zero_required');
 });
