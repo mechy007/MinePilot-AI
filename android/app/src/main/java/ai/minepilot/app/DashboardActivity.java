@@ -802,7 +802,24 @@ public final class DashboardActivity extends Activity {
             }
         }
         if (learningState != null && playing) {
-            learningState.append("\nODYSSEY library: " + current.getInt("odyssey_total")
+            String autopilotReason = current.getString("learning_autopilot_reason", "disabled");
+            if (learningAutopilotEnabled && !learningActive) {
+                learningState.setText("AUTOPILOT ARMED · Waiting for a supported task"
+                        + "\\nStatus: " + autopilotReason.replace('_', ' ')
+                        + "\\nRemaining tasks: " + current.getInt("learning_remaining_tasks")
+                        + " · Blocked by prerequisites: " + current.getInt("learning_blocked_tasks"));
+                String blocker = current.getString("learning_first_blocker", "");
+                String blockedTask = current.getString("learning_first_blocked_task", "");
+                if (!blocker.isEmpty()) {
+                    learningState.append("\\nFirst blocker: " + blocker.replace('_', ' ')
+                            + (blockedTask.isEmpty() ? "" : " (" + blockedTask.replace('_', ' ') + ")"));
+                }
+            } else if (learningAutopilotEnabled) {
+                learningState.append("\\nAutopilot: running the local curriculum");
+            } else if (!"disabled".equals(autopilotReason) && !learningActive) {
+                learningState.append("\\nAutopilot: " + autopilotReason.replace('_', ' '));
+            }
+            learningState.append("\\nODYSSEY library: " + current.getInt("odyssey_total")
                     + " skills · " + current.getInt("odyssey_ready") + " ready · "
                     + current.getInt("odyssey_partial") + " partial · "
                     + current.getInt("odyssey_manual") + " manual · "
