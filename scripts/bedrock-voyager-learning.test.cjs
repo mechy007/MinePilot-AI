@@ -9,8 +9,10 @@ const {
   PRIMITIVES, COMPOSITE_SKILLS, BedrockOpenWorldLearningEngine,
   safeProposal
 } = require('./bedrock-open-world-skills.cjs');
-const { gameplaySkillManifest, startLearningTask, stopLearningTask, proposeLearningSkill } =
-  require('./bedrock-skill-manifest.cjs');
+const {
+  gameplaySkillManifest, tickLearningEngine, learningEngineFor,
+  startLearningTask, stopLearningTask, proposeLearningSkill
+} = require('./bedrock-skill-manifest.cjs');
 
 function worldFixture() {
   let now = 1000;
@@ -341,4 +343,55 @@ test('verified step totals retain the previous run and count the first post-rese
   setAgent({ active: true, serverVerifiedSteps: 2 });
   engine.observe(world, manifest);
   assert.equal(engine.totalVerifiedSteps, 6);
+});
+
+
+test('autopilot remains armed while required movement and terrain capabilities are unavailable', () => {
+  const { world } = worldFixture();
+  let movementReady = false;
+  world.movement.capability = () => movementReady ? 'experimental' : 'unavailable';
+  const engine = learningEngineFor(world);
+  const enabled = engine.enableAutopilot(world, gameplaySkillManifest(world), { confirmed: true });
+
+  assert.equal(enabled.status, 'accepted');
+  assert.equal(enabled.reason, 'local_autopilot_waiting_for_task');
+  let state = gameplaySkillManifest(world).learning;
+  assert.equal(state.localAutopilot.enabled, true);
+  assert.equal(state.localAutopilot.reason, 'waiting_for_eligible_local_task');
+  assert.equal(state.activeTask, null);
+  assert.equal(state.curriculumReadiness.remainingTaskCount, COMPOSITE_SKILLS.length);
+  assert.ok(state.curriculumReadiness.blockedTaskCount > 0);
+  assert.ok(state.curriculumReadiness.firstBlocker.reason);
+
+  // The same user-authorized controller starts a task once a fresh capability
+  // evaluation proves the prerequisite is available.
+  movementReady = true;
+  tickLearningEngine(world);
+  state = gameplaySkillManifest(world).learning;
+  assert.equal(state.localAutopilot.enabled, true);
+  assert.equal(state.localAutopilot.reason, 'running_local_curriculum');
+  assert.equal(state.activeTask.goal, 'survive');
+});
+
+test('learning manifests are read-only; explicit runtime ticks advance the curriculum', () => {
+  const { world, setAgent } = worldFixture();
+  const engine = learningEngineFor(world);
+  const enabled = engine.enableAutopilot(world, gameplaySkillManifest(world), { confirmed: true });
+  assert.equal(enabled.status, 'accepted');
+  assert.equal(engine.activeRun.taskId, 'survival_patrol');
+
+  setAgent({ active: false, phase: 'idle', reason: 'gameplay_run_budget_exhausted',
+    serverVerifiedSteps: 3 });
+
+  // Android status polling must not mutate the learning engine.
+  const status = gameplaySkillManifest(world).learning;
+  assert.equal(status.activeTask.id, 'survival_patrol');
+  assert.equal(engine.activeRun.taskId, 'survival_patrol');
+
+  // The bridge's explicit tick consumes terminal evidence and starts the next task.
+  tickLearningEngine(world);
+  const advanced = gameplaySkillManifest(world).learning;
+  assert.equal(advanced.recentRuns.at(-1).outcome, 'verified');
+  assert.equal(advanced.activeTask.goal, 'explore');
+  assert.equal(advanced.localAutopilot.enabled, true);
 });
