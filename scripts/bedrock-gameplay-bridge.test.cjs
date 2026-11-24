@@ -1136,3 +1136,27 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
   assert.equal(call('craftItem').reason,'primitive_executor_unavailable');
   bridge.stop();
 });
+
+
+test('StartGame inventory transaction negotiation is tracked without assuming a mode', () => {
+  const enabledClient = new Client();
+  const enabled = new BedrockGameplayBridge(enabledClient).start();
+  enabledClient.emit('start_game', { ...start, enable_item_stack_net_manager: true });
+  assert.equal(enabled.snapshot().itemStackNetManager, true);
+  assert.equal(enabled.snapshot().inventoryTransactionMode, 'server_authoritative');
+  enabled.stop();
+
+  const legacyClient = new Client();
+  const legacy = new BedrockGameplayBridge(legacyClient).start();
+  legacyClient.emit('start_game', { ...start, enable_item_stack_net_manager: false });
+  assert.equal(legacy.snapshot().itemStackNetManager, false);
+  assert.equal(legacy.snapshot().inventoryTransactionMode, 'legacy');
+  legacy.stop();
+
+  const unknownClient = new Client();
+  const unknown = new BedrockGameplayBridge(unknownClient).start();
+  unknownClient.emit('start_game', start);
+  assert.equal(unknown.snapshot().itemStackNetManager, null);
+  assert.equal(unknown.snapshot().inventoryTransactionMode, 'unknown');
+  unknown.stop();
+});
