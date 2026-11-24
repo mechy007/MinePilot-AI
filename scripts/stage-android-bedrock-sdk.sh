@@ -211,6 +211,7 @@ cp "$root/scripts/bedrock-block-break.cjs" "$temp/bedrock-block-break.cjs"
 cp "$root/scripts/bedrock-life-senses.cjs" "$temp/bedrock-life-senses.cjs"
 cp "$root/scripts/bedrock-intelligence-core.cjs" "$temp/bedrock-intelligence-core.cjs"
 cp "$root/scripts/bedrock-gameplay-agent.cjs" "$temp/bedrock-gameplay-agent.cjs"
+cp "$root/scripts/bedrock-skill-manifest.cjs" "$temp/bedrock-skill-manifest.cjs"
 cp "$root/scripts/bedrock-first-person-scene.cjs" "$temp/bedrock-first-person-scene.cjs"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
@@ -247,7 +248,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
-        "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-first-person-scene.cjs",
+        "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-skill-manifest.cjs", "bedrock-first-person-scene.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
@@ -285,8 +286,9 @@ cp "$root/scripts/bedrock-respawn-recovery.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-life-senses.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-intelligence-core.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-gameplay-agent.test.cjs" "$temp/verify/"
+cp "$root/scripts/bedrock-survival-mission.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-first-person-scene.test.cjs" "$temp/verify/"
-node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs"
+node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 du -h "$destination/bedrock-sdk.zip"
