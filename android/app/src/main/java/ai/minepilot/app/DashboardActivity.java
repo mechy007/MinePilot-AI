@@ -37,6 +37,7 @@ public final class DashboardActivity extends Activity {
     private TextView lastEvent;
     private TextView gameplayStatus;
     private LifeAnalyticsView lifeAnalytics;
+    private FirstPersonVoxelView firstPersonView;
     private Button probeStep;
     private Button verifiedStep;
     private Button autoFollow;
@@ -506,6 +507,15 @@ public final class DashboardActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(420)));
         body.addView(analytics, panelLayout(10));
 
+        LinearLayout povCard = card();
+        povCard.addView(text("BOT CAMERA  ·  FIRST PERSON (EXPERIMENTAL)", 11, GRASS, true));
+        firstPersonView = new FirstPersonVoxelView(this);
+        povCard.addView(firstPersonView,new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(250)));
+        povCard.addView(text("Reconstructed 3D view of decoded blocks only. Not a live Minecraft screen stream.",
+                11, MUTED, false));
+        body.addView(povCard, panelLayout(10));
+
         LinearLayout gameplay = card();
         gameplay.addView(text("GAMEPLAY TELEMETRY", 11, GRASS, true));
         gameplayStatus = text("Waiting for a server-reported position", 13, MUTED, false);
@@ -700,6 +710,7 @@ public final class DashboardActivity extends Activity {
         worldHealth.setText(current.getString("health", "—"));
         worldHunger.setText(current.getString("hunger", "—"));
         if (lifeAnalytics != null) lifeAnalytics.update(current);
+        if (firstPersonView != null) firstPersonView.update(current);
         String coordinates = current.getString("position", "");
         String movement = current.getString("movement", "unavailable");
         String effectiveMode = current.getString("effective_gamemode", "unknown");
