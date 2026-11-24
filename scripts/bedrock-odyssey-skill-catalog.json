@@ -89,8 +89,14 @@
       "primitiveCalls": [
         "feedAnimals"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "breed_animals"
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -103,8 +109,14 @@
       "primitiveCalls": [
         "feedAnimals"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "breed_animals"
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -117,8 +129,14 @@
       "primitiveCalls": [
         "feedAnimals"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "breed_animals"
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -131,8 +149,14 @@
       "primitiveCalls": [
         "feedAnimals"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "breed_animals"
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -148,9 +172,18 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
         "fishing",
-        "navigation"
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -165,10 +198,15 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -182,9 +220,14 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -199,10 +242,15 @@
         "goto",
         "mineBlock"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -216,9 +264,14 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -234,10 +287,14 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -252,10 +309,15 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -271,10 +333,14 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -287,9 +353,13 @@
       "primitiveCalls": [
         "exploreUntil"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -304,9 +374,19 @@
       "primitiveCalls": [
         "exploreUntil"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "item_use",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "eat_food",
+        "equip_items",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -321,11 +401,15 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "equip_items",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -338,9 +422,13 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -356,9 +444,18 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "equip_items",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -372,9 +469,14 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -389,11 +491,15 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "equip_items",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -406,9 +512,13 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -424,10 +534,14 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -443,10 +557,14 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -460,9 +578,14 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -478,9 +601,20 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "item_use",
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "eat_food",
+        "equip_items",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -494,9 +628,14 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -510,9 +649,16 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "collect_resources",
-        "navigation"
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -529,8 +675,12 @@
       "primitiveCalls": [
         "cookFood"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "cook"
+        "cook",
+        "inventory_read"
       ]
     },
     {
@@ -547,8 +697,12 @@
       "primitiveCalls": [
         "cookFood"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "cook"
+        "cook",
+        "inventory_read"
       ]
     },
     {
@@ -565,8 +719,12 @@
       "primitiveCalls": [
         "cookFood"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "cook"
+        "cook",
+        "inventory_read"
       ]
     },
     {
@@ -583,8 +741,12 @@
       "primitiveCalls": [
         "cookFood"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "cook"
+        "cook",
+        "inventory_read"
       ]
     },
     {
@@ -602,9 +764,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -625,9 +791,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -648,9 +818,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -670,6 +844,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -693,9 +870,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -714,6 +895,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -738,9 +922,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -761,6 +949,9 @@
         "findSuitablePosition",
         "getLogsCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -785,9 +976,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -806,6 +1001,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -831,9 +1029,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -852,9 +1054,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -873,9 +1079,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -894,9 +1104,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -917,9 +1131,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -939,9 +1157,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -958,6 +1180,9 @@
       "primitiveCalls": [
         "craftItem",
         "getPlanksCount"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "craft",
@@ -976,8 +1201,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -995,9 +1224,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1017,9 +1250,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1038,9 +1275,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1059,9 +1300,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1080,9 +1325,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1101,9 +1350,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1123,9 +1376,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1144,9 +1401,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1166,9 +1427,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1188,9 +1453,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1210,9 +1479,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1232,9 +1505,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1253,9 +1530,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1274,9 +1555,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1297,9 +1582,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1318,9 +1607,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1340,9 +1633,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1363,9 +1660,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1385,9 +1686,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1407,9 +1712,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1429,9 +1738,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1452,9 +1765,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1474,9 +1791,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1497,9 +1818,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1520,9 +1845,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1543,9 +1872,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1562,8 +1895,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -1583,9 +1920,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1606,9 +1947,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1628,9 +1973,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1650,9 +1999,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1672,9 +2025,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1694,9 +2051,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1716,9 +2077,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1738,9 +2103,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1761,9 +2130,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1783,9 +2156,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1802,8 +2179,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -1823,9 +2204,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1846,9 +2231,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1869,9 +2258,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1888,8 +2281,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -1908,6 +2305,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -1931,9 +2331,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1952,9 +2356,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1974,9 +2382,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -1996,9 +2408,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2015,8 +2431,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -2035,9 +2455,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2057,6 +2481,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -2085,6 +2512,9 @@
         "getPlanksCount",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
@@ -2109,9 +2539,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2130,9 +2564,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2151,9 +2589,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2172,9 +2614,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2193,9 +2639,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2212,8 +2662,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -2231,9 +2685,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2252,9 +2710,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2274,9 +2736,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2297,6 +2763,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -2322,9 +2791,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2341,6 +2814,7 @@
         "craftItem",
         "getPlanksCount"
       ],
+      "directBotApis": [],
       "requiredCapabilities": [
         "craft",
         "inventory_read"
@@ -2362,9 +2836,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2384,9 +2862,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2406,9 +2888,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2428,9 +2914,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2450,9 +2940,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -2469,8 +2963,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -2489,6 +2987,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -2514,6 +3015,9 @@
         "getPlanksCount",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
@@ -2537,6 +3041,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -2562,6 +3069,9 @@
         "getPlanksCount",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
@@ -2581,8 +3091,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -2601,6 +3115,9 @@
         "findSuitablePosition",
         "getPlanksCount",
         "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
       ],
       "requiredCapabilities": [
         "block_placement",
@@ -2626,6 +3143,9 @@
         "getPlanksCount",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
@@ -2643,8 +3163,12 @@
         "place_chest"
       ],
       "primitiveCalls": [],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "container_transfer"
+        "container_transfer",
+        "inventory_read"
       ]
     },
     {
@@ -2657,8 +3181,13 @@
       "primitiveCalls": [
         "equipArmor"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2671,8 +3200,13 @@
         "craft_wooden_axe"
       ],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2685,8 +3219,13 @@
         "craft_wooden_hoe"
       ],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2697,8 +3236,13 @@
       "sourcePath": "Odyssey/skill_library/skill/compositional/equipIronArmor.js",
       "dependencies": [],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2711,8 +3255,13 @@
         "craft_wooden_pickaxe"
       ],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2723,8 +3272,13 @@
       "sourcePath": "Odyssey/skill_library/skill/compositional/equipShield.js",
       "dependencies": [],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2737,8 +3291,13 @@
         "craft_wooden_shovel"
       ],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2751,8 +3310,13 @@
         "craft_wooden_sword"
       ],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "equip_items"
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -2768,7 +3332,12 @@
         "equipHoe",
         "exploreUntil"
       ],
+      "directBotApis": [
+        "place_block",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "block_placement",
         "equip_items",
         "farming",
         "navigation",
@@ -2788,10 +3357,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2807,10 +3381,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2826,10 +3405,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2845,10 +3429,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2864,10 +3453,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2883,10 +3477,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2902,10 +3501,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2921,10 +3525,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2940,10 +3549,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2959,10 +3573,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2978,10 +3597,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -2997,10 +3621,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3016,10 +3645,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3035,10 +3669,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3054,10 +3693,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3073,10 +3717,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3092,10 +3741,15 @@
         "goto",
         "killMob"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "combat",
         "equip_items",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3112,9 +3766,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -3132,9 +3790,13 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
         "craft",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -3148,8 +3810,12 @@
       "primitiveCalls": [
         "craftItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "craft"
+        "craft",
+        "inventory_read"
       ]
     },
     {
@@ -3165,9 +3831,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3182,10 +3856,14 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "equip_items",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3201,9 +3879,13 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3219,9 +3901,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3237,9 +3927,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3255,9 +3953,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3272,10 +3978,14 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "equip_items",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3291,9 +4001,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3309,9 +4027,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3327,9 +4053,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3345,9 +4079,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3363,9 +4105,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3381,9 +4131,17 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3397,9 +4155,13 @@
         "exploreUntil",
         "mineBlock"
       ],
+      "directBotApis": [
+        "world_query"
+      ],
       "requiredCapabilities": [
         "mine",
-        "navigation"
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3415,8 +4177,12 @@
         "findSuitablePosition",
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
+        "inventory_read",
         "spatial_observation"
       ]
     },
@@ -3430,9 +4196,15 @@
       "primitiveCalls": [
         "exploreUntil"
       ],
+      "directBotApis": [
+        "inventory",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "block_placement",
-        "navigation"
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
       ]
     },
     {
@@ -3445,8 +4217,12 @@
       "primitiveCalls": [
         "placeItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "block_placement"
+        "block_placement",
+        "inventory_read"
       ]
     },
     {
@@ -3457,8 +4233,16 @@
       "sourcePath": "Odyssey/skill_library/skill/compositional/placeWater.js",
       "dependencies": [],
       "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "item_use"
+      ],
       "requiredCapabilities": [
-        "block_placement"
+        "block_placement",
+        "eat_food",
+        "equip_items",
+        "inventory_read"
       ]
     },
     {
@@ -3471,8 +4255,12 @@
       "primitiveCalls": [
         "plantSeeds"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "farming"
+        "farming",
+        "inventory_read"
       ]
     },
     {
@@ -3485,8 +4273,12 @@
       "primitiveCalls": [
         "plantSeeds"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "farming"
+        "farming",
+        "inventory_read"
       ]
     },
     {
@@ -3501,8 +4293,12 @@
       "primitiveCalls": [
         "plantSeeds"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
-        "farming"
+        "farming",
+        "inventory_read"
       ]
     },
     {
@@ -3518,9 +4314,18 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
         "navigation",
-        "shear_animals"
+        "shear_animals",
+        "spatial_observation"
       ]
     },
     {
@@ -3538,8 +4343,12 @@
         "placeItem",
         "smeltItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
+        "inventory_read",
         "smelt",
         "spatial_observation"
       ]
@@ -3559,8 +4368,12 @@
         "placeItem",
         "smeltItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
+        "inventory_read",
         "smelt",
         "spatial_observation"
       ]
@@ -3580,8 +4393,12 @@
         "placeItem",
         "smeltItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
+        "inventory_read",
         "smelt",
         "spatial_observation"
       ]
@@ -3601,8 +4418,12 @@
         "placeItem",
         "smeltItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
+        "inventory_read",
         "smelt",
         "spatial_observation"
       ]
@@ -3622,8 +4443,12 @@
         "placeItem",
         "smeltItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
+        "inventory_read",
         "smelt",
         "spatial_observation"
       ]
@@ -3644,8 +4469,12 @@
         "placeItem",
         "smeltItem"
       ],
+      "directBotApis": [
+        "inventory"
+      ],
       "requiredCapabilities": [
         "block_placement",
+        "inventory_read",
         "smelt",
         "spatial_observation"
       ]
@@ -3661,8 +4490,13 @@
         "exploreUntil",
         "goto"
       ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
       "requiredCapabilities": [
         "navigation",
+        "spatial_observation",
         "vehicle_control"
       ]
     }
