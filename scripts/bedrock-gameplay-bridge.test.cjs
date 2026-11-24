@@ -1344,6 +1344,6 @@ test('bridge mirrors full Bedrock inventory content and incremental slots withou
   snapshot = bridge.snapshot();
   assert.equal(snapshot.inventory.player.fresh, false,
     'an incremental slot update must not renew the complete inventory snapshot');
-  assert.equal(snapshot.inventory.windows[0].slots[0].item.stackId, 23);
+  assert.equal(snapshot.inventory.player.items[0].stackId, 23);
   bridge.stop();
 });
