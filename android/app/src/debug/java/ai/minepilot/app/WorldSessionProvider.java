@@ -561,6 +561,17 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putString("last_command_result", observedText);
                         result.putBoolean("last_command_read_only", command.optBoolean("readOnly", false));
                     }
+                    if (primitive.matches("goto|exploreUntil|mineBlock|equipAxe|equipHoe|equipPickaxe|equipSword")) {
+                        result.putString("last_command_primitive", primitive);
+                        result.putBoolean("last_command_dispatch_accepted", command.optBoolean("dispatchAccepted", false));
+                        result.putBoolean("last_command_awaiting_server_confirmation",
+                                command.optBoolean("awaitingServerConfirmation", false));
+                        String itemName = command.optString("itemName", "");
+                        if (!itemName.isEmpty()) result.putString("last_command_item_name", itemName);
+                        int selectedSlot = command.optInt("selectedSlot", -1);
+                        if (selectedSlot >= 0 && selectedSlot <= 8)
+                            result.putInt("last_command_selected_slot", selectedSlot);
+                    }
                 }
             }
         } else if ("failed".equals(phase) || "stopped".equals(phase) || "disconnected".equals(phase)) {
