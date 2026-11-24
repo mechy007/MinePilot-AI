@@ -77,3 +77,16 @@ The private Android gameplay IPC now has a separate confirmed execution action, 
 - `mineBlock`: starts the existing single-block Bedrock break controller only for a confirmed integer block coordinate within reach, a decoded solid/breakable block, active neutral player-input presence, and no competing movement. A changed server block is recorded as an observation with causality explicitly unverified, not proof that MinePilot mined it.
 
 Android validates the primitive and coordinates before writing the single-command inbox. The bridge validates again and dispatches only the allowlisted executor. Crafting, cooking, smelting, equipment, combat, feeding/breeding, item placement, farming and other unsupported primitive families remain blocked. Primitive-level executors do not automatically make a composite skill runnable: dependency orchestration and verified postconditions are still required for each composition.
+
+
+## Inventory transaction protocol negotiation
+
+The Bedrock bridge now records the `enable_item_stack_net_manager` flag from the authenticated StartGame packet and exposes the negotiated mode as `server_authoritative`, `legacy`, or `unknown`. Missing fields remain unknown; the runtime does not guess which transaction protocol the host expects.
+
+This is a prerequisite for the next inventory-action implementation stage, not an executor. Crafting, equipping, food use, bucket use, and container operations remain blocked. A future transaction controller must use the negotiated protocol, correlate each request with the server's response, and verify the resulting inventory/world state before reporting success.
+
+Protocol references for the pinned Bedrock 1.26.60 / protocol 2225 schema:
+
+- StartGame packet and its inventory-manager negotiation flag: https://mojang.github.io/bedrock-protocol-docs/1.26.60/packets/start-game-packet/
+- Item stack request packet: https://mojang.github.io/bedrock-protocol-docs/1.26.60/packets/item-stack-request-packet/
+- Item stack response packet: https://mojang.github.io/bedrock-protocol-docs/1.26.60/packets/item-stack-response-packet/
