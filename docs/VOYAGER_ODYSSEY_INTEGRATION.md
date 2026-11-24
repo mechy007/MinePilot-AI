@@ -21,7 +21,7 @@ Research references: [Voyager source](https://github.com/MineDojo/Voyager) · [V
 | Voyager skill memory | Bounded persistent skill proposals, run records, verified counters and mastery status are saved beside the session command file. |
 | Failure feedback | Recent run reasons are retained with deterministic improvement hints; unsafe or stale states stop or reject execution. |
 
-The Android World screen displays the recommended task, current run state, mastered-skill count and server-verified navigation progress. Starting a task requires an explicit confirmation. The Stop learning task control cancels the learning actor without disconnecting the Minecraft session.
+The Android World screen displays the recommended task, current run state, mastered-skill count and server-verified navigation progress. Starting a task requires an explicit confirmation. The Stop learning task control cancels the learning actor without disconnecting the Minecraft session. The same screen also offers a one-time confirmed **Enable local autopilot** control. Once enabled, a deterministic local scheduler runs eligible built-in tasks in priority order, advances to the next task after a server-verified terminal result, and stops when the built-in curriculum is exhausted or blocked. It does not call an LLM, cloud endpoint or Kaggle worker. Stop local autopilot immediately cancels its current task without disconnecting Minecraft.
 
 ## Current composite tasks
 
@@ -52,6 +52,8 @@ The debug Android session provider accepts these commands through the existing s
 - learning_start: requires confirmed=true and a known task ID, for example safe_exploration.
 - learning_stop: cancels the active learning task; it does not disconnect the Bedrock client.
 - learning_propose: requires confirmed=true and a JSON declarative skill proposal. The core validates the proposal against the primitive allowlist.
+- learning_autopilot_start: requires confirmed=true once per enable. The local scheduler selects only built-in, reviewed compositions and never runs model proposals.
+- learning_autopilot_stop: disables the scheduler and cancels its active learning task without disconnecting the Bedrock client.
 
 Example learning_start payload:
 {"version":"minepilot.gameplay.v1","requestId":"learn_001","action":"learning_start","taskId":"safe_exploration","confirmed":true}
@@ -64,7 +66,7 @@ This integration is a complete first Bedrock-native learning loop over the actio
 
 At this point MinePilot's current executable gameplay agent can perform bounded verified navigation for survival patrol, exploration, following a selected player, returning to a marked home, and approaching/collecting an observed drop when the Bedrock inventory evidence supports it. It does not yet autonomously fight, eat, mine, craft, place building blocks, operate redstone, breed animals or complete Nether/End progression.
 
-The curriculum currently recommends tasks and waits for the player to confirm each run. The learning core is not yet connected to a remote LLM/model provider, Kaggle worker or an automatic model-driven planner. learning_propose is a validated intake API, not evidence that a model is currently generating skills. The current critic uses deterministic Bedrock outcome evidence, not a learned neural critic.
+The default mode recommends tasks and waits for the player to confirm each run. The optional local autopilot can sequence only the built-in tasks after one explicit enable; it does not invent skills or add unsupported actions. The learning core is not yet connected to a remote LLM/model provider, Kaggle worker or an automatic model-driven planner. learning_propose is a validated intake API, not evidence that a model is currently generating skills. The current critic uses deterministic Bedrock outcome evidence, not a learned neural critic.
 
 ## Validation
 
