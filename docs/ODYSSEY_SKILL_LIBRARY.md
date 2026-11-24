@@ -26,7 +26,7 @@ Current mapping is strict:
 - ODYSSEY resource harvesting is not equated with picking up an already-observed ground drop.
 - Crafting, eating/item use, equipment transactions, combat, animal breeding, fishing, farming, cooking, smelting, shearing, container transfer, vehicle control and general block placement remain blocked until corresponding Bedrock-native executors and authoritative verification are implemented.
 
-The summary is exposed under gameplaySkills.odysseyLibrary in the runtime snapshot. Android's World learning panel displays the 183-skill total and live ready/partial/manual/blocked counts.
+The summary is exposed under gameplaySkills.odysseyLibrary in the runtime snapshot. Android's World learning panel displays the 183-skill total and live ready/partial/manual/blocked counts. The new Bedrock primitive adapter also maps every distinct primitive referenced by the 183 compositions (20 names) to a MinePilot-owned Bedrock action contract. This is a compatibility/action-plan layer, not a claim that all handlers exist.
 
 ## Runtime APIs
 
@@ -38,7 +38,7 @@ The CommonJS module scripts/bedrock-odyssey-skill-library.cjs exports:
 - summarizeOdysseyLibrary(capabilityStates)
 - validateOdysseyCatalog()
 
-planOdysseySkill is a dependency-aware planning preview only. It returns the ordered prerequisite IDs and required capabilities; it does not dispatch gameplay actions, run JavaScript, or call Mineflayer. Every result has executable=false and arbitraryCodeExecution=false.
+planOdysseySkill is a dependency-aware planning preview. It returns the ordered prerequisite IDs, required capabilities and a Bedrock primitive plan. The adapter lives in scripts/bedrock-odyssey-bedrock-adapter.cjs and maps the 20 referenced upstream primitive names to MinePilot-owned action names, capability requirements and execution modes. It deliberately refuses to mark unsupported handlers executable. The plan does not dispatch gameplay actions, run JavaScript, or call Mineflayer. Every result has executable=false and arbitraryCodeExecution=false. Tests verify that every primitive reference in all 183 compositions has an explicit mapping and that unsupported actions remain blocked even if a caller incorrectly advertises the capability as ready.
 
 ## What is not imported
 
@@ -52,4 +52,4 @@ Research: ODYSSEY paper, IJCAI 2025: https://ijcai.org/proceedings/2025/22
 
 ## Validation boundary
 
-Automated tests validate catalog completeness, metadata safety, dependency integrity, recursive evaluation, capability classification and the rule that planning never executes code. They do not prove that the 183 skills can run in a Bedrock world. That requires separate Bedrock-native executors, server-authoritative success checks and private-world/device testing for each capability family.
+Automated tests validate catalog completeness, metadata safety, dependency integrity, recursive evaluation, the 20-name primitive mapping, conservative action status and the rule that planning never executes code. They do not prove that the 183 skills can run in a Bedrock world. The remaining implementation work is concrete Bedrock packet/action handlers plus transaction acknowledgements and world/inventory verification for each action family, followed by private-world/device testing. A skill is not complete until every primitive in its dependency closure has a tested Bedrock executor and authoritative success criteria.
