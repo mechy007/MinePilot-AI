@@ -9,7 +9,7 @@ const MAX_HISTORY = 32;
 const MAX_MEMORY = 64;
 const FRESH_POSITION_MS = 7000;
 const HAZARD_DISTANCE = 8;
-const VALID_GOALS = new Set(['standby', 'survive', 'follow', 'return_home', 'explore', 'gather']);
+const VALID_GOALS = new Set(['standby', 'survive', 'follow', 'return_home', 'explore', 'gather', 'goto']);
 
 const candidate = (action, priority, reason, confidence, allowed, evidence) =>
   ({action,priority,reason,confidence,allowed,evidence});
