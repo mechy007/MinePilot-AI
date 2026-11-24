@@ -382,7 +382,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "eat_food",
+        "item_use",
         "equip_items",
         "inventory_read",
         "navigation",
@@ -610,7 +610,7 @@
       ],
       "requiredCapabilities": [
         "collect_resources",
-        "eat_food",
+        "item_use",
         "equip_items",
         "inventory_read",
         "navigation",
@@ -4240,7 +4240,7 @@
       ],
       "requiredCapabilities": [
         "block_placement",
-        "eat_food",
+        "item_use",
         "equip_items",
         "inventory_read"
       ]
