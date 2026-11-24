@@ -1,6 +1,9 @@
 'use strict';
 
 const { BedrockOpenWorldLearningEngine } = require('./bedrock-open-world-skills.cjs');
+const {
+  evaluateOdysseySkill, listOdysseySkills, planOdysseySkill, summarizeOdysseyLibrary
+} = require('./bedrock-odyssey-skill-library.cjs');
 
 /**
  * Capability catalog for MinePilot's Bedrock runtime. A capability advertised
@@ -72,6 +75,44 @@ function evaluateCapabilities(world) {
   };
 }
 
+function odysseyCapabilityStates(world, manifest) {
+  const terrain = world?.terrain?.snapshot?.() ?? {};
+  const resources = manifest?.worldReady
+    ? world?.layerThree?.snapshot?.(world.gameplayWorld?.()) ?? {} : {};
+  const existing = name => manifest?.skills?.find(item => item.name === name) ?? {};
+  const state = (value, reason) => ({ state: value, reason });
+  return {
+    world_observation: state(manifest?.worldReady ? 'ready' : 'blocked',
+      manifest?.worldReady ? 'authenticated_bedrock_world' : 'world_not_ready'),
+    spatial_observation: state(manifest?.worldReady && terrain.decodedSections > 0 ? 'ready' : 'blocked',
+      manifest?.worldReady && terrain.decodedSections > 0 ? 'decoded_bedrock_terrain' : 'decoded_terrain_unavailable'),
+    inventory_read: state(resources.inventoryKnown === true ? 'ready' : 'blocked',
+      resources.inventoryKnown === true ? 'server_inventory_snapshot' : 'inventory_not_known'),
+    navigation: state(manifest?.localNavigationReady ? 'experimental' : 'blocked',
+      manifest?.localNavigationReady ? 'bounded_server_verified_navigation' : 'verified_navigation_unavailable'),
+    mine: state(existing('mine').state ?? 'blocked',
+      existing('mine').reason ?? 'single_block_action_unavailable'),
+    eat_food: state(existing('eat_food').state ?? 'blocked',
+      existing('eat_food').reason ?? 'food_use_unavailable'),
+    combat: state(existing('attack_hostile').state ?? 'blocked',
+      existing('attack_hostile').reason ?? 'combat_executor_unavailable'),
+    craft: state(existing('craft').state ?? 'blocked',
+      existing('craft').reason ?? 'recipe_transaction_unavailable'),
+    block_placement: state(existing('build_shelter').state ?? 'blocked',
+      existing('build_shelter').reason ?? 'verified_block_placement_unavailable'),
+    equip_items: state('unsupported', 'inventory_equipment_transaction_unavailable'),
+    collect_resources: state('unsupported', 'only_observed_ground_drop_collection_exists_not_resource_harvesting'),
+    breed_animals: state('unsupported', 'animal_interaction_executor_unavailable'),
+    fishing: state('unsupported', 'fishing_executor_unavailable'),
+    cook: state('unsupported', 'cooking_executor_unavailable'),
+    smelt: state('unsupported', 'furnace_transaction_executor_unavailable'),
+    farming: state('unsupported', 'crop_tilling_and_planting_executor_unavailable'),
+    shear_animals: state('unsupported', 'shearing_executor_unavailable'),
+    container_transfer: state('unsupported', 'container_inventory_transaction_unavailable'),
+    vehicle_control: state('unsupported', 'vehicle_control_executor_unavailable')
+  };
+}
+
 const engines = new WeakMap();
 
 function learningEngineFor(world) {
@@ -89,8 +130,10 @@ function learningEngineFor(world) {
 function gameplaySkillManifest(world) {
   const manifest = evaluateCapabilities(world);
   const engine = learningEngineFor(world);
+  const odysseyCapabilities = odysseyCapabilityStates(world, manifest);
   return {
     ...manifest,
+    odysseyLibrary: summarizeOdysseyLibrary(odysseyCapabilities),
     learning: engine ? engine.observe(world, manifest) : {
       version: 'minepilot.voyager-odyssey.v1',
       mode: 'unavailable',
@@ -143,5 +186,9 @@ module.exports = {
   stopLearningTask,
   startLocalAutopilot,
   stopLocalAutopilot,
-  proposeLearningSkill
+  proposeLearningSkill,
+  odysseyCapabilityStates,
+  evaluateOdysseySkill,
+  listOdysseySkills,
+  planOdysseySkill
 };
