@@ -8,12 +8,12 @@
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
-const { gameplaySkillManifest } = require('./bedrock-skill-manifest.cjs');
+const { gameplaySkillManifest, startLearningTask, stopLearningTask, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -677,14 +677,14 @@ class BedrockGameplayBridge {
     }
     if (this.closed) return { status: 'rejected', reason: 'session_closed' };
     if (this.gameplayAgent?.snapshot()?.active && ![
-      'status','inspect','agent_stop','autonomy_stop','stop_movement','advisor_review'
+      'status','inspect','agent_stop','autonomy_stop','stop_movement','advisor_review','learning_stop'
     ].includes(raw.action))
       return {status:'rejected',reason:'gameplay_agent_busy_stop_first'};
     // Layer 8 enforces a fresh authenticated world for *new* plans.
     // Stop, status and disabling suggestions remain possible when stale.
     if (this.layerEight && [
       'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food',
-      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint'
+      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start'
     ].includes(raw.action)) {
       const preflight = this.layerEight.allowPreview(this.readinessInput());
       if (!preflight.allowed)
@@ -699,6 +699,16 @@ class BedrockGameplayBridge {
       return this.gameplayAgent?.start(this,{
         confirmed:raw.confirmed,goal:raw.goal,playerName:raw.playerName
       })??{status:'rejected',reason:'gameplay_agent_unavailable'};
+    }
+    if (raw.action === 'learning_start') {
+      return startLearningTask(this, raw.taskId, { confirmed: raw.confirmed });
+    }
+    if (raw.action === 'learning_stop') {
+      return stopLearningTask(this, 'learning_user_stopped');
+    }
+    if (raw.action === 'learning_propose') {
+      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+      return proposeLearningSkill(this, raw.skill);
     }
     if(raw.action === 'experimental_break') {
       if (raw.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
