@@ -36,6 +36,7 @@ public final class DashboardActivity extends Activity {
     private TextView worldHunger;
     private TextView lastEvent;
     private TextView gameplayStatus;
+    private LifeAnalyticsView lifeAnalytics;
     private Button probeStep;
     private Button verifiedStep;
     private Button autoFollow;
@@ -496,6 +497,15 @@ public final class DashboardActivity extends Activity {
         worldHunger = addVital(vitals, "Hunger", 0);
         body.addView(vitals, panelLayout(10));
 
+        // Lightweight live visualization of packet-confirmed observations.
+        // This is not a streamed game camera or guessed voxel map.
+        LinearLayout analytics = card();
+        analytics.addView(text("VISUAL ANALYTICS  ·  LIVE SURVIVAL", 11, GRASS, true));
+        lifeAnalytics = new LifeAnalyticsView(this);
+        analytics.addView(lifeAnalytics, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(420)));
+        body.addView(analytics, panelLayout(10));
+
         LinearLayout gameplay = card();
         gameplay.addView(text("GAMEPLAY TELEMETRY", 11, GRASS, true));
         gameplayStatus = text("Waiting for a server-reported position", 13, MUTED, false);
@@ -689,6 +699,7 @@ public final class DashboardActivity extends Activity {
                 });
         worldHealth.setText(current.getString("health", "—"));
         worldHunger.setText(current.getString("hunger", "—"));
+        if (lifeAnalytics != null) lifeAnalytics.update(current);
         String coordinates = current.getString("position", "");
         String movement = current.getString("movement", "unavailable");
         String effectiveMode = current.getString("effective_gamemode", "unknown");
