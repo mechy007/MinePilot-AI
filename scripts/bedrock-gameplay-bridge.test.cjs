@@ -1032,3 +1032,30 @@ test('neutral presence maintains bot input when idle spawn coordinates have no f
   assert.equal(movement.snapshot().movementVerified,false);
   bridge.stop();
 });
+
+test('ODYSSEY read-only observation results survive the private IPC receipt boundary', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'minepilot-odyssey-observe-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const commandPath = join(dir, 'command.json'), receiptPath = join(dir, 'receipt.json');
+  const { LayerThreePlanner } = require('../dist/src/gameplay/layer-three.js');
+  const layerThree = new LayerThreePlanner(() => 10000);
+  layerThree.observeItemRegistry({ items: [{ network_id: 1, name: 'minecraft:oak_log' }] });
+  layerThree.observeInventory({ window_id: 0, input: [{ network_id: 1, count: 4 }] });
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath, layerThree,
+    clock: () => 10000 }).start();
+  initialized(client, bridge);
+  // Keep the inventory snapshot time aligned with the bridge clock.
+  const command = { version: 'minepilot.gameplay.v1', requestId: 'odyssey-1',
+    action: 'odyssey_observe', confirmed: true, primitive: 'getLogsCount' };
+  writeFileSync(commandPath, JSON.stringify(command));
+  bridge.poll();
+  const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
+  assert.equal(receipt.status, 'ok');
+  assert.equal(receipt.primitive, 'getLogsCount');
+  assert.equal(receipt.result, 4);
+  assert.equal(receipt.verifiedBy, 'server_inventory_content');
+  assert.equal(receipt.readOnly, true);
+  assert.equal(receipt.executed, false);
+  bridge.stop();
+});
