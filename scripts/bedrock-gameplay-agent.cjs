@@ -1,0 +1,341 @@
+'use strict';
+
+/**
+ * Bedrock Gameplay Agent V1
+ * The only automated locomotion path is the existing experimental player
+ * input writer. Every step requires explicitly classified collision-safe
+ * voxels and a later, fresh SERVER position update showing progress.
+ *
+ * Goals: explore verified terrain, follow named player, return home, approach
+ * observed dropped items. Survival: retreat from recognized hostiles when a
+ * verified safe route exists; otherwise stop and report why. No automatic
+ * combat, hunger packets, crafting, mining, building or teleportation.
+ *
+ * There is no implicit enable: users confirm each session in the Android UI.
+ * The loop has strict budgets and can be cancelled synchronously.
+ */
+const {tileIsSafe}=require('./bedrock-local-path.cjs');
+const INTERVAL_MS=250;
+const MAX_RUN_MS=120000;
+const MAX_STEPS=40;
+const MAX_FAILURES=2;
+const ACK_MS=4500;
+const POSITION_TTL_MS=7000;
+const MIN_PROGRESS=0.08;
+const GOALS=new Set(['explore','follow','return_home','gather']);
+const CARDINAL=[[1,0],[0,1],[-1,0],[0,-1]];
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+const finite=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k])&&Math.abs(p[k])<=30000000);
+const copy=p=>({x:p.x,y:p.y,z:p.z});
+
+class BedrockGameplayAgent {
+  constructor(options={}) {
+    this.clock=options.clock??Date.now;
+    this.setInterval=options.setInterval??setInterval;
+    this.clearInterval=options.clearInterval??clearInterval;
+    this.interval=null;
+    this.active=false;
+    this.world=null;
+    this.goal='none';
+    this.phase='idle';
+    this.reason='not_enabled';
+    this.startedAt=null;
+    this.dimension=null;
+    this.attempted=0;
+    this.verified=0;
+    this.failures=0;
+    this.awaiting=null;
+    this.lastVerifiedAt=null;
+    this.lastPlan=null;
+    this.recentCells=new Map();
+    this.nextActionAt=0;
+  }
+  readiness(world) {
+    if(!world||world.closed||!world.spawned||!finite(world.position) ||
+       ![0,1,2].includes(world.dimension)||world.respawnRecovery?.state!=='alive')
+      return 'world_or_respawn_not_ready';
+    if(![1,2].includes(world.movementAuthority) ||
+       typeof world.serverTick!=='bigint')
+      return 'authoritative_movement_unavailable';
+    if(world.lastServerPositionAt==null ||
+       this.clock()-world.lastServerPositionAt<0 ||
+       this.clock()-world.lastServerPositionAt>POSITION_TTL_MS)
+      return 'server_position_stale';
+    if(!world.terrain?.snapshot?.().collisionClassificationReady ||
+       typeof world.terrain.tile!=='function' ||
+       typeof world.routePlanner!=='function')
+      return 'verified_terrain_unavailable';
+    if(world.movement?.capability?.(world)!=='experimental')
+      return 'experimental_movement_not_enabled';
+    if(world.blockBreaker?.snapshot?.()?.active)
+      return 'block_break_busy';
+    return null;
+  }
+  start(world,opts={}) {
+    if(this.active)return {status:'rejected',reason:'gameplay_agent_already_active'};
+    if(opts.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
+    if(!GOALS.has(opts.goal))return {status:'rejected',reason:'unsupported_goal'};
+    if(world?.autonomy?.snapshot?.()?.active)return {status:'rejected',reason:'follow_autonomy_busy'};
+    const blocker=this.readiness(world);
+    if(blocker)return {status:'rejected',reason:blocker};
+    if(!world.lifeSenses||!world.intelligence)
+      return {status:'rejected',reason:'perception_or_intelligence_unavailable'};
+    let select;
+    if(opts.goal==='follow') {
+      if(opts.playerName) {
+        select=world.layerTwo?.follow(opts.playerName,world.gameplayWorld());
+        if(select?.status!=='accepted')
+          return select??{status:'rejected',reason:'follow_plan_unavailable'};
+      }
+      const preview=world.layerTwo?.preview(world.gameplayWorld());
+      if(preview?.goal!=='follow')return {status:'rejected',reason:'select_follow_player_first'};
+    } else if(opts.goal==='return_home') {
+      select=world.layerTwo?.returnHome(world.gameplayWorld());
+      if(select?.status!=='accepted')
+        return select??{status:'rejected',reason:'home_not_marked'};
+    } else if(opts.goal==='gather') {
+      const preview=world.layerThree?.preview(world.gameplayWorld());
+      if(!preview||preview.status==='idle'||!preview.itemName)
+        return {status:'rejected',reason:'select_observed_item_goal_first'};
+    }
+    this.world=world;
+    this.active=true;
+    this.goal=opts.goal;
+    this.phase='observing';
+    this.reason='goal_accepted_awaiting_verified_terrain';
+    this.startedAt=this.clock();
+    this.dimension=world.dimension;
+    this.attempted=0;this.verified=0;this.failures=0;
+    this.awaiting=null;this.lastVerifiedAt=null;this.lastPlan=null;
+    this.nextActionAt=0;this.recentCells.clear();
+    world.intelligence.setGoal(opts.goal);
+    this.interval=this.setInterval(()=>this.pulse(),INTERVAL_MS);
+    return {status:'accepted',reason:'gameplay_agent_enabled_not_yet_moving'};
+  }
+  stop(reason='user_stopped') {
+    if(this.interval!==null)this.clearInterval(this.interval);
+    this.interval=null;
+    const world=this.world;
+    const wasActive=this.active;
+    this.active=false;this.world=null;this.awaiting=null;
+    this.phase='idle';this.reason=reason;this.nextActionAt=0;
+    if(wasActive&&world?.movement?.snapshot?.()?.active)
+      world.movement.stop('gameplay_agent_stopped');
+    if(wasActive&&world?.intelligence)world.intelligence.setGoal('standby');
+    return {status:'ok',reason};
+  }
+  pause(reason) {
+    this.phase='paused';
+    this.reason=reason;
+    this.lastPlan=null;
+  }
+  noteFailure(reason) {
+    this.failures++;
+    this.world?.intelligence?.noteOutcome('failed');
+    this.reason=reason;
+    this.awaiting=null;
+    this.nextActionAt=this.clock()+1000;
+    if(this.failures>=MAX_FAILURES){this.stop(reason);return;}
+    this.phase='recovering';
+  }
+  recordCell(position) {
+    const key=[Math.floor(position.x),Math.floor(position.z)].join(',');
+    this.recentCells.set(key,(this.recentCells.get(key)??0)+1);
+    if(this.recentCells.size>96)
+      this.recentCells.delete(this.recentCells.keys().next().value);
+  }
+  localTarget(world,threat=null) {
+    const position=world.position,dim=world.dimension;
+    // The y convention matches the existing local A* implementation.
+    const y=Math.floor(position.y-1.62+0.01);
+    const px=Math.floor(position.x),pz=Math.floor(position.z);
+    const targets=[];
+    for(let radius=1;radius<=3;radius++) {
+      for(const [dx,dz] of CARDINAL) {
+        const x=px+dx*radius,z=pz+dz*radius;
+        if(!tileIsSafe(world.terrain,dim,x,y,z))continue;
+        const target={x:x+0.5,y:position.y,z:z+0.5};
+        const plan=world.routePlanner(world.terrain,dim,position,target,{
+          radius:Math.max(3,radius+1)
+        });
+        if(plan?.status!=='route_found'||!finite(plan.waypoint)||
+           plan.path?.length<2)continue;
+        if(threat){
+          const distNow=Math.hypot(position.x-threat.position.x,
+            position.z-threat.position.z);
+          const distAfter=Math.hypot(target.x-threat.position.x,
+            target.z-threat.position.z);
+          if(distAfter-distNow<0.7)continue;
+          targets.push({target,plan,score:distAfter*10-radius});
+        }else{
+          const visits=this.recentCells.get([x,z].join(','))??0;
+          targets.push({target,plan,score:radius*3-visits*25});
+        }
+      }
+    }
+    targets.sort((a,b)=>b.score-a.score);
+    return targets[0]?.plan?.waypoint??null;
+  }
+  targetFromGoal(world) {
+    const state=world.gameplayWorld();
+    if(this.goal==='explore') {
+      const waypoint=this.localTarget(world);
+      return waypoint?{status:'ready',waypoint,reason:'known_walkable_exploration'}:
+        {status:'paused',reason:'no_safe_exploration_route'};
+    }
+    if(this.goal==='follow'||this.goal==='return_home') {
+      const plan=world.layerTwo?.preview(state);
+      if(!plan || plan.goal!==(this.goal==='follow'?'follow':'return'))
+        return {status:'paused',reason:'navigation_goal_unavailable'};
+      if(plan.status==='at_target')
+        return {status:'complete',reason:'target_reached'};
+      if(plan.status!=='route_unverified'||!finite(plan.nextPoint))
+        return {status:'paused',reason:plan.reason??'target_not_visible'};
+      const path=world.routePlanner(world.terrain,world.dimension,world.position,plan.nextPoint);
+      return path?.status==='route_found'&&finite(path.waypoint)?
+        {status:'ready',waypoint:path.waypoint,reason:'verified_follow_or_return_route'}:
+        {status:'paused',reason:path?.reason??'path_not_verified'};
+    }
+    if(this.goal==='gather') {
+      const drop=world.layerThree?.preview(state);
+      if(drop?.status==='observed_inventory_increase')
+        return {status:'complete',reason:'server_confirmed_item_pickup'};
+      if(drop?.status==='within_range')
+        return {status:'paused',reason:'awaiting_server_item_pickup'};
+      if(drop?.status!=='route_unverified'||!finite(drop.nextPoint))
+        return {status:'paused',reason:drop?.reason??'item_drop_unavailable'};
+      const path=world.routePlanner(world.terrain,world.dimension,world.position,drop.nextPoint);
+      return path?.status==='route_found'&&finite(path.waypoint)?
+        {status:'ready',waypoint:path.waypoint,reason:'observed_drop_route_verified'}:
+        {status:'paused',reason:path?.reason??'drop_route_not_verified'};
+    }
+    return {status:'paused',reason:'unsupported_goal'};
+  }
+  pulse() {
+    if(!this.active)return;
+    const world=this.world,now=this.clock();
+    if(now-this.startedAt>MAX_RUN_MS||this.attempted>=MAX_STEPS) {
+      this.stop('gameplay_run_budget_exhausted');return;
+    }
+    if(!world||world.dimension!==this.dimension) {
+      this.stop('dimension_or_session_changed');return;
+    }
+    const blocker=this.readiness(world);
+    if(blocker) {
+      this.stop(blocker);return;
+    }
+    if(world.autonomy?.snapshot?.()?.active) {
+      this.stop('follow_autonomy_started');return;
+    }
+    const life=world.lifeSenses.snapshot({
+      position:world.position,dimension:world.dimension,spawned:world.spawned,
+      closed:world.closed,respawnState:world.respawnRecovery.state,
+      terrain:world.terrain
+    });
+    // The brain's priority calculations are advisory. This agent only acts
+    // on values observed from the same authenticated server connection.
+    world.intelligenceTick?.();
+    if(life.state==='dead'||life.health===0) {
+      this.stop('player_died');return;
+    }
+    if(life.health===null||life.health===undefined) {
+      this.pause('health_not_observed');return;
+    }
+    const enemy=life.nearbyEntities?.find(e=>e.hostile===true &&
+      Number.isFinite(e.distance)&&e.distance<=8 &&
+      finite(e.position));
+    const critical=life.health<=6 || (life.air!==null&&life.air<=4);
+    const hunger=life.hunger!==null&&life.hunger<=6;
+    const movement=world.movement;
+    if(this.awaiting) {
+      const a=this.awaiting;
+      if(movement.snapshot?.()?.active) {
+        if(now-a.startedAt>ACK_MS+1800) {
+          movement.stop?.('server_progress_timeout');
+          this.noteFailure('server_movement_not_confirmed');
+        }
+        return;
+      }
+      const updated=world.lastServerPositionAt!=null &&
+        world.lastServerPositionAt>a.observedAt;
+      const moved=distance(world.position,a.from)>=MIN_PROGRESS;
+      const toward=distance(a.from,a.target)-
+        distance(world.position,a.target)>=0.05;
+      if(updated&&moved&&toward&&world.corrections<=a.corrections) {
+        this.verified++;
+        this.failures=0;
+        world.intelligence.noteOutcome('verified');
+        this.recordCell(world.position);
+        this.awaiting=null;
+        this.phase='verified';
+        this.reason='server_confirmed_waypoint_progress';
+        this.lastVerifiedAt=now;
+        this.nextActionAt=now+400;
+      } else if(world.corrections>a.corrections) {
+        this.noteFailure('server_correction_not_verified_progress');
+      } else if(now-a.startedAt>ACK_MS) {
+        this.noteFailure('server_movement_not_confirmed');
+      } else {
+        this.phase='awaiting_server_confirmation';
+        this.reason='movement_sent_not_yet_verified';
+      }
+      return;
+    }
+    if(movement.snapshot?.()?.active) {
+      this.pause('other_movement_active');return;
+    }
+    if(now<this.nextActionAt)return;
+    let target=null,planReason='';
+    if(enemy) {
+      target=this.localTarget(world,enemy);
+      if(!target) {this.pause('no_verified_retreat_from_hostile');return;}
+      planReason='verified_retreat_from_hostile';
+    }else if(critical) {
+      // Standing still while critically injured is safer than selecting an
+      // arbitrary direction. Only move on *observed* retreat routes.
+      this.pause('critical_vitals_wait_for_safe_recovery');return;
+    }else if(hunger) {
+      world.layerFour?.planFood?.();
+      this.pause('low_hunger_requires_verified_food_interaction');return;
+    }else{
+      const goal=this.targetFromGoal(world);
+      if(goal.status==='complete') {
+        this.stop(goal.reason);return;
+      }
+      if(goal.status!=='ready') {
+        this.pause(goal.reason);return;
+      }
+      target=goal.waypoint;planReason=goal.reason;
+    }
+    if(!finite(target)) {this.pause('no_verified_next_waypoint');return;}
+    // A final path check immediately before sending input: no stale terrain,
+    // large drops, jumping or speculative collision assumptions.
+    const path=world.routePlanner(world.terrain,world.dimension,world.position,target,{radius:3});
+    if(path?.status!=='route_found'||!finite(path.waypoint)||
+       path.path?.length<2) {
+      this.pause('waypoint_no_longer_verified');return;
+    }
+    const from=copy(world.position);
+    const result=movement.runVerifiedStep?.(world,path.waypoint,8);
+    if(result?.status!=='accepted') {
+      this.noteFailure(result?.reason??'movement_input_rejected');return;
+    }
+    this.attempted++;
+    this.phase='moving';
+    this.reason=planReason+'_awaiting_server';
+    this.lastPlan={target:copy(path.waypoint),kind:enemy?'retreat':this.goal};
+    this.awaiting={from,target:copy(path.waypoint),observedAt:world.lastServerPositionAt,
+      corrections:world.corrections??0,startedAt:now};
+  }
+  snapshot() {
+    return {active:this.active,goal:this.goal,phase:this.phase,reason:this.reason,
+      attemptedSteps:this.attempted,serverVerifiedSteps:this.verified,
+      failures:this.failures,maxSteps:MAX_STEPS,runBudgetMs:MAX_RUN_MS,
+      target:this.awaiting?{...this.awaiting.target}:null,
+      lastPlan:this.lastPlan?{target:{...this.lastPlan.target},kind:this.lastPlan.kind}:null,
+      execution:this.active?'experimental_verified_movement':'inactive',
+      autonomousCombat:false,autonomousMining:false,autonomousEating:false,
+      serverVerified:this.verified>0};
+  }
+}
+module.exports={BedrockGameplayAgent};
