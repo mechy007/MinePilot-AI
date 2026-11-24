@@ -90,11 +90,14 @@ function odysseyCapabilityStates(world, manifest) {
       manifest?.worldReady ? 'authenticated_bedrock_world' : 'world_not_ready'),
     spatial_observation: state(manifest?.worldReady && terrain.decodedSections > 0 && terrain.collisionClassificationReady === true ? 'ready' : 'blocked',
       manifest?.worldReady && terrain.decodedSections > 0 && terrain.collisionClassificationReady === true ? 'decoded_bedrock_terrain' : 'decoded_terrain_unavailable'),
-    inventory_read: state(inventory?.known === true && inventory?.fresh === true ? 'ready'
-      : inventory?.known === true ? 'partial' : 'blocked',
+    inventory_read: state(inventory?.known !== true ? 'blocked'
+      : inventory.fresh === true && inventory.registryKnown === true &&
+          inventory.unresolvedItemCount === 0 ? 'ready' : 'partial',
       inventory?.known !== true ? 'inventory_not_known'
-        : inventory.fresh === true ? 'fresh_server_authoritative_inventory_snapshot'
-          : 'inventory_snapshot_stale'),
+        : inventory.fresh !== true ? 'inventory_snapshot_stale'
+          : inventory.registryKnown !== true ? 'item_registry_not_observed'
+            : inventory.unresolvedItemCount > 0 ? 'inventory_contains_unresolved_item_ids'
+              : 'fresh_server_authoritative_inventory_snapshot'),
     navigation: state(manifest?.localNavigationReady ? 'experimental' : 'blocked',
       manifest?.localNavigationReady ? 'bounded_server_verified_navigation' : 'verified_navigation_unavailable'),
     mine: state(existing('mine').state ?? 'blocked',
