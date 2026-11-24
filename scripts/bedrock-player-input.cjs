@@ -48,8 +48,10 @@ function buildInputPacket(position, yaw, tick, moving, options = {}) {
     analogue_move_vector: { x: 0, z: forward },
     // Protocol 2225 requires a world-space unit forward vector, not an
     // all-zero placeholder that cannot represent any look direction.
-    camera_orientation: { x: -Math.sin(angle)*Math.cos(vertical),
-      y: -Math.sin(vertical), z: Math.cos(angle)*Math.cos(vertical) },
+    camera_orientation: { x: Math.sin(angle)===0?0:
+      -Math.sin(angle)*Math.cos(vertical),
+      y: Math.sin(vertical)===0?0:-Math.sin(vertical),
+      z: Math.cos(angle)*Math.cos(vertical) },
     raw_move_vector: { x: 0, z: forward }
   };
 }
@@ -72,7 +74,6 @@ class ExperimentalPlayerInput {
     this.clock = options.clock ?? Date.now;
     this.tickClock = new AuthInputTickClock({clock:this.clock});
     this.timer = null;
-    this.tickClock.reset();
     this.lastTick = null;
     this.predicted = null;
     this.remaining = 0;
@@ -358,6 +359,7 @@ class ExperimentalPlayerInput {
   resetSession() {
     this.stopPresence('world_reset');
     this.stop('session_reset', { silent: true });
+    this.tickClock.reset();
     this.lastTick = null;
     this.predicted = null;
     this.initialPosition = null;
