@@ -9,6 +9,7 @@ const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = requir
 const { randomUUID } = require('node:crypto');
 const { executeBedrockObservation } = require('./bedrock-odyssey-observation-executor.cjs');
 const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.cjs');
+const { BedrockInventoryLedger } = require('./bedrock-inventory-ledger.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
 
@@ -97,6 +98,7 @@ class BedrockGameplayBridge {
     this.worldGameMode = 'unknown';
     this.difficulty = null;
     this.itemStackNetManager = null;
+    this.inventoryLedger = options.inventoryLedger ?? new BedrockInventoryLedger({ clock: this.clock });
     this.stackRequests = new BedrockStackRequestManager(this.client, {
       isEnabled: () => this.itemStackNetManager === true, timeoutMs: 5000
     });
@@ -131,8 +133,12 @@ class BedrockGameplayBridge {
     this.bind('subchunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
-    this.bind('inventory_slot', p => this.layerThree?.observeInventorySlot(p));
+    this.bind('inventory_slot', p => {
+      this.inventoryLedger?.observeSlot(p);
+      this.layerThree?.observeInventorySlot(p);
+    });
     this.bind('inventory_content', p => {
+      this.inventoryLedger?.observeContent(p);
       this.layerOne?.onInventory(p);
       this.layerThree?.observeInventory(p);
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
@@ -140,6 +146,7 @@ class BedrockGameplayBridge {
       this.layerSix?.observeContainer(p);
     });
     this.bind('item_registry', p => {
+      this.inventoryLedger?.observeItemRegistry(p);
       this.layerThree?.observeItemRegistry(p);
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
@@ -187,6 +194,7 @@ class BedrockGameplayBridge {
     this.dimension = validDimension(packet.dimension);
     this.itemStackNetManager = typeof packet.enable_item_stack_net_manager === 'boolean'
       ? packet.enable_item_stack_net_manager : null;
+    this.inventoryLedger?.reset();
     this.selectedHotbarSlot = null;
     this.pendingHotbarSelection = null;
     this.lastHotbarSelection = null;
@@ -764,6 +772,9 @@ class BedrockGameplayBridge {
       difficulty: this.difficulty,
       itemStackNetManager: this.itemStackNetManager,
       stackRequests: this.stackRequests.snapshot(),
+      inventory: this.inventoryLedger?.snapshot() ?? { version: 'minepilot.bedrock-inventory.v1',
+        revision: 0, generation: 0, windows: [], player: { known: false, fresh: false,
+          reason: 'inventory_ledger_unavailable', observedAt: null, slotCount: 0, occupied: 0, items: [] } },
       hotbarSelection: this.hotbarSelectionSnapshot(),
       inventoryTransactionMode: this.itemStackNetManager === true ? 'server_authoritative'
         : this.itemStackNetManager === false ? 'legacy' : 'unknown',
