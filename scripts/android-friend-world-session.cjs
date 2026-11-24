@@ -16,6 +16,7 @@ const { planLocalRoute } = require('./bedrock-local-path.cjs');
 const { VerifiedAutonomyRunner } = require('./bedrock-autonomy-runner.cjs');
 const { BedrockBlockBreakExecutor } = require('./bedrock-block-break.cjs');
 const { BedrockLifeSenses } = require('./bedrock-life-senses.cjs');
+const { MinePilotIntelligence } = require('./bedrock-intelligence-core.cjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -109,7 +110,8 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     registryResolver: createVanillaRuntimeRegistry,
     routePlanner: planLocalRoute,
     autonomy: new VerifiedAutonomyRunner(),
-    lifeSenses: new BedrockLifeSenses()
+    lifeSenses: new BedrockLifeSenses(),
+    intelligence: new MinePilotIntelligence()
   }).start() : null;
   let startGame = false;
   let spawn = false;

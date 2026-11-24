@@ -38,6 +38,7 @@ public final class DashboardActivity extends Activity {
     private TextView gameplayStatus;
     private LifeAnalyticsView lifeAnalytics;
     private FirstPersonVoxelView firstPersonView;
+    private TextView brainStatus;
     private Button probeStep;
     private Button verifiedStep;
     private Button autoFollow;
@@ -516,6 +517,13 @@ public final class DashboardActivity extends Activity {
                 11, MUTED, false));
         body.addView(povCard, panelLayout(10));
 
+        LinearLayout intelligencePanel = card();
+        intelligencePanel.addView(text("AI BRAIN  ·  LIVE DECISIONS", 11, GRASS, true));
+        brainStatus = text("Waiting for the bot's first world observations", 13, MUTED, false);
+        brainStatus.setPadding(0, dp(9), 0, dp(4));
+        intelligencePanel.addView(brainStatus);
+        body.addView(intelligencePanel, panelLayout(10));
+
         LinearLayout gameplay = card();
         gameplay.addView(text("GAMEPLAY TELEMETRY", 11, GRASS, true));
         gameplayStatus = text("Waiting for a server-reported position", 13, MUTED, false);
@@ -711,6 +719,23 @@ public final class DashboardActivity extends Activity {
         worldHunger.setText(current.getString("hunger", "—"));
         if (lifeAnalytics != null) lifeAnalytics.update(current);
         if (firstPersonView != null) firstPersonView.update(current);
+        if (brainStatus != null) {
+            if (!playing || !current.getBoolean("brain_available", false)) {
+                brainStatus.setText("Awaiting authenticated world telemetry");
+            } else {
+                String priority = current.getString("brain_action", "observe").replace('_', ' ');
+                String reason = current.getString("brain_reason", "awaiting_observation").replace('_', ' ');
+                brainStatus.setText("Current decision: " + priority
+                    + "\nWhy: " + reason
+                    + " · Urgency: " + current.getInt("brain_priority") + "/100"
+                    + "\nSelected goal: " + current.getString("brain_goal", "standby").replace('_', ' ')
+                    + "\nVisited areas remembered: " + current.getInt("brain_memory_cells")
+                    + " · Decisions: " + current.getInt("brain_decisions")
+                    + "\nWorld state fresh: " + (current.getBoolean("brain_world_verified", false) ? "yes" : "no")
+                    + " · Verified movement steps: " + current.getInt("brain_verified_steps")
+                    + "\nMode: suggestions + emergency movement stop; no automatic combat or mining");
+            }
+        }
         String coordinates = current.getString("position", "");
         String movement = current.getString("movement", "unavailable");
         String effectiveMode = current.getString("effective_gamemode", "unknown");
