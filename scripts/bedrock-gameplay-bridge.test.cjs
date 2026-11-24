@@ -6,7 +6,7 @@ const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { test } = require('node:test');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
-const { learningEngineFor } = require('./bedrock-skill-manifest.cjs');
+const { learningEngineFor, odysseyCapabilityStates } = require('./bedrock-skill-manifest.cjs');
 const { ExperimentalPlayerInput, buildInputPacket } = require('./bedrock-player-input.cjs');
 
 class Client extends EventEmitter {
@@ -1199,4 +1199,14 @@ test('tool equip fails closed without fresh hotbar inventory or a matching tool'
   assert.equal(call('equipPickaxe').reason, 'matching_tool_not_in_hotbar');
   assert.equal(client.sent.length, 0);
   bridge.stop();
+});
+
+
+test('hotbar capability is experimental only while a complete server inventory snapshot is fresh', () => {
+  const stale = { clock: () => 12000,
+    layerThree: { hotbarItems: () => ({ known: true, observedAt: 1000, slots: [] }) } };
+  const fresh = { clock: () => 12000,
+    layerThree: { hotbarItems: () => ({ known: true, observedAt: 3000, slots: [] }) } };
+  assert.equal(odysseyCapabilityStates(stale, {}).hotbar_selection.state, 'blocked');
+  assert.equal(odysseyCapabilityStates(fresh, {}).hotbar_selection.state, 'experimental');
 });
