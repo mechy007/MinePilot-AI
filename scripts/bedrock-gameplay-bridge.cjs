@@ -7,6 +7,7 @@
  */
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
+const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
@@ -589,6 +590,7 @@ class BedrockGameplayBridge {
       ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
       ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
+      firstPerson: buildFirstPersonScene(this),
       ...(this.lifeSenses ? { life: this.lifeSenses.snapshot({
         position:this.position,dimension:this.dimension,spawned:this.spawned,
         closed:this.closed,respawnState:this.respawnRecovery.state,
