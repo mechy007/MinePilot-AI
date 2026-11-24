@@ -86,12 +86,19 @@ test('Bedrock session bridge presents real intelligence status and stops active 
     attributes:[{name:'minecraft:health',current:20}]});
   client.emit('add_actor',{runtime_entity_id:100n,
     entity_type:'minecraft:creeper',position:{x:3,y:65,z:1}});
+  // Status reads are pure. The explicit control tick owns decisions and stops.
   let snap=bridge.snapshot();
+  assert.equal(snap.intelligence.action,'observe');
+  assert.deepEqual(stopped,[]);
+  bridge.tickControlPlane();
+  snap=bridge.snapshot();
   assert.equal(snap.intelligence.action,'avoid_threat');
   assert.deepEqual(stopped,['autonomy:intelligence_safety_stop','intelligence_safety_stop']);
   assert.deepEqual(commands,[],'intelligence never performs unsolicited network input');
   bridge.snapshot();
-  assert.equal(stopped.length,2,'no repeated stop on unchanged threat');
+  assert.equal(stopped.length,2,'status refresh does not repeat a control action');
+  bridge.tickControlPlane();
+  assert.equal(stopped.length,2,'unchanged threat does not trigger a repeated emergency stop');
   bridge.stop();
 });
 
