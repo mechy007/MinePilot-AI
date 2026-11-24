@@ -218,6 +218,7 @@ class BedrockInventoryLedger {
     return {
       known: true, fresh, registryKnown: this.registry.size > 0, unresolvedItemCount,
       reason: fresh ? 'server_inventory_snapshot' : 'player_inventory_snapshot_stale',
+      windowId: window.windowId, container: { ...window.container },
       observedAt: window.fullObservedAt, ageMs: age, slotCount: window.slotCount,
       occupied: occupied.length, items, revision: window.revision, generation: window.generation
     };
@@ -239,7 +240,61 @@ class BedrockInventoryLedger {
   }
 }
 
+
+function planPlayerInventorySwap(ledger, sourceSlot, destinationSlot, options = {}) {
+  if (!ledger || typeof ledger.playerInventory !== 'function' || typeof ledger.getSlot !== 'function')
+    return { status: 'blocked', reason: 'inventory_ledger_unavailable', executable: false };
+  if (!Number.isInteger(sourceSlot) || !Number.isInteger(destinationSlot) ||
+      sourceSlot < 0 || sourceSlot > 35 || destinationSlot < 0 || destinationSlot > 35)
+    return { status: 'rejected', reason: 'invalid_player_inventory_slot', executable: false };
+  if (sourceSlot === destinationSlot)
+    return { status: 'rejected', reason: 'source_and_destination_are_same_slot', executable: false };
+  const inventory = ledger.playerInventory({ maxAgeMs: options.maxAgeMs });
+  if (inventory.known !== true || inventory.fresh !== true)
+    return { status: 'blocked', reason: inventory.reason ?? 'fresh_player_inventory_required', executable: false };
+  if (inventory.registryKnown !== true || inventory.unresolvedItemCount > 0)
+    return { status: 'blocked', reason: 'resolved_item_registry_required', executable: false };
+  if (inventory.container?.container_id !== 'hotbar_and_inventory' || inventory.slotCount !== 36)
+    return { status: 'blocked', reason: 'canonical_36_slot_player_inventory_required', executable: false };
+  const address = slot => ledger.getSlot({
+    window_id: inventory.windowId, container: inventory.container, slot
+  }, { maxAgeMs: options.maxAgeMs });
+  const source = address(sourceSlot);
+  const destination = address(destinationSlot);
+  if (!source.known || !destination.known || !source.fresh || !destination.fresh ||
+      !source.fullSnapshotFresh || !destination.fullSnapshotFresh)
+    return { status: 'blocked', reason: 'fresh_source_and_destination_slots_required', executable: false };
+  if (source.item.empty || destination.item.empty)
+    return { status: 'blocked', reason: 'swap_requires_two_occupied_slots', executable: false };
+  if (source.item.hasStackId !== true || destination.item.hasStackId !== true ||
+      !Number.isInteger(source.item.stackId) || !Number.isInteger(destination.item.stackId))
+    return { status: 'blocked', reason: 'server_stack_ids_required', executable: false };
+  if (source.item.networkId === destination.item.networkId &&
+      source.item.count === destination.item.count &&
+      source.item.metadata === destination.item.metadata &&
+      source.item.blockRuntimeId === destination.item.blockRuntimeId)
+    return { status: 'rejected', reason: 'swap_has_no_observable_inventory_change', executable: false };
+  const slotType = { ...inventory.container };
+  return {
+    status: 'ready', reason: 'fresh_server_observed_swap_plan',
+    executable: false, execution: 'awaiting_transaction_executor',
+    action: {
+      type_id: 'swap',
+      source: { slot_type: slotType, slot: sourceSlot, stack_id: source.item.stackId },
+      destination: { slot_type: { ...slotType }, slot: destinationSlot, stack_id: destination.item.stackId }
+    },
+    expected: {
+      source: { networkId: destination.item.networkId, count: destination.item.count,
+        metadata: destination.item.metadata, blockRuntimeId: destination.item.blockRuntimeId },
+      destination: { networkId: source.item.networkId, count: source.item.count,
+        metadata: source.item.metadata, blockRuntimeId: source.item.blockRuntimeId }
+    },
+    inventoryRevision: inventory.revision,
+    generation: inventory.generation
+  };
+}
+
 module.exports = {
   BedrockInventoryLedger, normalizeWindowId, normalizeContainer, normalizeItem,
-  MAX_WINDOWS, MAX_SLOTS, MAX_AGE_MS
+  planPlayerInventorySwap, MAX_WINDOWS, MAX_SLOTS, MAX_AGE_MS
 };
