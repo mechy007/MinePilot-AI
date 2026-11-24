@@ -49,6 +49,8 @@ public final class DashboardActivity extends Activity {
     private TextView learningState;
     private Button learningStart;
     private Button learningStop;
+    private Button learningAutopilot;
+    private boolean learningAutopilotEnabled;
     private String learningNextTaskId = "";
     private Button experimentalBreak;
     private Button stopMovement;
@@ -547,6 +549,9 @@ public final class DashboardActivity extends Activity {
                 () -> requestGameplay("learning_stop", false));
         learningStop.setVisibility(View.GONE);
         body.addView(learningStop, panelLayout(8));
+        learningAutopilot = actionButton("Enable local autopilot", true, this::toggleLocalAutopilot);
+        learningAutopilot.setVisibility(View.GONE);
+        body.addView(learningAutopilot, panelLayout(8));
 
         LinearLayout gameplay = card();
         gameplay.addView(text("GAMEPLAY TELEMETRY", 11, GRASS, true));
@@ -771,6 +776,7 @@ public final class DashboardActivity extends Activity {
         }
         learningNextTaskId = current.getString("learning_next_task_id", "");
         boolean learningActive = playing && current.getBoolean("learning_active", false);
+        learningAutopilotEnabled = playing && current.getBoolean("learning_autopilot_enabled", false);
         if (learningState != null) {
             if (!playing) {
                 learningState.setText("Connect to a Bedrock world to load reusable skills and curriculum.");
@@ -799,6 +805,11 @@ public final class DashboardActivity extends Activity {
                 playing && !learningActive && !learningNextTaskId.isEmpty() ? View.VISIBLE : View.GONE);
         if (learningStop != null) learningStop.setVisibility(
                 learningActive ? View.VISIBLE : View.GONE);
+        if (learningAutopilot != null) {
+            learningAutopilot.setVisibility(playing ? View.VISIBLE : View.GONE);
+            learningAutopilot.setText(learningAutopilotEnabled
+                    ? "Stop local autopilot" : "Enable local autopilot");
+        }
         if (brainStatus != null) {
             if (!playing || !current.getBoolean("brain_available", false)) {
                 brainStatus.setText("Awaiting authenticated world telemetry");
@@ -1284,6 +1295,20 @@ public final class DashboardActivity extends Activity {
 
     private void requestGameplay(String action, boolean confirmed, String playerName) {
         requestGameplay(action, confirmed, playerName, null, 0);
+    }
+
+    private void toggleLocalAutopilot() {
+        if (learningAutopilotEnabled) {
+            requestGameplay("learning_autopilot_stop", false);
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Enable local autopilot")
+                .setMessage("MinePilot will run its built-in Bedrock tasks in sequence using deterministic local rules. No external AI prompt, cloud model or Kaggle GPU is required. It will only use currently supported, verified tasks; unknown terrain, unsafe vitals, failed server confirmation and run limits stop actions. Mining, combat, crafting and building are not enabled by this switch. You can stop autopilot at any time.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Enable", (dialog, which) ->
+                        requestGameplay("learning_autopilot_start", true))
+                .show();
     }
 
     private void confirmLearningStart() {
