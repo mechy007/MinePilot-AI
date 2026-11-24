@@ -70,7 +70,7 @@ export class LayerThreePlanner {
   private readonly drops = new Map<string, Drop>();
   private readonly blockUpdates = new Map<string, BlockUpdate>();
   private readonly inventory = new Map<number, number>();
-  private readonly hotbar = new Map<number, number>();
+  private readonly hotbar = new Map<number, { networkId: number; count: number }>();
   private hotbarKnown = false;
   private hotbarSeenAt: number | null = null;
   private inventoryKnown = false;
@@ -203,7 +203,7 @@ export class LayerThreePlanner {
       const id = idNumber(item?.network_id);
       const count = item?.count;
       if (id != null && typeof count === 'number' && Number.isInteger(count) && count >= 1 && count <= 127)
-        hotbar.set(slot, id);
+        hotbar.set(slot, { networkId: id, count });
     }
     for (const item of p.input) {
       const id = idNumber(item?.network_id);
@@ -236,7 +236,7 @@ export class LayerThreePlanner {
     this.inventoryKnown = true;
     this.inventorySeenAt = this.now();
     this.hotbar.clear();
-    for (const [slot, id] of hotbar) this.hotbar.set(slot, id);
+    for (const [slot, id] of hotbar) this.hotbar.set(slot, { networkId: id, count: count as number });
     this.hotbarKnown = p.input.length >= 9;
     this.hotbarSeenAt = this.hotbarKnown ? this.now() : null;
     return true;
@@ -263,9 +263,9 @@ export class LayerThreePlanner {
     known: boolean; observedAt: number | null;
     slots: Array<{ slot: number; itemName: string; count: number; networkId: number }>;
   } {
-    const slots = Array.from(this.hotbar.entries()).flatMap(([slot, networkId]) => {
-      const itemName = this.registry.get(networkId);
-      return itemName ? [{ slot, itemName, count: 1, networkId }] : [];
+    const slots = Array.from(this.hotbar.entries()).flatMap(([slot, item]) => {
+      const itemName = this.registry.get(item.networkId);
+      return itemName ? [{ slot, itemName, count: item.count, networkId: item.networkId }] : [];
     }).sort((a, b) => a.slot - b.slot);
     return { known: this.inventoryKnown && this.hotbarKnown && this.registry.size > 0,
       observedAt: this.hotbarSeenAt, slots };
