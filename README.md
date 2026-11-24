@@ -223,6 +223,7 @@ For deeper diagnostics see [Android app test guide](docs/ANDROID-APP-STATUS.md) 
 - [Android ARM64 runtime packaging](docs/ANDROID-RUNTIME-PACKAGING.md)
 - [Desktop friend-world diagnostic](docs/friend-world-live-join.md)
 - [Gameplay planning integration](docs/CRAFTMIND_GAMEPLAY_INTEGRATION.md)
+- [Voyager + ODYSSEY Bedrock-native learning integration](docs/VOYAGER_ODYSSEY_INTEGRATION.md)
 
 ## Contributions and issue reports
 
