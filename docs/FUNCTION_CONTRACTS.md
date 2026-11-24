@@ -71,6 +71,7 @@ This catalog assigns purpose and side-effect rules to the public functions in th
 | `getSlot(address, options)` | Read one exact window/container/slot and return slot/full-snapshot freshness. | Pure read; no default stack ID is invented. |
 | `playerInventory(options)` | Return the canonical player inventory slots, names, counts and freshness. | Pure read; returns unknown/stale distinctly. |
 | `planPlayerInventorySwap(ledger, sourceSlot, destinationSlot, options)` | Build a reversible player-inventory swap plan from two fresh, occupied, server-identified slots. | Pure preflight only; returns `executable:false` until the asynchronous transaction executor and postcondition verifier are wired. |
+| `planPlayerInventoryMove(ledger, sourceSlot, destinationSlot, count, options)` | Build a player-inventory `take` plan from a fresh occupied source into a fresh known-empty destination whose server-observed stack ID is exactly zero. | Pure preflight only; never invents the empty-slot stack ID and returns `executable:false` until dispatch and postcondition verification are wired. |
 | `snapshot()` | Return compact bounded window metadata and the player inventory projection. | Does not expose item NBT or unbounded raw packet data. |
 
 ### `scripts/bedrock-stack-request-manager.cjs`
