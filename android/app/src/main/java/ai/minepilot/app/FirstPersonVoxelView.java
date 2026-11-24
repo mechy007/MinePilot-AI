@@ -31,8 +31,8 @@ public final class FirstPersonVoxelView extends View {
     };
     // Face vertex indices (west, east, bottom, top, north, south)
     private static final int[][] FACES = {
-        {0,2,6,4}, {1,5,7,3}, {0,1,3,2},
-        {4,6,7,5}, {0,4,5,1}, {2,3,7,6}
+        {0,2,6,4}, {1,5,7,3}, {0,1,5,4},
+        {2,6,7,3}, {0,1,3,2}, {4,5,7,6}
     };
     private static final float[][] VERTICES = {
         {0,0,0},{1,0,0},{0,1,0},{1,1,0},
