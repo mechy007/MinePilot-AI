@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { BedrockInventoryLedger, normalizeContainer, normalizeItem } = require('./bedrock-inventory-ledger.cjs');
+const { BedrockInventoryLedger, normalizeContainer, normalizeItem, planPlayerInventorySwap } = require('./bedrock-inventory-ledger.cjs');
 
 const container = { container_id: 'hotbar_and_inventory' };
 const item = (network_id, count = 1, stack_id = 7) => ({
@@ -111,4 +111,71 @@ test('inventory windows remain bounded and session reset invalidates all old slo
   assert.equal(ledger.snapshot().generation, generation + 1);
   assert.equal(ledger.getSlot({ window_id: 1,
     container: { container_id: 'container', dynamic_container_id: 20 }, slot: 0 }).known, false);
+});
+
+
+test('player inventory swap planning requires fresh resolved server stacks and preserves exact stack IDs', () => {
+  const ledger = new BedrockInventoryLedger({ clock: () => 1000 });
+  ledger.observeItemRegistry({ itemstates: [
+    { runtime_id: 5, name: 'minecraft:oak_log' },
+    { runtime_id: 8, name: 'minecraft:iron_pickaxe' }
+  ] });
+  const slots = Array.from({ length: 36 }, () => item(0, 0));
+  slots[0] = item(5, 12, 41);
+  slots[9] = item(8, 1, 77);
+  ledger.observeContent(full(slots));
+  const plan = planPlayerInventorySwap(ledger, 0, 9);
+  assert.equal(plan.status, 'ready');
+  assert.equal(plan.executable, false,
+    'a plan is not permission to dispatch before the transaction executor exists');
+  assert.equal(plan.action.type_id, 'swap');
+  assert.deepEqual(plan.action.source, {
+    slot_type: { container_id: 'hotbar_and_inventory' }, slot: 0, stack_id: 41
+  });
+  assert.deepEqual(plan.action.destination, {
+    slot_type: { container_id: 'hotbar_and_inventory' }, slot: 9, stack_id: 77
+  });
+  assert.deepEqual(plan.expected.source, {
+    networkId: 8, count: 1, metadata: 0, blockRuntimeId: 0
+  });
+  assert.deepEqual(plan.expected.destination, {
+    networkId: 5, count: 12, metadata: 0, blockRuntimeId: 0
+  });
+});
+
+test('player inventory swap planning blocks stale, empty, unresolved and no-op slots', () => {
+  let now = 1000;
+  const ledger = new BedrockInventoryLedger({ clock: () => now });
+  ledger.observeItemRegistry({ itemstates: [
+    { runtime_id: 5, name: 'minecraft:oak_log' },
+    { runtime_id: 8, name: 'minecraft:iron_pickaxe' }
+  ] });
+  const slots = Array.from({ length: 36 }, () => item(0, 0));
+  slots[0] = item(5, 12, 41);
+  slots[9] = item(8, 1, 77);
+  ledger.observeContent(full(slots));
+  assert.equal(planPlayerInventorySwap(ledger, 0, 0).reason,
+    'source_and_destination_are_same_slot');
+  assert.equal(planPlayerInventorySwap(ledger, 0, 1).reason,
+    'swap_requires_two_occupied_slots');
+  now = 20000;
+  assert.equal(planPlayerInventorySwap(ledger, 0, 9).reason,
+    'player_inventory_snapshot_stale');
+
+  const unresolved = new BedrockInventoryLedger({ clock: () => 1000 });
+  const unresolvedSlots = Array.from({ length: 36 }, () => item(0, 0));
+  unresolvedSlots[0] = item(5, 1, 10);
+  unresolvedSlots[1] = item(8, 1, 11);
+  unresolved.observeContent(full(unresolvedSlots));
+  assert.equal(planPlayerInventorySwap(unresolved, 0, 1).reason,
+    'resolved_item_registry_required');
+
+  const same = new BedrockInventoryLedger({ clock: () => 1000 });
+  same.observeItemRegistry({ itemstates: [{ runtime_id: 5, name: 'minecraft:oak_log' }] });
+  const sameSlots = Array.from({ length: 36 }, () => item(0, 0));
+  sameSlots[0] = item(5, 2, 10);
+  sameSlots[1] = item(5, 2, 11);
+  same.observeContent(full(sameSlots));
+  assert.equal(planPlayerInventorySwap(same, 0, 1).reason,
+    'swap_has_no_observable_inventory_change');
 });
