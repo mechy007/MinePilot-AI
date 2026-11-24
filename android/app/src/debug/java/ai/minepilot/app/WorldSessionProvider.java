@@ -189,6 +189,22 @@ public final class WorldSessionProvider extends ContentProvider {
                             String autopilotReason = localAutopilot.optString("reason", "disabled");
                             if (autopilotReason.matches("[a-z_]{1,64}")) result.putString("learning_autopilot_reason", autopilotReason);
                         }
+                        JSONObject curriculum = learning.optJSONObject("curriculumReadiness");
+                        if (curriculum != null) {
+                            result.putInt("learning_remaining_tasks", Math.max(0, Math.min(5,
+                                    curriculum.optInt("remainingTaskCount", 0))));
+                            result.putInt("learning_blocked_tasks", Math.max(0, Math.min(5,
+                                    curriculum.optInt("blockedTaskCount", 0))));
+                            JSONObject blocker = curriculum.optJSONObject("firstBlocker");
+                            if (blocker != null) {
+                                String blockerId = blocker.optString("id", "");
+                                String blockerReason = blocker.optString("reason", "");
+                                if (blockerId.matches("[a-z][a-z0-9_]{2,47}"))
+                                    result.putString("learning_first_blocked_task", blockerId);
+                                if (blockerReason.matches("[a-z_]{1,72}"))
+                                    result.putString("learning_first_blocker", blockerReason);
+                            }
+                        }
                         JSONObject next = learning.optJSONObject("nextCurriculumTask");
                         if (next != null) {
                             String taskId = next.optString("id", "");
