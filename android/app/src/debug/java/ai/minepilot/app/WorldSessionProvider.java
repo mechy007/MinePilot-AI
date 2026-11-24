@@ -552,6 +552,15 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
                             + ": " + command.optString("reason", ""));
+                    String primitive = command.optString("primitive", "");
+                    if (primitive.matches("getLogsCount|getPlanksCount|checkBlockAbove|checkBlocksAround|findSuitablePosition")) {
+                        result.putString("last_command_primitive", primitive);
+                        Object observed = command.opt("result");
+                        String observedText = observed == null ? "" : observed.toString();
+                        if (observedText.length() > 2048) observedText = observedText.substring(0, 2048);
+                        result.putString("last_command_result", observedText);
+                        result.putBoolean("last_command_read_only", command.optBoolean("readOnly", false));
+                    }
                 }
             }
         } else if ("failed".equals(phase) || "stopped".equals(phase) || "disconnected".equals(phase)) {
@@ -579,13 +588,14 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
                 !"experimental_break".equals(action) && !"learning_start".equals(action) &&
                 !"learning_stop".equals(action) && !"learning_propose".equals(action) &&
-                !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action)) return;
+                !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action) &&
+                !"odyssey_observe".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
                 "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
                 "agent_start".equals(action) || "learning_start".equals(action) ||
                 "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
-                "experimental_break".equals(action)) && !confirmed) return;
+                "odyssey_observe".equals(action) || "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
         Path temporary = directory.resolve("gameplay-command-" + requestId + ".tmp");
@@ -604,6 +614,30 @@ public final class WorldSessionProvider extends ContentProvider {
                 String taskId = extras.getString("task_id", "");
                 if (!taskId.matches("[a-z][a-z0-9_]{2,47}")) return;
                 command.put("taskId", taskId).put("confirmed", true);
+            }
+            if ("odyssey_observe".equals(action)) {
+                String primitive = extras.getString("primitive", "");
+                if (!"getLogsCount".equals(primitive) && !"getPlanksCount".equals(primitive) &&
+                        !"checkBlockAbove".equals(primitive) && !"checkBlocksAround".equals(primitive) &&
+                        !"findSuitablePosition".equals(primitive)) return;
+                JSONObject args = new JSONObject();
+                String source = extras.getString("block_position", "").trim();
+                if (!source.isEmpty()) {
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    int bx, by, bz;
+                    try {
+                        bx = Integer.parseInt(coordinates[0].trim());
+                        by = Integer.parseInt(coordinates[1].trim());
+                        bz = Integer.parseInt(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (Math.abs((long) bx) > 30000000 || Math.abs((long) bz) > 30000000 ||
+                            by < -256 || by > 512) return;
+                    args.put("position", new JSONObject().put("x", bx).put("y", by).put("z", bz));
+                } else if ("checkBlockAbove".equals(primitive)) {
+                    return; // This primitive needs an explicit block coordinate.
+                }
+                command.put("primitive", primitive).put("args", args).put("confirmed", true);
             }
             if ("learning_propose".equals(action)) {
                 String skillJson = extras.getString("skill_json", "");
@@ -684,7 +718,8 @@ public final class WorldSessionProvider extends ContentProvider {
             if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
                 "follow_player".equals(action) || "agent_start".equals(action) ||
                 "learning_start".equals(action) || "learning_propose".equals(action) ||
-                "learning_autopilot_start".equals(action) || "experimental_break".equals(action))
+                "learning_autopilot_start".equals(action) || "odyssey_observe".equals(action) ||
+                "experimental_break".equals(action))
                 command.put("confirmed", true);
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
