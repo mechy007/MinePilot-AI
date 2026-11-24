@@ -360,9 +360,16 @@ class BedrockOpenWorldLearningEngine {
     this.autopilotReason = 'selecting_local_task';
     const next = this.curriculum(world, manifest);
     if (!next) {
-      this.autopilotEnabled = false;
-      this.autopilotReason = 'no_eligible_local_task';
-      return { status: 'rejected', reason: 'no_eligible_local_task' };
+      const readiness = this.curriculumReadiness(world, manifest);
+      if (readiness.exhausted) {
+        this.autopilotEnabled = false;
+        this.autopilotReason = 'local_curriculum_exhausted';
+        return { status: 'rejected', reason: this.autopilotReason, readiness };
+      }
+      // Keep the user-authorized controller armed while prerequisites arrive.
+      // This is a waiting state, not permission to bypass any capability gate.
+      this.autopilotReason = 'waiting_for_eligible_local_task';
+      return { status: 'accepted', reason: 'local_autopilot_waiting_for_task', readiness };
     }
     const started = this.start(world, manifest, next.id, { confirmed: true, owner: 'autopilot' });
     if (started?.status !== 'accepted') {
@@ -506,8 +513,14 @@ class BedrockOpenWorldLearningEngine {
           ? 'running_local_curriculum' : (started?.reason ?? 'local_task_start_failed');
         if (started?.status !== 'accepted') this.autopilotEnabled = false;
       } else {
-        this.autopilotEnabled = false;
-        this.autopilotReason = 'local_curriculum_exhausted_or_blocked';
+        const readiness = this.curriculumReadiness(world, manifest);
+        if (readiness.exhausted) {
+          this.autopilotEnabled = false;
+          this.autopilotReason = 'local_curriculum_exhausted';
+        } else {
+          // A blocked task is not a failed task. Re-check after each fresh tick.
+          this.autopilotReason = 'waiting_for_eligible_local_task';
+        }
       }
     }
     return this.snapshot(world, manifest);
@@ -544,6 +557,25 @@ class BedrockOpenWorldLearningEngine {
     return candidates[0] ?? null;
   }
 
+  curriculumReadiness(world, manifest) {
+    const pending = COMPOSITE_SKILLS.filter(task =>
+      !this.learned.has(task.id) &&
+      !(this.autopilotEnabled && this.sessionAttempted.has(task.id)));
+    const blockedTasks = [];
+    for (const task of pending) {
+      const reason = taskPreflight(world, manifest, task);
+      if (reason) blockedTasks.push({ id: task.id, reason });
+    }
+    return {
+      remainingTaskCount: pending.length,
+      eligibleTaskCount: pending.length - blockedTasks.length,
+      blockedTaskCount: blockedTasks.length,
+      exhausted: pending.length === 0,
+      firstBlocker: blockedTasks[0] ?? null,
+      blockedTasks
+    };
+  }
+
   snapshot(world, manifest) {
     const agent = world?.gameplayAgent?.snapshot?.() ?? {};
     const activeTask = this.activeRun ? {
@@ -567,6 +599,7 @@ class BedrockOpenWorldLearningEngine {
       proposedSkillCount: [...this.proposals.values()].filter(item => item.status === 'proposed').length,
       learnedSkillCount: this.learned.size,
       totalVerifiedNavigationSteps: this.totalVerifiedSteps,
+      curriculumReadiness: this.curriculumReadiness(world, manifest),
       nextCurriculumTask: this.curriculum(world, manifest),
       activeTask,
       skills: [...COMPOSITE_SKILLS.map(item => ({
