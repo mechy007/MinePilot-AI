@@ -77,8 +77,6 @@ function evaluateCapabilities(world) {
 
 function odysseyCapabilityStates(world, manifest) {
   const terrain = world?.terrain?.snapshot?.() ?? {};
-  const resources = manifest?.worldReady
-    ? world?.layerThree?.snapshot?.(world.gameplayWorld?.()) ?? {} : {};
   const inventory = manifest?.worldReady
     ? world?.inventoryLedger?.playerInventory?.() ?? null : null;
   const existing = name => manifest?.skills?.find(item => item.name === name) ?? {};
