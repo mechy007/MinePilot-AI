@@ -35,6 +35,15 @@ test('normalizes Bedrock 1.26.60 action IDs and validates slot addresses', () =>
     assert.throws(() => normalizeAction({ type_id, count: 1, source: slot('inventory', 9) }), /unsupported action/);
   assert.throws(() => normalizeAction({ type_id: 'take', count: 1,
     source: slot('inventory', 256), destination: slot('hotbar', 0) }), /slot/);
+  assert.throws(() => normalizeAction({ type_id: 'take', count: 1,
+    source: { slot_type: { container_id: 'inventory' }, slot: 9 },
+    destination: slot('hotbar', 0) }), /stack id/);
+  const dynamic = normalizeAction({ type_id: 'take', count: 1,
+    source: { slot_type: { container_id: 'container', dynamic_container_id: 12 },
+      slot: 3, stack_id: -4 }, destination: slot('inventory', 9, 0) });
+  assert.deepEqual(dynamic.source.slot_type,
+    { container_id: 'container', dynamic_container_id: 12 });
+  assert.equal(dynamic.source.stack_id, -4);
 });
 
 test('does not send inventory requests unless StartGame negotiated server authority', async () => {
