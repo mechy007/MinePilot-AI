@@ -55,6 +55,36 @@ This catalog assigns purpose and side-effect rules to the public functions in th
 | `poll()` | Tick the learning controller once and process at most one IPC command/receipt. | Runs on the private timer; errors are recorded, not silently swallowed. |
 | `stop()` | Cancel and dispose every per-session subsystem. | Idempotent; clears timers, requests, event listeners, movement and caches. |
 
+### `scripts/bedrock-inventory-ledger.cjs`
+
+| Function | Responsibility | Side effects / failure behavior |
+|---|---|---|
+| `normalizeWindowId(value)` | Validate/normalize a protocol window ID, including the named player inventory window. | Unknown names and out-of-range IDs return `null`. |
+| `normalizeContainer(value)` | Validate the Bedrock `FullContainerName` including optional dynamic container ID. | Rejects unknown container types and invalid dynamic IDs. |
+| `normalizeItem(value)` | Normalize the Bedrock 1.26.60 `ItemV4` fields: item runtime ID, count, metadata, stack-ID presence/value and block runtime ID. | Drops NBT/user data; rejects malformed non-empty stacks; preserves known-empty slots. |
+| `constructor(options)` | Initialize bounded per-session windows, registry, clock and freshness budget. | No packet writes or external resources. |
+| `now()` | Read the injected clock. | Used for all observation timestamps. |
+| `reset()` | Clear inventory windows and item registry for a new session generation. | Invalidates every old stack identity. |
+| `observeItemRegistry(packet)` | Build a bounded runtime-item-ID to namespaced-name map. | Rejects malformed/oversized registries; never guesses names. |
+| `observeContent(packet)` | Atomically replace one full inventory window/container snapshot. | Invalid packet leaves the prior snapshot untouched; unknown is distinct from known empty. |
+| `observeSlot(packet)` | Apply one server-observed slot update to an already-known window/container. | Does not refresh the full-container timestamp; rejects ambiguous container-less updates. |
+| `getSlot(address, options)` | Read one exact window/container/slot and return slot/full-snapshot freshness. | Pure read; no default stack ID is invented. |
+| `playerInventory(options)` | Return the canonical player inventory slots, names, counts and freshness. | Pure read; returns unknown/stale distinctly. |
+| `snapshot()` | Return compact bounded window metadata and the player inventory projection. | Does not expose item NBT or unbounded raw packet data. |
+
+### `scripts/bedrock-stack-request-manager.cjs`
+
+| Function | Responsibility | Side effects / failure behavior |
+|---|---|---|
+| `normalizeSlotInfo(info, label)` | Validate exact Bedrock stack-request slot/container addresses and observed stack IDs. | Missing stack identity must fail closed; never invent a zero stack ID. |
+| `normalizeAction(action)` | Validate the supported stack action shape against the pinned 1.26.60 protocol. | Unsupported action types are rejected before any packet is queued. |
+| `constructor(client, options)` | Bind one response listener and require negotiated server-authoritative mode. | Does not enable transactions when StartGame negotiation is absent. |
+| `nextRequestId()` | Allocate a bounded request ID. | Avoids reusing an ID while a request is pending. |
+| `send(actions, options)` | Send one bounded request and await its correlated response. | Single-flight; timeout, write error, server rejection and cancellation are explicit outcomes. |
+| `receive(packet)` | Resolve only the response matching the pending request ID. | Unmatched responses cannot complete another request. |
+| `snapshot()` | Report negotiation, pending request and last outcome. | Pure read. |
+| `close(reason)` | Remove listeners and reject pending requests. | Idempotent cleanup. |
+
 ### `scripts/bedrock-gameplay-agent.cjs`
 
 | Function | Responsibility |
