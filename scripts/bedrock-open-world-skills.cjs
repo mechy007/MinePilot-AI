@@ -482,8 +482,13 @@ class BedrockOpenWorldLearningEngine {
         this.activeRun.seenActive = true;
       } else if (this.activeRun.seenActive) {
         const task = this.taskById(this.activeRun.taskId);
-        if (task) this.recordRun(task, this.critic(task, agent, this.activeRun), this.activeRun);
+        const outcome = task ? this.critic(task, agent, this.activeRun) : null;
+        if (task) this.recordRun(task, outcome, this.activeRun);
         this.activeRun = null;
+        if (this.autopilotEnabled && outcome?.outcome !== 'verified') {
+          this.autopilotEnabled = false;
+          this.autopilotReason = 'stopped_after_unverified_task';
+        }
       }
     }
     if (this.autopilotEnabled && !this.activeRun) {
