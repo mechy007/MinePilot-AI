@@ -15,6 +15,11 @@ test('imports all 183 upstream compositions as metadata only',()=>{
  assert.ok(CATALOG.sourceInventory.controlPrimitiveFiles.length>0);
  assert.ok(CATALOG.sourceInventory.comprehensiveLibraryApiModules.length>0);
  assert.ok(CATALOG.compositions.every(s=>typeof s.id==='string'&&typeof s.description==='string'&&typeof s.sourcePath==='string'&&!Object.hasOwn(s,'code')));
+ const diamond=CATALOG.compositions.find(s=>s.id==='mine_diamond');
+ assert.ok(diamond.directBotApis.includes('equip'));
+ assert.ok(diamond.directBotApis.includes('inventory'));
+ assert.ok(diamond.requiredCapabilities.includes('equip_items'));
+ assert.ok(diamond.requiredCapabilities.includes('inventory_read'));
 });
 test('all transitive dependencies resolve and order is acyclic',()=>{
  const ids=new Set(CATALOG.compositions.map(s=>s.id));assert.equal(ids.size,183);
