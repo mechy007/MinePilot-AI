@@ -168,6 +168,52 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("gameplay_skill_ready",usable);
                     result.putInt("gameplay_skill_limited",preview);
                     result.putInt("gameplay_skill_unsupported",unsupported);
+                    JSONObject learning = capabilities.optJSONObject("learning");
+                    if (learning != null) {
+                        result.putString("learning_version", learning.optString("version", ""));
+                        result.putInt("learning_learned", Math.max(0, Math.min(128, learning.optInt("learnedSkillCount", 0))));
+                        result.putInt("learning_proposed", Math.max(0, Math.min(64, learning.optInt("proposedSkillCount", 0))));
+                        result.putInt("learning_verified_total", Math.max(0, Math.min(10000000, learning.optInt("totalVerifiedNavigationSteps", 0))));
+                        result.putInt("learning_legacy_records", Math.max(0, Math.min(128, learning.optInt("legacyVoyagerRecordCountMigrated", 0))));
+                        JSONObject next = learning.optJSONObject("nextCurriculumTask");
+                        if (next != null) {
+                            String taskId = next.optString("id", "");
+                            String goal = next.optString("goal", "");
+                            String title = next.optString("title", "");
+                            if (taskId.matches("[a-z][a-z0-9_]{2,47}")) result.putString("learning_next_task_id", taskId);
+                            if (goal.matches("[a-z_]{1,32}")) result.putString("learning_next_task_goal", goal);
+                            if (title.length() <= 100) result.putString("learning_next_task_title", title);
+                        }
+                        JSONObject activeTask = learning.optJSONObject("activeTask");
+                        if (activeTask != null) {
+                            result.putBoolean("learning_active", activeTask.optBoolean("active", false));
+                            String taskId = activeTask.optString("id", "");
+                            String goal = activeTask.optString("goal", "");
+                            String phase = activeTask.optString("phase", "");
+                            String reason = activeTask.optString("reason", "");
+                            String title = activeTask.optString("title", "");
+                            if (taskId.matches("[a-z][a-z0-9_]{2,47}")) result.putString("learning_active_task_id", taskId);
+                            if (goal.matches("[a-z_]{1,32}")) result.putString("learning_active_goal", goal);
+                            if (phase.matches("[a-z_]{1,32}")) result.putString("learning_active_phase", phase);
+                            if (reason.matches("[a-z_]{1,72}")) result.putString("learning_active_reason", reason);
+                            if (title.length() <= 100) result.putString("learning_active_title", title);
+                            result.putInt("learning_active_verified", Math.max(0, Math.min(40, activeTask.optInt("verifiedSteps", 0))));
+                        } else {
+                            result.putBoolean("learning_active", false);
+                        }
+                        org.json.JSONArray recent = learning.optJSONArray("recentRuns");
+                        if (recent != null && recent.length() > 0) {
+                            JSONObject last = recent.optJSONObject(recent.length() - 1);
+                            if (last != null) {
+                                String outcome = last.optString("outcome", "");
+                                String reason = last.optString("reason", "");
+                                String taskId = last.optString("taskId", "");
+                                if (outcome.matches("[a-z_]{1,24}")) result.putString("learning_last_outcome", outcome);
+                                if (reason.matches("[a-z_]{1,80}")) result.putString("learning_last_reason", reason);
+                                if (taskId.matches("[a-z][a-z0-9_]{2,47}")) result.putString("learning_last_task_id", taskId);
+                            }
+                        }
+                    }
                 }
                 JSONObject intelligence = gameplay.optJSONObject("intelligence");
                 if (intelligence != null) {
@@ -517,11 +563,13 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
-                !"experimental_break".equals(action)) return;
+                !"experimental_break".equals(action) && !"learning_start".equals(action) &&
+                !"learning_stop".equals(action) && !"learning_propose".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
                 "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
-                "agent_start".equals(action) ||
+                "agent_start".equals(action) || "learning_start".equals(action) ||
+                "learning_propose".equals(action) ||
                 "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
@@ -536,6 +584,17 @@ public final class WorldSessionProvider extends ContentProvider {
                 String name = extras.getString("player_name", "");
                 if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) return;
                 command.put("playerName", name);
+            }
+            if ("learning_start".equals(action)) {
+                String taskId = extras.getString("task_id", "");
+                if (!taskId.matches("[a-z][a-z0-9_]{2,47}")) return;
+                command.put("taskId", taskId).put("confirmed", true);
+            }
+            if ("learning_propose".equals(action)) {
+                String skillJson = extras.getString("skill_json", "");
+                if (skillJson.length() < 2 || skillJson.length() > 1200) return;
+                JSONObject skill = new JSONObject(skillJson);
+                command.put("skill", skill).put("confirmed", true);
             }
             if ("agent_start".equals(action)) {
                 String goal=extras.getString("agent_goal","");
@@ -609,6 +668,7 @@ public final class WorldSessionProvider extends ContentProvider {
             }
             if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
                 "follow_player".equals(action) || "agent_start".equals(action) ||
+                "learning_start".equals(action) || "learning_propose".equals(action) ||
                 "experimental_break".equals(action))
                 command.put("confirmed", true);
             if ("probe_step".equals(action)) {
