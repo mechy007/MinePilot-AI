@@ -2,6 +2,7 @@
 
 // Bedrock-safe metadata bridge. Upstream Mineflayer source is never loaded.
 const CATALOG = require('./bedrock-odyssey-skill-catalog.json');
+const { buildBedrockPrimitivePlan, validatePrimitiveCoverage } = require('./bedrock-odyssey-bedrock-adapter.cjs');
 const BY_ID = new Map(CATALOG.compositions.map(skill => [skill.id, skill]));
 const ALLOWED_STATES = new Set(['ready','experimental','partial','manual_experimental','unsupported','preview_only','protocol_only','blocked']);
 
@@ -89,7 +90,8 @@ function planOdysseySkill(skillId, capabilities = {}) {
     skillId,title:skill.upstreamName,dependencyOrder:compatibility.dependencyOrder,
     primitiveCalls:[...new Set(compatibility.dependencyOrder.flatMap(id=>BY_ID.get(id)?.primitiveCalls??[]))].sort(),
     requiredCapabilities:compatibility.requiredCapabilities,
-    execution:'catalog_only_no_bedrock_executor',executable:false,arbitraryCodeExecution:false,compatibility
+    bedrockPlan:buildBedrockPrimitivePlan(skill, capabilities),
+    execution:'bedrock_action_plan_only',executable:false,arbitraryCodeExecution:false,compatibility
   };
 }
 function validateOdysseyCatalog() {
@@ -102,7 +104,7 @@ function validateOdysseyCatalog() {
        typeof skill.sourcePath!=='string'||Object.hasOwn(skill,'code'))return false;
     if(skill.dependencies.some(id=>!BY_ID.has(id)))return false;
   }
-  return ids.size===CATALOG.publishedCounts.compositionalSkills;
+  return ids.size===CATALOG.publishedCounts.compositionalSkills && validatePrimitiveCoverage(CATALOG);
 }
 if(!validateOdysseyCatalog())throw new Error('ODYSSEY metadata catalog validation failed');
 module.exports={CATALOG,evaluateOdysseySkill,listOdysseySkills,summarizeOdysseyLibrary,planOdysseySkill,validateOdysseyCatalog};
