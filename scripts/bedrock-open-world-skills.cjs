@@ -501,7 +501,7 @@ class BedrockOpenWorldLearningEngine {
     if (this.autopilotEnabled && !this.activeRun) {
       const next = this.curriculum(world, manifest);
       if (next) {
-        const started = this.start(world, manifest, next.id, { confirmed: true });
+        const started = this.start(world, manifest, next.id, { confirmed: true, owner: 'autopilot' });
         this.autopilotReason = started?.status === 'accepted'
           ? 'running_local_curriculum' : (started?.reason ?? 'local_task_start_failed');
         if (started?.status !== 'accepted') this.autopilotEnabled = false;
