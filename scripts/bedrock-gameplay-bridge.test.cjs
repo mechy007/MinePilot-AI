@@ -1210,3 +1210,25 @@ test('hotbar capability is experimental only while a complete server inventory s
   assert.equal(odysseyCapabilityStates(stale, {}).hotbar_selection.state, 'blocked');
   assert.equal(odysseyCapabilityStates(fresh, {}).hotbar_selection.state, 'experimental');
 });
+
+
+test('unconfirmed hotbar selection times out and can be retried without claiming success', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: true, observedAt: 1000, slots: [
+    { slot: 1, itemName: 'minecraft:stone_sword', count: 1, networkId: 15 }
+  ] }) };
+  const call = () => bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'equip-timeout', action: 'odyssey_execute',
+    primitive: 'equipSword', args: {}, confirmed: true });
+  assert.equal(call().status, 'accepted');
+  now = 6001;
+  assert.equal(bridge.snapshot().hotbarSelection.last.status, 'timed_out');
+  assert.equal(bridge.snapshot().hotbarSelection.pending, null);
+  assert.equal(call().status, 'accepted');
+  assert.equal(client.sent.filter(x => x.packet === 'player_hotbar').length, 2);
+  assert.equal(bridge.snapshot().hotbarSelection.last, null);
+  bridge.stop();
+});
