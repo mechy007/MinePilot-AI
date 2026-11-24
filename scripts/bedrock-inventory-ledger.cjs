@@ -118,17 +118,17 @@ class BedrockInventoryLedger {
       return false;
     }
     const slots = [];
+    const nextRevision = this.revision + 1;
     for (let index = 0; index < packet.input.length; index++) {
       const item = normalizeItem(packet.input[index]);
       if (!item) {
         this.lastError = 'invalid_inventory_item';
         return false;
       }
-      slots.push({ slot: index, item, observedAt: this.now(), source: 'full' });
+      slots.push({ slot: index, item, observedAt: this.now(), source: 'full', revision: nextRevision });
     }
     const key = containerKey(windowId, container);
-    const previous = this.windows.get(key);
-    this.revision++;
+    this.revision = nextRevision;
     this.windows.delete(key);
     this.windows.set(key, {
       key, windowId, container, slots, slotCount: slots.length,
@@ -169,9 +169,11 @@ class BedrockInventoryLedger {
       return false;
     }
     const now = this.now();
-    window.slots[packet.slot] = { slot: packet.slot, item, observedAt: now, source: 'incremental' };
+    const slotRevision = ++this.revision;
+    window.slots[packet.slot] = { slot: packet.slot, item, observedAt: now,
+      source: 'incremental', revision: slotRevision };
     window.lastSlotObservedAt = now;
-    window.revision = ++this.revision;
+    window.revision = slotRevision;
     this.lastError = null;
     return true;
   }
@@ -193,7 +195,7 @@ class BedrockInventoryLedger {
       known: true, fresh, ageMs: age, fullSnapshotFresh: fullAge >= 0 && fullAge <= maxAge,
       windowId: window.windowId, container: { ...window.container }, slot,
       item: copyItem(observed.item), source: observed.source,
-      revision: window.revision, generation: window.generation
+      revision: window.revision, slotRevision: observed.revision, generation: window.generation
     };
   }
   playerInventory(options = {}) {
@@ -211,7 +213,7 @@ class BedrockInventoryLedger {
     const items = window.slots.map(entry => ({
       slot: entry.slot, ...copyItem(entry.item), itemName: entry.item.empty
         ? null : this.registry.get(entry.item.networkId) ?? null,
-      observedAt: entry.observedAt, source: entry.source
+      observedAt: entry.observedAt, source: entry.source, slotRevision: entry.revision
     }));
     const occupied = items.filter(item => !item.empty);
     const unresolvedItemCount = occupied.filter(item => item.itemName === null).length;
@@ -290,6 +292,8 @@ function planPlayerInventorySwap(ledger, sourceSlot, destinationSlot, options = 
         metadata: source.item.metadata, blockRuntimeId: source.item.blockRuntimeId }
     },
     inventoryRevision: inventory.revision,
+    sourceSlotRevision: source.slotRevision,
+    destinationSlotRevision: destination.slotRevision,
     generation: inventory.generation
   };
 }
