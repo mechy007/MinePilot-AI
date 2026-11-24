@@ -6,7 +6,7 @@ const { executeBedrockObservation } = require('./bedrock-odyssey-observation-exe
 function bridge(overrides = {}) {
   const now = 10000;
   return {
-    closed: false, spawned: true, position: { x: 0.5, y: 64, z: 0.5 }, dimension: 0,
+    closed: false, spawned: true, position: { x: 0.5, y: 65.62, z: 0.5 }, dimension: 0,
     receivedChunks: new Map([['0:0:0', now]]), lastServerPositionAt: now, lastWorldAt: now,
     clock: () => now,
     layerThree: { inventoryItems: () => ({ known: true, observedAt: now, counts: {
