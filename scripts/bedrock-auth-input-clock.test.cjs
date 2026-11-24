@@ -134,16 +134,20 @@ test('verified movement requires safe 0.6-block footprint, not merely a clear ce
   assert.equal(movement.snapshot().motionModel,'verified_flat_footprint');
   blocked=true;
   now+=50;pulse();
-  assert.equal(sent.length,0,'unknown body-corner voxel blocks outgoing movement');
+  assert.equal(sent.filter(x=>x.p.input_data.includes(10)).length,0,
+    'unknown body-corner voxel blocks outgoing moving frames');
+  assert.ok(sent.every(x=>x.p.input_data.length===0),
+    'a neutral stop acknowledgement is allowed after a rejected move');
   assert.equal(movement.snapshot().stoppedReason,'unverified_or_blocked_next_step');
   assert.equal(movement.snapshot().active,false);
   blocked=false;
   assert.equal(movement.runVerifiedStep(world,{x:8.5,y:65.62,z:11.45},8).status,
     'accepted');
   now+=50;pulse();
-  assert.equal(sent.length,1);
-  assert.ok(sent[0].p.position.z>10.5);
-  assert.ok(sent[0].p.position.z<=10.63);
-  assert.equal(sent[0].p.input_data[0],10);
+  assert.equal(sent.filter(x=>x.p.input_data.includes(10)).length,1);
+  const moving=sent.find(x=>x.p.input_data.includes(10));
+  assert.ok(moving.p.position.z>10.5);
+  assert.ok(moving.p.position.z<=10.63);
+  assert.equal(moving.p.input_data[0],10);
   movement.stop('user_stop',{silent:true});
 });
