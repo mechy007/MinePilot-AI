@@ -329,7 +329,7 @@ class BedrockOpenWorldLearningEngine {
       return { status: 'rejected', reason: 'proposal_library_full' };
     const previous = this.proposals.get(proposal.id);
     this.proposals.set(proposal.id, proposal);
-    if (!this.persist()) {
+    if (this.storagePath && !this.persist()) {
       if (previous) this.proposals.set(proposal.id, previous);
       else this.proposals.delete(proposal.id);
       return { status: 'rejected', reason: this.lastPersistError ?? 'learning_store_write_failed' };
