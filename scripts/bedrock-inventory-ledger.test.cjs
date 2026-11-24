@@ -22,6 +22,13 @@ test('decodes Bedrock 1.26.60 ItemV4 stack IDs and full container identity', () 
     hasStackId: true, stackId: 41, blockRuntimeId: 0
   });
   assert.equal(normalizeItem(item(0, 0)).empty, true);
+  const emptyWithStackId = normalizeItem({ network_id: 0, count: 0, metadata: 0,
+    has_stack_id: true, stack_id: 0, block_runtime_id: 0 });
+  assert.equal(emptyWithStackId.empty, true);
+  assert.equal(emptyWithStackId.hasStackId, true);
+  assert.equal(emptyWithStackId.stackId, 0);
+  assert.equal(normalizeItem({ network_id: 0, count: 1, metadata: 0,
+    has_stack_id: false, block_runtime_id: 0 }), null);
   assert.equal(normalizeItem({ network_id: 5, count: 1, metadata: 0, has_stack_id: true }), null);
   assert.equal(normalizeItem({ network_id: 5, count: 1, metadata: 0,
     has_stack_id: false, stack_id: 99 }), null);
