@@ -6,7 +6,7 @@ const allReady={
 world_observation:'ready',spatial_observation:'ready',inventory_read:'ready',navigation:'ready',mine:'ready',
 eat_food:'ready',combat:'ready',craft:'ready',block_placement:'ready',equip_items:'ready',
 collect_resources:'ready',breed_animals:'ready',fishing:'ready',cook:'ready',smelt:'ready',
-farming:'ready',shear_animals:'ready',container_transfer:'ready',vehicle_control:'ready',item_use:'ready'
+farming:'ready',shear_animals:'ready',container_transfer:'ready',vehicle_control:'ready',item_use:'ready',bucket_use:'ready'
 };
 test('imports all 183 upstream compositions as metadata only',()=>{
  assert.equal(validateOdysseyCatalog(),true);assert.equal(CATALOG.compositions.length,183);
@@ -74,9 +74,9 @@ test('live Bedrock-like states correctly keep unsupported gameplay families bloc
 
 test('bucket item activation requires item_use, never the unrelated eat_food capability',()=>{
  const water=CATALOG.compositions.find(s=>s.id==='place_water');
- assert.ok(water.requiredCapabilities.includes('item_use'));
- assert.ok(!water.requiredCapabilities.includes('eat_food'));
- const r=evaluateOdysseySkill('place_water',{...allReady,item_use:'unsupported'});
+ assert.ok(water.requiredCapabilities.includes('bucket_use'));
+ assert.ok(!water.requiredCapabilities.includes('eat_food') && !water.requiredCapabilities.includes('item_use'));
+ const r=evaluateOdysseySkill('place_water',{...allReady,bucket_use:'unsupported'});
  assert.equal(r.status,'blocked');
- assert.ok(r.blockedCapabilities.some(x=>x.name==='item_use'));
+ assert.ok(r.blockedCapabilities.some(x=>x.name==='bucket_use'));
 });
