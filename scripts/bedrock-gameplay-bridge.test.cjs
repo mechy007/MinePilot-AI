@@ -1038,11 +1038,12 @@ test('ODYSSEY read-only observation results survive the private IPC receipt boun
   const dir = mkdtempSync(join(tmpdir(), 'minepilot-odyssey-observe-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const commandPath = join(dir, 'command.json'), receiptPath = join(dir, 'receipt.json');
-  const layerThree = { reset() {}, inventoryItems: () => ({ known: true, observedAt: 10000,
+  const layerThree = { reset() {}, snapshot: () => ({}), inventoryItems: () => ({ known: true, observedAt: 10000,
     counts: { 'minecraft:oak_log': 4 } }) };
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath, layerThree,
     clock: () => 10000 }).start();
+  t.after(() => bridge.stop());
   initialized(client, bridge);
   // Keep the inventory snapshot time aligned with the bridge clock.
   const command = { version: 'minepilot.gameplay.v1', requestId: 'odyssey-1',
@@ -1118,7 +1119,7 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
     stop(){return {status:'ok'};}
   };
   const breaks=[];
-  const blockBreaker={start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
+  const blockBreaker={snapshot(){return {};},start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
   const bridge=new BedrockGameplayBridge(client,{gameplayAgent,blockBreaker}).start();
   initialized(client,bridge);
   const call=(primitive,args={},confirmed=true)=>bridge.execute({
@@ -1176,7 +1177,7 @@ test('tool equip selects only a server-observed hotbar slot and waits for matchi
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
   initialized(client, bridge);
-  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: true, observedAt: now, slots: [
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: true, observedAt: now, slots: [
     { slot: 2, itemName: 'minecraft:iron_axe', count: 1, networkId: 7 },
     { slot: 5, itemName: 'minecraft:stone', count: 32, networkId: 9 }
   ] }) };
@@ -1200,11 +1201,11 @@ test('tool equip fails closed without fresh hotbar inventory or a matching tool'
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client).start();
   initialized(client, bridge);
-  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: false, observedAt: null, slots: [] }) };
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: false, observedAt: null, slots: [] }) };
   const call = primitive => bridge.execute({ version: 'minepilot.gameplay.v1',
     requestId: 'equip-tool-blocked', action: 'odyssey_execute', primitive, args: {}, confirmed: true });
   assert.equal(call('equipPickaxe').reason, 'fresh_hotbar_inventory_required');
-  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: true, observedAt: Date.now(), slots: [] }) };
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: true, observedAt: Date.now(), slots: [] }) };
   assert.equal(call('equipPickaxe').reason, 'matching_tool_not_in_hotbar');
   assert.equal(client.sent.length, 0);
   bridge.stop();
@@ -1226,7 +1227,7 @@ test('unconfirmed hotbar selection times out and can be retried without claiming
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
   initialized(client, bridge);
-  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: true, observedAt: 1000, slots: [
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: true, observedAt: 1000, slots: [
     { slot: 1, itemName: 'minecraft:stone_sword', count: 1, networkId: 15 }
   ] }) };
   const call = () => bridge.execute({ version: 'minepilot.gameplay.v1',
