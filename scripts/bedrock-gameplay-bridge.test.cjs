@@ -1277,3 +1277,38 @@ test('unconfirmed hotbar selection times out and can be retried without claiming
   assert.equal(bridge.snapshot().hotbarSelection.last, null);
   bridge.stop();
 });
+
+
+test('world snapshots do not run intelligence decisions or update navigation intents', () => {
+  const client = new Client();
+  let decisions = 0;
+  let navigationUpdates = 0;
+  const intelligence = {
+    reset() {},
+    snapshot: () => ({ decisionCount: decisions }),
+    decide() { decisions++; return { decisionCount: decisions }; },
+    shouldEmergencyStop: () => false,
+    noteOutcome() {}
+  };
+  const addonNavigation = {
+    snapshot: () => ({ state: 'idle', reason: 'no_live_intent', executed: false }),
+    request() { return { accepted: true }; },
+    release() {},
+    update() {
+      navigationUpdates++;
+      return { state: 'idle', reason: 'no_live_intent', executed: false };
+    }
+  };
+  const bridge = new BedrockGameplayBridge(client, { intelligence, addonNavigation }).start();
+  initialized(client, bridge);
+
+  bridge.snapshot();
+  bridge.snapshot();
+  assert.equal(decisions, 0);
+  assert.equal(navigationUpdates, 0);
+
+  bridge.tickControlPlane();
+  assert.equal(decisions, 1);
+  assert.equal(navigationUpdates, 1);
+  bridge.stop();
+});
