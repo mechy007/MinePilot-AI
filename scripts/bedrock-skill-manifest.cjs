@@ -70,7 +70,7 @@ function evaluateCapabilities(world) {
     version:'minepilot.gameplay.skills.v1',
     worldReady:ready,localNavigationReady:navigate,
     userConfirmationRequired:true,rawPacketAccess:false,
-    permittedGoalNames:['survive','explore','follow','return_home','gather'],
+    permittedGoalNames:['survive','explore','follow','return_home','gather','goto'],
     skills:TYPES.map(name=>({name,...result[name]}))
   };
 }
