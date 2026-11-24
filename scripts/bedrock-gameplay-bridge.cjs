@@ -830,7 +830,9 @@ class BedrockGameplayBridge {
         {status:'rejected',reason:'gameplay_agent_unavailable'};
     }
     if (raw.action === 'agent_start') {
-      // Reconcile a completed learning run against its own task before a new goal can replace its snapshot.
+      // Reconcile a completed learning run before a new goal can replace its snapshot.
+      // Direct command callers get the same explicit lifecycle tick as the IPC loop.
+      this.tickLearning();
       const learning = gameplaySkillManifest(this).learning;
       if (learning?.activeTask) return { status: 'rejected', reason: 'learning_task_owned_stop_or_finish_first' };
       return this.gameplayAgent?.start(this,{
@@ -1089,31 +1091,38 @@ class BedrockGameplayBridge {
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
-  poll() {
-    if (this.closed || !this.commandPath || !this.receiptPath) return;
-    // One explicit owner advances the learning engine. Status snapshots are
-    // read-only and cannot accidentally start or complete curriculum tasks.
+  tickLearning() {
+    // One explicit owner advances the curriculum. Reads of snapshots/manifests
+    // never mutate task state. Keep failures visible without crashing the SDK loop.
     try {
       tickLearningEngine(this);
       this.learningTickStatus = { state: 'healthy', reason: 'runtime_tick_ok' };
     } catch {
       this.learningTickStatus = { state: 'error', reason: 'learning_tick_failed' };
     }
+  }
+  poll() {
+    if (this.closed || !this.commandPath || !this.receiptPath) return;
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
         unlinkSync(this.commandPath);
+        this.tickLearning();
         return;
       }
       data = readFileSync(this.commandPath, 'utf8');
       unlinkSync(this.commandPath);
     } catch (error) {
       if (error.code !== 'ENOENT') this.lastReceipt = { status: 'rejected', reason: 'inbox_error' };
+      this.tickLearning();
       return;
     }
     let command;
     try { command = JSON.parse(data); }
     catch { command = null; }
+    // agent_start performs its own tick before replacing the current task.
+    // All other commands share the normal single 100 ms runtime tick.
+    if (command?.action !== 'agent_start') this.tickLearning();
     const result = this.execute(command);
     const receipt = {
       version: 'minepilot.gameplay.v1',
