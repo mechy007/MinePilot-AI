@@ -66,3 +66,14 @@ The bridge now exposes a deliberately narrow, read-only command: `odyssey_observ
 The Android gameplay IPC validates the primitive name, requires explicit confirmation, bounds optional coordinates, and returns a capped observation result to the caller. The executor also requires a live world, a fresh server position, and (for terrain primitives) decoded terrain plus a registry. It sends no Bedrock packets and performs no movement or interaction. Each successful result identifies its observation source and is marked `readOnly: true` and `executed: false`. The module and tests are staged into the Android Node runtime bundle.
 
 These five primitives are now actual read-only observation operations; this does not make all 183 ODYSSEY compositions runnable. Navigation, mining, crafting, equipment and other state-changing primitives remain governed by their existing capability gates and missing executor/verification requirements.
+
+
+## Confirmed Bedrock action primitives
+
+The private Android gameplay IPC now has a separate confirmed execution action, `odyssey_execute`, for a narrow allowlist:
+
+- `goto`: a user-supplied world position within 16 blocks; requires a decoded collision-safe route, bounded movement input, and later fresh server-position progress. The gameplay agent stops on stale state, corrections, missing route, or its existing run/time budgets.
+- `exploreUntil`: starts the existing bounded exploration agent. It uses decoded walkable terrain and verifies each movement step from later server position updates. It does not import or execute upstream JavaScript conditions; it stops on its bounded budget or safety failure.
+- `mineBlock`: starts the existing single-block Bedrock break controller only for a confirmed integer block coordinate within reach, a decoded solid/breakable block, active neutral player-input presence, and no competing movement. A changed server block is recorded as an observation with causality explicitly unverified, not proof that MinePilot mined it.
+
+Android validates the primitive and coordinates before writing the single-command inbox. The bridge validates again and dispatches only the allowlisted executor. Crafting, cooking, smelting, equipment, combat, feeding/breeding, item placement, farming and other unsupported primitive families remain blocked. Primitive-level executors do not automatically make a composite skill runnable: dependency orchestration and verified postconditions are still required for each composition.
