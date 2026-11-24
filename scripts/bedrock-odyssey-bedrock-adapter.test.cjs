@@ -80,3 +80,7 @@ test('live primitive executor declarations are explicit and do not promote compo
     { navigation: 'experimental' });
   assert.equal(plan.executable, false, 'single primitive IPC does not imply composition orchestration');
 });
+
+assert.equal(evaluatePrimitive('checkBlockAbove', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
+assert.equal(evaluatePrimitive('checkBlocksAround', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
+assert.equal(evaluatePrimitive('getPlanksCount', { inventory_read: 'ready' }).executor, 'odyssey_observe');
