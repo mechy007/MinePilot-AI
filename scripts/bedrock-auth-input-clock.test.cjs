@@ -111,3 +111,39 @@ test('pinned protocol-2225 serializer accepts validated camera vectors and write
     }
   }
 });
+
+test('verified movement requires safe 0.6-block footprint, not merely a clear center point',()=>{
+  let now=1000,pulse,blocked=false;
+  const sent=[];
+  const client={queue:(name,p)=>sent.push({name,p})};
+  const movement=new ExperimentalPlayerInput(client,true,{
+    clock:()=>now,setInterval(cb){pulse=cb;return 1;},clearInterval(){}
+  });
+  const world={
+    closed:false,spawned:true,self:'123',dimension:0,
+    position:{x:8.5,y:65.62,z:10.5},yaw:0,pitch:0,
+    movementAuthority:1,serverTick:100n,serverTickObservedAt:1000,
+    lastServerPositionAt:1000,receivedChunks:new Set(['0,0']),
+    terrain:{tile(dim,x,y,z){
+      if(blocked&&x===8&&z===11)return 'unknown';
+      return 'walkable';
+    }}
+  };
+  assert.equal(movement.runVerifiedStep(world,{x:8.5,y:65.62,z:11.45},8).status,
+    'accepted');
+  assert.equal(movement.snapshot().motionModel,'verified_flat_footprint');
+  blocked=true;
+  now+=50;pulse();
+  assert.equal(sent.length,0,'unknown body-corner voxel blocks outgoing movement');
+  assert.equal(movement.snapshot().stoppedReason,'unverified_or_blocked_next_step');
+  assert.equal(movement.snapshot().active,false);
+  blocked=false;
+  assert.equal(movement.runVerifiedStep(world,{x:8.5,y:65.62,z:11.45},8).status,
+    'accepted');
+  now+=50;pulse();
+  assert.equal(sent.length,1);
+  assert.ok(sent[0].p.position.z>10.5);
+  assert.ok(sent[0].p.position.z<=10.63);
+  assert.equal(sent[0].p.input_data[0],10);
+  movement.stop('user_stop',{silent:true});
+});
