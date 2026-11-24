@@ -90,3 +90,10 @@ Protocol references for the pinned Bedrock 1.26.60 / protocol 2225 schema:
 - StartGame packet and its inventory-manager negotiation flag: https://mojang.github.io/bedrock-protocol-docs/1.26.60/packets/start-game-packet/
 - Item stack request packet: https://mojang.github.io/bedrock-protocol-docs/1.26.60/packets/item-stack-request-packet/
 - Item stack response packet: https://mojang.github.io/bedrock-protocol-docs/1.26.60/packets/item-stack-response-packet/
+
+
+## Bounded tool selection
+
+Four equipment primitives (`equipAxe`, `equipHoe`, `equipPickaxe`, `equipSword`) now have a deliberately narrow implementation: they select a matching tool only when it is already present in the nine-slot hotbar. The hotbar is derived from a complete server inventory snapshot plus subsequent server inventory-slot updates. MinePilot sends the Bedrock `player_hotbar` selection packet and does not report success until a self `mob_equipment` update confirms both the selected slot and the expected item network ID. Missing/stale inventory, absent tools, packet errors, and missing server confirmation fail closed.
+
+This does not move tools from main inventory, equip armor, or make a full equipment skill executable. The separate `equip_items` capability remains hard-blocked; only `hotbar_selection` is experimental. Skill compositions that require additional unsupported capabilities remain blocked.
