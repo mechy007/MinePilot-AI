@@ -65,7 +65,7 @@ The bridge now exposes a deliberately narrow, read-only command: `odyssey_observ
 
 The Android gameplay IPC validates the primitive name, requires explicit confirmation, bounds optional coordinates, and returns a capped observation result to the caller. The executor also requires a live world, a fresh server position, and (for terrain primitives) decoded terrain plus a registry. It sends no Bedrock packets and performs no movement or interaction. Each successful result identifies its observation source and is marked `readOnly: true` and `executed: false`. The module and tests are staged into the Android Node runtime bundle.
 
-These five primitives are now actual read-only observation operations; this does not make all 183 ODYSSEY compositions runnable. Navigation, mining, crafting, equipment and other state-changing primitives remain governed by their existing capability gates and missing executor/verification requirements.
+These five primitives are now actual read-only observation operations; this does not make all 183 ODYSSEY compositions runnable. Bounded target navigation, bounded exploration and confirmed single-block mining now have dedicated Bedrock IPC dispatch paths; mining remains manual/experimental. Crafting, equipment, combat, cooking, smelting, animal interaction, placement, farming and other unsupported primitive families remain blocked.
 
 
 ## Confirmed Bedrock action primitives
