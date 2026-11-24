@@ -684,7 +684,7 @@ public final class WorldSessionProvider extends ContentProvider {
             if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
                 "follow_player".equals(action) || "agent_start".equals(action) ||
                 "learning_start".equals(action) || "learning_propose".equals(action) ||
-                "experimental_break".equals(action))
+                "learning_autopilot_start".equals(action) || "experimental_break".equals(action))
                 command.put("confirmed", true);
             if ("probe_step".equals(action)) {
                 command.put("confirmed", true).put("direction", "forward");
