@@ -125,7 +125,9 @@ The inventory ledger and the transaction manager are separate by design:
 4. The executor waits for the resulting inventory content/slot updates and verifies the postcondition against a new server observation.
 5. Timeout, rejection, stale identity, ambiguous container, dimension/session change or cancellation must stop the operation without claiming success.
 
-The first supported transaction family should be a reversible player-inventory slot transfer/swap. Crafting, armor, furnace, container, block placement and item-use actions remain blocked until their own packet schemas, UI/container lifecycle and server postconditions are implemented and tested. No speculative request may be sent to discover protocol behavior.
+The first transaction family is being prepared as a reversible player-inventory slot swap. `planPlayerInventorySwap` now performs a pure preflight against two fresh, occupied slots in the canonical 36-slot player container, requires resolved item IDs and exact server stack IDs, and emits an allowlisted `swap` request shape. It deliberately returns `executable:false`: the asynchronous request/response plus dual-slot postcondition verifier is not yet wired into the session command lifecycle.
+
+Crafting, armor, furnace, container, block placement and item-use actions remain blocked until their own packet schemas, UI/container lifecycle and server postconditions are implemented and tested. No speculative request may be sent to discover protocol behavior.
 
 ### 3.5 Capability registry
 
