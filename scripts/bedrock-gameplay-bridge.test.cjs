@@ -1119,7 +1119,7 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
     stop(){return {status:'ok'};}
   };
   const breaks=[];
-  const blockBreaker={snapshot(){return {};},start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
+  const blockBreaker={snapshot(){return {};},abort(){},start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
   const bridge=new BedrockGameplayBridge(client,{gameplayAgent,blockBreaker}).start();
   initialized(client,bridge);
   const call=(primitive,args={},confirmed=true)=>bridge.execute({
