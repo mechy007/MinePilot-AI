@@ -141,6 +141,7 @@ Target contracts:
 - `stop(reason)`: idempotently stop only the work owned by this controller.
 - `replan(reason)`: produce a new bounded plan after a verified state change or recoverable failure.
 - `snapshot()`: read-only state including active task, waiting reason, blocked prerequisites and counters.
+- `tickControlPlane()`: refresh safety/intelligence and optional navigation observations from the explicit control loop; must never be called by a UI/status refresh.
 
 Autopilot states: `disabled`, `starting`, `running`, `waiting_for_eligible_local_task`, `paused_for_safety`, `recovering`, `completed`, `failed`. Lack of a currently eligible task is a waiting state, not proof of task failure. A session safety hold always takes priority over curriculum progression.
 
@@ -196,6 +197,7 @@ Every subsystem must expose a typed status, stable reason code, bounded counters
 - The zero-runtime-ID respawn test now compares position by value. Actual respawn recovery still requires live host/device verification.
 - Autopilot previously disabled immediately when all built-in tasks were temporarily blocked. It now has an explicit waiting state, reports task blockers and advances only via an explicit runtime tick.
 - Learning status reads were previously mutating because `gameplaySkillManifest` called `observe`. Status is now read-only; `tickLearningEngine` is the explicit state-transition entry point used by the bridge.
+- Gameplay snapshots previously ran intelligence decisions and updated optional navigation intents. Those actions now run in `tickControlPlane`; snapshots return cached results.
 - The dashboard/provider now expose the autopilot wait reason and first blocker.
 - The 183 ODYSSEY compositions are still dependency metadata, not 183 runnable Minecraft skills. Keep unimplemented families blocked.
 - The current gameplay agent is bounded and experimental. It is not yet a full Minecraft-playing general agent.
