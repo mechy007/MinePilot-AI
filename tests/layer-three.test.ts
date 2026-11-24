@@ -139,7 +139,8 @@ test('within range of dropped resources does not imply pickup is executed', () =
 
 
 test('hotbar item slots are derived only from full inventory content and fresh slot updates', () => {
-  const p = new LayerThreePlanner(() => 1000);
+  let now = 1000;
+  const p = new LayerThreePlanner(() => now);
   p.observeItemRegistry(registry);
   const items = Array.from({ length: 36 }, () => ({ network_id: 0, count: 0 }));
   items[0] = { network_id: 5, count: 3 };
@@ -152,8 +153,11 @@ test('hotbar item slots are derived only from full inventory content and fresh s
       { slot: 4, itemName: 'minecraft:stone', count: 1, networkId: 9 }
     ]
   });
+  now = 12000;
   assert.equal(p.observeInventorySlot({ window_id: 0, slot: 0,
     item: { network_id: 0, count: 0 } }), true);
+  assert.equal(p.hotbarItems().observedAt, 1000,
+    'a single slot update must not refresh the full hotbar snapshot age');
   assert.deepEqual(p.hotbarItems().slots, [
     { slot: 4, itemName: 'minecraft:stone', count: 1, networkId: 9 }
   ]);
