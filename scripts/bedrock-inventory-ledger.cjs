@@ -62,7 +62,7 @@ function normalizeItem(value) {
   if (value.has_stack_id &&
       (!Number.isInteger(value.stack_id) || value.stack_id < -0x80000000 || value.stack_id > 0x7fffffff))
     return null;
-  if (!value.has_stack_id && value.stack_id !== undefined) return null;
+  if (!value.has_stack_id && value.stack_id !== undefined && value.stack_id !== null) return null;
   if (value.block_runtime_id !== undefined &&
       (!Number.isInteger(value.block_runtime_id) || value.block_runtime_id < 0 || value.block_runtime_id > 0x7fffffff))
     return null;
