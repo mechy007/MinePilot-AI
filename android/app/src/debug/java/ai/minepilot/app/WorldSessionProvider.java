@@ -174,6 +174,14 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putInt("learning_learned", Math.max(0, Math.min(128, learning.optInt("learnedSkillCount", 0))));
                         result.putInt("learning_proposed", Math.max(0, Math.min(64, learning.optInt("proposedSkillCount", 0))));
                         result.putInt("learning_verified_total", Math.max(0, Math.min(10000000, learning.optInt("totalVerifiedNavigationSteps", 0))));
+                        JSONObject odyssey = capabilities.optJSONObject("odysseyLibrary");
+                        if (odyssey != null) {
+                            result.putInt("odyssey_total", Math.max(0, Math.min(183, odyssey.optInt("total", 0))));
+                            result.putInt("odyssey_ready", Math.max(0, Math.min(183, odyssey.optInt("ready", 0))));
+                            result.putInt("odyssey_partial", Math.max(0, Math.min(183, odyssey.optInt("partial", 0))));
+                            result.putInt("odyssey_manual", Math.max(0, Math.min(183, odyssey.optInt("manual", 0))));
+                            result.putInt("odyssey_blocked", Math.max(0, Math.min(183, odyssey.optInt("blocked", 0))));
+                        }
                         result.putInt("learning_legacy_records", Math.max(0, Math.min(128, learning.optInt("legacyVoyagerRecordCountMigrated", 0))));
                         JSONObject localAutopilot = learning.optJSONObject("localAutopilot");
                         if (localAutopilot != null) {
