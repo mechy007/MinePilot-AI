@@ -213,11 +213,13 @@ class BedrockInventoryLedger {
         ? null : this.registry.get(entry.item.networkId) ?? null,
       observedAt: entry.observedAt, source: entry.source
     }));
+    const occupied = items.filter(item => !item.empty);
+    const unresolvedItemCount = occupied.filter(item => item.itemName === null).length;
     return {
-      known: true, fresh, reason: fresh ? 'server_inventory_snapshot' : 'player_inventory_snapshot_stale',
+      known: true, fresh, registryKnown: this.registry.size > 0, unresolvedItemCount,
+      reason: fresh ? 'server_inventory_snapshot' : 'player_inventory_snapshot_stale',
       observedAt: window.fullObservedAt, ageMs: age, slotCount: window.slotCount,
-      occupied: items.filter(item => !item.empty).length,
-      items, revision: window.revision, generation: window.generation
+      occupied: occupied.length, items, revision: window.revision, generation: window.generation
     };
   }
   snapshot() {
