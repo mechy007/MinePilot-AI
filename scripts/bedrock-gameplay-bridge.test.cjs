@@ -1126,8 +1126,9 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
     primitive,args,confirmed
   });
   assert.equal(call('exploreUntil',{},false).reason,'confirmation_required');
-  assert.equal(call('exploreUntil').status,'accepted');
-  assert.equal(call('exploreUntil').awaitingServerConfirmation,true);
+  const explore = call('exploreUntil');
+  assert.equal(explore.status,'accepted');
+  assert.equal(explore.awaitingServerConfirmation,true);
   assert.deepEqual(starts.at(-1),{confirmed:true,goal:'explore'});
   const goto = call('goto',{targetPosition:{x:9,y:64,z:10}});
   assert.equal(goto.status,'accepted');
