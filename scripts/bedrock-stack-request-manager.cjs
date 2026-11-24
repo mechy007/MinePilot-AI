@@ -10,9 +10,7 @@ const LEGACY_ACTION_IDS_1_26_60 = Object.freeze({
 const COUNTED = new Set(['take','place','drop','destroy','consume']);
 const WITH_SOURCE = new Set(['take','place','swap','drop','destroy','consume']);
 const WITH_DESTINATION = new Set(['take','place','swap']);
-const EXECUTABLE_ACTION_TYPES = new Set([
-  'take','place','swap','drop','destroy','consume','craft_recipe'
-]);
+const EXECUTABLE_ACTION_TYPES = new Set(['take','place','swap','craft_recipe']);
 
 class BedrockStackRequestError extends Error {
   constructor(message, details = {}) {
