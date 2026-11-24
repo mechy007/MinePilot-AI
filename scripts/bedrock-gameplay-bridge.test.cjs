@@ -1160,3 +1160,43 @@ test('StartGame inventory transaction negotiation is tracked without assuming a 
   assert.equal(unknown.snapshot().inventoryTransactionMode, 'unknown');
   unknown.stop();
 });
+
+
+test('tool equip selects only a server-observed hotbar slot and waits for matching mob equipment', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  bridge.layerThree = { hotbarItems: () => ({ known: true, observedAt: now, slots: [
+    { slot: 2, itemName: 'minecraft:iron_axe', count: 1, networkId: 7 },
+    { slot: 5, itemName: 'minecraft:stone', count: 32, networkId: 9 }
+  ] }) };
+  const call = primitive => bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'equip-tool', action: 'odyssey_execute', primitive, args: {}, confirmed: true });
+  const result = call('equipAxe');
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.awaitingServerConfirmation, true);
+  assert.deepEqual(client.sent.at(-1), { packet: 'player_hotbar',
+    value: { selected_slot: 2, window_id: 0, select_slot: true } });
+  assert.equal(bridge.snapshot().hotbarSelection.pending.status, 'awaiting_server_confirmation');
+  client.emit('mob_equipment', { runtime_entity_id: 123n, selected_slot: 2, slot: 2,
+    item: { network_id: 7, count: 1 } });
+  assert.equal(bridge.snapshot().hotbarSelection.pending, null);
+  assert.equal(bridge.snapshot().hotbarSelection.last.status, 'verified');
+  assert.equal(bridge.snapshot().hotbarSelection.last.itemName, 'minecraft:iron_axe');
+  bridge.stop();
+});
+
+test('tool equip fails closed without fresh hotbar inventory or a matching tool', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client).start();
+  initialized(client, bridge);
+  bridge.layerThree = { hotbarItems: () => ({ known: false, observedAt: null, slots: [] }) };
+  const call = primitive => bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'equip-tool-blocked', action: 'odyssey_execute', primitive, args: {}, confirmed: true });
+  assert.equal(call('equipPickaxe').reason, 'fresh_hotbar_inventory_required');
+  bridge.layerThree = { hotbarItems: () => ({ known: true, observedAt: Date.now(), slots: [] }) };
+  assert.equal(call('equipPickaxe').reason, 'matching_tool_not_in_hotbar');
+  assert.equal(client.sent.length, 0);
+  bridge.stop();
+});
