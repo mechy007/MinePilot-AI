@@ -8,6 +8,7 @@
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
+const { gameplaySkillManifest } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
@@ -630,6 +631,7 @@ class BedrockGameplayBridge {
       ...(this.gameplayAgent ? { gameplayAgent: this.gameplayAgent.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
       firstPerson: buildFirstPersonScene(this),
+      gameplaySkills: gameplaySkillManifest(this),
       ...(this.intelligence ? { intelligence: this.intelligenceTick() } : {}),
       ...(this.lifeSenses ? { life: this.lifeSenses.snapshot({
         position:this.position,dimension:this.dimension,spawned:this.spawned,
