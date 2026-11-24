@@ -1167,7 +1167,7 @@ test('tool equip selects only a server-observed hotbar slot and waits for matchi
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
   initialized(client, bridge);
-  bridge.layerThree = { hotbarItems: () => ({ known: true, observedAt: now, slots: [
+  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: true, observedAt: now, slots: [
     { slot: 2, itemName: 'minecraft:iron_axe', count: 1, networkId: 7 },
     { slot: 5, itemName: 'minecraft:stone', count: 32, networkId: 9 }
   ] }) };
@@ -1191,11 +1191,11 @@ test('tool equip fails closed without fresh hotbar inventory or a matching tool'
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client).start();
   initialized(client, bridge);
-  bridge.layerThree = { hotbarItems: () => ({ known: false, observedAt: null, slots: [] }) };
+  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: false, observedAt: null, slots: [] }) };
   const call = primitive => bridge.execute({ version: 'minepilot.gameplay.v1',
     requestId: 'equip-tool-blocked', action: 'odyssey_execute', primitive, args: {}, confirmed: true });
   assert.equal(call('equipPickaxe').reason, 'fresh_hotbar_inventory_required');
-  bridge.layerThree = { hotbarItems: () => ({ known: true, observedAt: Date.now(), slots: [] }) };
+  bridge.layerThree = { reset() {}, hotbarItems: () => ({ known: true, observedAt: Date.now(), slots: [] }) };
   assert.equal(call('equipPickaxe').reason, 'matching_tool_not_in_hotbar');
   assert.equal(client.sent.length, 0);
   bridge.stop();
