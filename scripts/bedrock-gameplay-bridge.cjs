@@ -502,6 +502,7 @@ class BedrockGameplayBridge {
     };
   }
   selectHotbarTool(primitive) {
+    this.hotbarSelectionSnapshot();
     const suffix = ({ equipAxe: '_axe', equipHoe: '_hoe',
       equipPickaxe: '_pickaxe', equipSword: '_sword' })[primitive];
     if (!suffix) return { status: 'rejected', reason: 'unsupported_hotbar_tool' };
@@ -524,6 +525,7 @@ class BedrockGameplayBridge {
     const pending = { primitive, itemName: candidate.itemName, networkId: candidate.networkId,
       slot: candidate.slot, requestedAt: this.clock(), playerHotbarAckAt: null,
       status: 'awaiting_server_confirmation' };
+    this.lastHotbarSelection = null;
     this.pendingHotbarSelection = pending;
     try {
       this.client.queue('player_hotbar', {
