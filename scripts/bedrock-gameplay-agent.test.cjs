@@ -244,3 +244,24 @@ test('session bridge command rejects unconfirmed start and stops independent age
   assert.equal(snap.gameplayAgent.serverVerifiedSteps,0);
   bridge.stop();
 });
+
+test('new hostile preempts an unconfirmed move before selecting a verified retreat',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'explore'});
+  f.tick();
+  assert.equal(f.agent.snapshot().attemptedSteps,1);
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,0);
+  f.changeLife({nearbyEntities:[{hostile:true,distance:2,
+    position:{x:10.5,y:65,z:8.5}}]});
+  f.tick();
+  assert.equal(f.agent.snapshot().phase,'evading');
+  assert.equal(f.agent.awaiting,null);
+  assert.ok(f.stopCount>=1,'pending movement pulse was interrupted');
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,0,
+    'preempted movement must not count as verified');
+  f.advance(300);
+  f.tick();
+  assert.equal(f.sent.length,2);
+  assert.equal(f.agent.snapshot().lastPlan.kind,'retreat');
+  f.agent.stop();
+});
