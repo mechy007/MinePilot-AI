@@ -117,6 +117,18 @@ function stopLearningTask(world, reason) {
   return engine.stop(world, reason);
 }
 
+function startLocalAutopilot(world, options = {}) {
+  const engine = learningEngineFor(world);
+  if (!engine) return { status: 'rejected', reason: 'learning_engine_unavailable' };
+  return engine.enableAutopilot(world, evaluateCapabilities(world), options);
+}
+
+function stopLocalAutopilot(world, reason) {
+  const engine = learningEngineFor(world);
+  if (!engine) return { status: 'rejected', reason: 'learning_engine_unavailable' };
+  return engine.disableAutopilot(world, reason);
+}
+
 function proposeLearningSkill(world, proposal) {
   const engine = learningEngineFor(world);
   if (!engine) return { status: 'rejected', reason: 'learning_engine_unavailable' };
@@ -129,5 +141,7 @@ module.exports = {
   learningEngineFor,
   startLearningTask,
   stopLearningTask,
+  startLocalAutopilot,
+  stopLocalAutopilot,
   proposeLearningSkill
 };
