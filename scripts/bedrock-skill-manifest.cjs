@@ -135,6 +135,12 @@ function learningEngineFor(world) {
   return engine;
 }
 
+function tickLearningEngine(world) {
+  const engine = learningEngineFor(world);
+  if (!engine) return null;
+  return engine.observe(world, evaluateCapabilities(world));
+}
+
 function gameplaySkillManifest(world) {
   const manifest = evaluateCapabilities(world);
   const engine = learningEngineFor(world);
@@ -142,7 +148,9 @@ function gameplaySkillManifest(world) {
   return {
     ...manifest,
     odysseyLibrary: summarizeOdysseyLibrary(odysseyCapabilities),
-    learning: engine ? engine.observe(world, manifest) : {
+    // Reading a manifest is observational only. Curriculum state changes happen
+    // exclusively on the bridge's explicit runtime tick.
+    learning: engine ? engine.snapshot(world, manifest) : {
       version: 'minepilot.voyager-odyssey.v1',
       mode: 'unavailable',
       nextCurriculumTask: null,
@@ -188,6 +196,7 @@ function proposeLearningSkill(world, proposal) {
 
 module.exports = {
   gameplaySkillManifest,
+  tickLearningEngine,
   evaluateCapabilities,
   learningEngineFor,
   startLearningTask,
