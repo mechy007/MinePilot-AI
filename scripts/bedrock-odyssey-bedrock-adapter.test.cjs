@@ -30,6 +30,7 @@ test('observation and bounded navigation primitives inherit only advertised Bedr
   assert.equal(evaluatePrimitive('goto',
     { navigation: { state: 'experimental', reason: 'server_verified_movement' } }).status, 'experimental');
   assert.equal(evaluatePrimitive('goto', {}).status, 'blocked');
+  assert.equal(evaluatePrimitive('checkBlocksAround', { spatial_observation: 'partial' }).status, 'partial');
   assert.equal(evaluatePrimitive('mineBlock',
     { mine: { state: 'manual_experimental', reason: 'explicit_single_block_confirmation' } }).status, 'manual');
 });
