@@ -83,6 +83,7 @@ class BedrockGameplayBridge {
     this.movementAuthority = null;
     this.movementAuthoritySource = 'unknown';
     this.serverTick = null;
+    this.serverTickObservedAt = null;
     this.receivedChunks = new Map();
     this.players = new Map();
     this.playerNames = new Map();
@@ -196,6 +197,7 @@ class BedrockGameplayBridge {
       (Number.isInteger(packet.rewind_history_size) && packet.rewind_history_size > 0 ? 2 : 1);
     this.movementAuthoritySource = explicit == null ? 'protocol_1_26_default' : 'explicit';
     this.serverTick = validTick(packet.current_tick);
+    this.serverTickObservedAt = this.serverTick!=null?this.clock():null;
     this.players.clear();
     this.receivedChunks.clear();
     this.lastWorldAt = this.clock();
@@ -497,7 +499,10 @@ class BedrockGameplayBridge {
     if (Number.isFinite(packet.rotation?.z)) this.yaw = packet.rotation.z;
     this.layerOne?.onServerPosition(pos);
     const tick = validTick(packet.tick);
-    if (tick !== null && (this.serverTick == null || tick > this.serverTick)) this.serverTick = tick;
+    if (tick !== null && (this.serverTick == null || tick > this.serverTick)) {
+      this.serverTick = tick;
+      this.serverTickObservedAt = this.clock();
+    }
     this.movement?.correct?.(pos, tick);
   }
   addPlayer(packet) {
@@ -532,6 +537,7 @@ class BedrockGameplayBridge {
     this.position = null;
     this.lastServerPositionAt = null;
     this.serverTick = null;
+    this.serverTickObservedAt = null;
     this.movementAuthority = null;
     this.movementAuthoritySource = 'unknown';
     this.spawned = false;
