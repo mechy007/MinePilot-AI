@@ -278,3 +278,18 @@ test('local autopilot requires one explicit enable and can be stopped immediatel
   assert.equal(state.activeTask, null);
   assert.equal(state.recentRuns.at(-1).outcome, 'interrupted');
 });
+
+
+test('local autopilot halts instead of advancing after an unverified task outcome', () => {
+  const { world, setAgent } = worldFixture();
+  const engine = new BedrockOpenWorldLearningEngine({ sessionId: 'offline-failure-session' });
+  const manifest = gameplaySkillManifest(world);
+  assert.equal(engine.enableAutopilot(world, manifest, { confirmed: true }).status, 'accepted');
+  setAgent({ active: false, phase: 'idle', reason: 'server_movement_not_confirmed',
+    serverVerifiedSteps: 0 });
+  const state = engine.observe(world, manifest);
+  assert.equal(state.localAutopilot.enabled, false);
+  assert.equal(state.localAutopilot.reason, 'stopped_after_unverified_task');
+  assert.equal(state.activeTask, null);
+  assert.equal(state.recentRuns.at(-1).outcome, 'failed');
+});
