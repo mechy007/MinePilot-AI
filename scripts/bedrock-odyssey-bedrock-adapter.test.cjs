@@ -84,3 +84,12 @@ test('live primitive executor declarations are explicit and do not promote compo
 assert.equal(evaluatePrimitive('checkBlockAbove', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
 assert.equal(evaluatePrimitive('checkBlocksAround', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
 assert.equal(evaluatePrimitive('getPlanksCount', { inventory_read: 'ready' }).executor, 'odyssey_observe');
+test('four tool equip primitives are bounded hotbar-selection executors; armor remains blocked', () => {
+  for (const primitive of ['equipAxe','equipHoe','equipPickaxe','equipSword']) {
+    const result = evaluatePrimitive(primitive, { hotbar_selection: 'experimental' });
+    assert.equal(result.status, 'experimental');
+    assert.equal(result.executor, 'odyssey_execute');
+  }
+  const armor = evaluatePrimitive('equipArmor', { equip_items: 'ready' });
+  assert.equal(armor.status, 'blocked');
+});
