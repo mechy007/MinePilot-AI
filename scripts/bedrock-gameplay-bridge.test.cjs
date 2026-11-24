@@ -823,6 +823,41 @@ test('Bedrock input ticks stay monotonic across separate diagnostic commands and
 });
 
 
+test('Bedrock Dedicated Server zero runtime-id respawn packets are accepted for the local player', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client).start();
+  initialized(client, bridge);
+
+  client.emit('update_attributes', {
+    runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 0 }]
+  });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'dead_waiting_for_server');
+
+  // BDS has been observed sending zero in the Respawn packet runtime-ID field.
+  client.emit('respawn', {
+    runtime_entity_id: 0n, state: 0, position: origin
+  });
+  assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn']);
+  assert.equal(client.sent[0].value.state, 2);
+
+  client.emit('respawn', {
+    runtime_entity_id: '0', state: 1, position: { x: 12.5, y: 70, z: 8.5 }
+  });
+  assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn', 'player_action']);
+  assert.equal(client.sent[1].value.action, 'respawn');
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'respawn_action_sent');
+
+  client.emit('update_attributes', {
+    runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 20 }]
+  });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
+  assert.equal(bridge.snapshot().respawnRecovery.recovered, 1);
+  assert.equal(bridge.snapshot().position, { x: 12.5, y: 70, z: 8.5 });
+  bridge.stop();
+});
+
 test('spawn completes loading gate exactly once and does not claim combat/physics readiness', () => {
   const client=new Client();
   const bridge=new BedrockGameplayBridge(client).start();
