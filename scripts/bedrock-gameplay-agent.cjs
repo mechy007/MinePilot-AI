@@ -22,7 +22,7 @@ const MAX_FAILURES=2;
 const ACK_MS=4500;
 const POSITION_TTL_MS=7000;
 const MIN_PROGRESS=0.08;
-const GOALS=new Set(['survive','explore','follow','return_home','gather']);
+const GOALS=new Set(['survive','explore','follow','return_home','gather','goto']);
 const FOOD_ITEMS=new Set(['minecraft:apple','minecraft:bread','minecraft:carrot',
   'minecraft:potato','minecraft:baked_potato','minecraft:cooked_beef',
   'minecraft:cooked_porkchop','minecraft:cooked_chicken','minecraft:cooked_mutton',
@@ -54,6 +54,7 @@ class BedrockGameplayAgent {
     this.recentCells=new Map();
     this.nextActionAt=0;
     this.subgoal=null;
+    this.targetPosition=null;
     this.collected=0;
     this.ignoredDrops=new Map();
   }
@@ -100,6 +101,15 @@ class BedrockGameplayAgent {
       select=world.layerTwo?.returnHome(world.gameplayWorld());
       if(select?.status!=='accepted')
         return select??{status:'rejected',reason:'home_not_marked'};
+    } else if(opts.goal==='goto') {
+      if(!finite(opts.targetPosition) ||
+         distance(world.position,opts.targetPosition)>16)
+        return {status:'rejected',reason:'goto_target_must_be_within_16_blocks'};
+      const route=world.routePlanner(world.terrain,world.dimension,world.position,
+        opts.targetPosition,{radius:16});
+      if(route?.status!=='route_found'||!finite(route.waypoint)||
+         !Array.isArray(route.path)||route.path.length<2)
+        return {status:'rejected',reason:route?.reason??'goto_route_not_verified'};
     } else if(opts.goal==='gather') {
       const preview=world.layerThree?.preview(world.gameplayWorld());
       if(!preview||preview.status==='idle'||!preview.itemName)
@@ -115,7 +125,7 @@ class BedrockGameplayAgent {
     this.attempted=0;this.verified=0;this.failures=0;
     this.awaiting=null;this.lastVerifiedAt=null;this.lastPlan=null;
     this.nextActionAt=0;this.recentCells.clear();
-    this.subgoal=null;this.collected=0;this.ignoredDrops.clear();
+    this.subgoal=null;this.targetPosition=opts.goal==='goto'?copy(opts.targetPosition):null;this.collected=0;this.ignoredDrops.clear();
     world.intelligence.setGoal(opts.goal);
     this.interval=this.setInterval(()=>this.pulse(),INTERVAL_MS);
     return {status:'accepted',reason:'gameplay_agent_enabled_not_yet_moving'};
@@ -129,7 +139,7 @@ class BedrockGameplayAgent {
     this.phase='idle';this.reason=reason;this.nextActionAt=0;
     if(wasActive&&this.subgoal&&world?.layerThree?.cancel)
       world.layerThree.cancel();
-    this.subgoal=null;
+    this.subgoal=null;this.targetPosition=null;
     if(wasActive&&world?.movement?.snapshot?.()?.active)
       world.movement.stop('gameplay_agent_stopped');
     if(wasActive&&world?.intelligence)world.intelligence.setGoal('standby');
@@ -260,6 +270,18 @@ class BedrockGameplayAgent {
   targetFromGoal(world) {
     if(this.goal==='survive')return this.survivalGoal(world);
     const state=world.gameplayWorld();
+    if(this.goal==='goto') {
+      if(!finite(this.targetPosition))
+        return {status:'paused',reason:'goto_target_missing'};
+      if(distance(world.position,this.targetPosition)<=0.8)
+        return {status:'complete',reason:'server_position_reached_goto_target'};
+      const route=world.routePlanner(world.terrain,world.dimension,world.position,
+        this.targetPosition,{radius:16});
+      return route?.status==='route_found'&&finite(route.waypoint)&&
+        Array.isArray(route.path)&&route.path.length>=2
+        ? {status:'ready',waypoint:route.waypoint,reason:'bounded_goto_route_verified'}
+        : {status:'paused',reason:route?.reason??'goto_route_not_verified'};
+    }
     if(this.goal==='explore') {
       const waypoint=this.localTarget(world);
       return waypoint?{status:'ready',waypoint,reason:'known_walkable_exploration'}:
@@ -448,6 +470,7 @@ class BedrockGameplayAgent {
       execution:this.active?'experimental_verified_movement':'inactive',
       collectedDrops:this.collected,
       currentSubgoal:this.subgoal?{kind:this.subgoal.kind,item:this.subgoal.item}:null,
+      targetPosition:this.targetPosition?{...this.targetPosition}:null,
       autonomousCombat:false,autonomousMining:false,autonomousEating:false,
       serverVerified:this.verified>0};
   }
