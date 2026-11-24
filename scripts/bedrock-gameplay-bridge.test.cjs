@@ -1144,6 +1144,7 @@ test('StartGame inventory transaction negotiation is tracked without assuming a 
   enabledClient.emit('start_game', { ...start, enable_item_stack_net_manager: true });
   assert.equal(enabled.snapshot().itemStackNetManager, true);
   assert.equal(enabled.snapshot().inventoryTransactionMode, 'server_authoritative');
+  assert.equal(enabled.snapshot().stackRequests.enabled, true);
   enabled.stop();
 
   const legacyClient = new Client();
@@ -1151,6 +1152,7 @@ test('StartGame inventory transaction negotiation is tracked without assuming a 
   legacyClient.emit('start_game', { ...start, enable_item_stack_net_manager: false });
   assert.equal(legacy.snapshot().itemStackNetManager, false);
   assert.equal(legacy.snapshot().inventoryTransactionMode, 'legacy');
+  assert.equal(legacy.snapshot().stackRequests.enabled, false);
   legacy.stop();
 
   const unknownClient = new Client();
@@ -1158,6 +1160,7 @@ test('StartGame inventory transaction negotiation is tracked without assuming a 
   unknownClient.emit('start_game', start);
   assert.equal(unknown.snapshot().itemStackNetManager, null);
   assert.equal(unknown.snapshot().inventoryTransactionMode, 'unknown');
+  assert.equal(unknown.snapshot().stackRequests.enabled, false);
   unknown.stop();
 });
 
