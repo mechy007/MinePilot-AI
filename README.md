@@ -225,6 +225,8 @@ For deeper diagnostics see [Android app test guide](docs/ANDROID-APP-STATUS.md) 
 - [Gameplay planning integration](docs/CRAFTMIND_GAMEPLAY_INTEGRATION.md)
 - [Voyager + ODYSSEY Bedrock-native learning integration](docs/VOYAGER_ODYSSEY_INTEGRATION.md)
   - Includes an optional, user-enabled local autopilot that sequences supported built-in tasks without external AI prompts or Kaggle.
+- [Complete ODYSSEY skill catalog and Bedrock compatibility](docs/ODYSSEY_SKILL_LIBRARY.md)
+  - Includes the 183-skill metadata catalog, dependency graph, runtime compatibility evaluation and Android telemetry.
 
 ## Contributions and issue reports
 
