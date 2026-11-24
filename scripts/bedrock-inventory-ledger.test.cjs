@@ -61,6 +61,7 @@ test('incremental slot updates preserve full-snapshot freshness and stack identi
   const updated = ledger.getSlot({ window_id: 0, container, slot: 2 });
   assert.equal(updated.item.stackId, 32);
   assert.equal(updated.source, 'incremental');
+  assert.ok(updated.slotRevision > 1);
   assert.equal(updated.fresh, true);
   assert.equal(updated.fullSnapshotFresh, true);
   now = 7000;
@@ -129,6 +130,8 @@ test('player inventory swap planning requires fresh resolved server stacks and p
   assert.equal(plan.executable, false,
     'a plan is not permission to dispatch before the transaction executor exists');
   assert.equal(plan.action.type_id, 'swap');
+  assert.equal(plan.sourceSlotRevision, 1);
+  assert.equal(plan.destinationSlotRevision, 1);
   assert.deepEqual(plan.action.source, {
     slot_type: { container_id: 'hotbar_and_inventory' }, slot: 0, stack_id: 41
   });
