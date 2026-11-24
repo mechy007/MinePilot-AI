@@ -225,11 +225,10 @@ class BedrockInventoryLedger {
       revision: this.revision, generation: this.generation,
       windows: Array.from(this.windows.values()).map(window => ({
         windowId: window.windowId, container: { ...window.container },
-        slotCount: window.slotCount, fullObservedAt: window.fullObservedAt,
-        lastSlotObservedAt: window.lastSlotObservedAt, revision: window.revision,
-        slots: window.slots.map(entry => ({
-          slot: entry.slot, item: copyItem(entry.item), observedAt: entry.observedAt, source: entry.source
-        }))
+        slotCount: window.slotCount,
+        occupied: window.slots.filter(entry => !entry.item.empty).length,
+        fullObservedAt: window.fullObservedAt,
+        lastSlotObservedAt: window.lastSlotObservedAt, revision: window.revision
       })),
       player: this.playerInventory(),
       lastError: this.lastError
