@@ -6,12 +6,19 @@ const { buildBedrockPrimitivePlan, evaluatePrimitive, validatePrimitiveCoverage 
 const BY_ID = new Map(CATALOG.compositions.map(skill => [skill.id, skill]));
 const ALLOWED_STATES = new Set(['ready','experimental','partial','manual_experimental','unsupported','preview_only','protocol_only','blocked']);
 
+const BEDROCK_UNSUPPORTED_CAPABILITIES = new Set([
+  'block_placement','breed_animals','bucket_use','collect_resources','combat',
+  'container_transfer','cook','craft','equip_items','farming','fishing',
+  'shear_animals','smelt','vehicle_control'
+]);
 function stateOf(capabilities, name) {
+  if (BEDROCK_UNSUPPORTED_CAPABILITIES.has(name)) return 'unsupported';
   const value = capabilities?.[name];
   const state = typeof value === 'string' ? value : value?.state;
   return ALLOWED_STATES.has(state) ? state : 'blocked';
 }
 function reasonOf(capabilities, name) {
+  if (BEDROCK_UNSUPPORTED_CAPABILITIES.has(name)) return 'bedrock_action_executor_not_implemented';
   const value = capabilities?.[name];
   return typeof value === 'object' && typeof value?.reason === 'string'
     ? value.reason.slice(0, 96) : 'capability_not_advertised';
