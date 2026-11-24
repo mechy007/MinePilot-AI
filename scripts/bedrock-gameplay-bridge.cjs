@@ -7,13 +7,14 @@
  */
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
+const { executeBedrockObservation } = require('./bedrock-odyssey-observation-executor.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 const { gameplaySkillManifest, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -692,6 +693,11 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: preflight.reason };
     }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if (raw.action === 'odyssey_observe') {
+      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+      if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
+      return executeBedrockObservation(this, raw.primitive, raw.args ?? {});
+    }
     if (raw.action === 'agent_stop') {
       return this.gameplayAgent?.stop('user_stopped') ??
         {status:'rejected',reason:'gameplay_agent_unavailable'};
