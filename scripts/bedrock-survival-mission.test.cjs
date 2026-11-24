@@ -72,10 +72,11 @@ test('survival mission seeks observed dropped food using only existing validated
   assert.equal(f.agent.snapshot().currentSubgoal.item,'minecraft:apple');
   assert.equal(f.agent.snapshot().serverVerifiedSteps,0);
   f.setCollected(true);
-  f.agent.awaiting=null;
+  assert.ok(f.agent.awaiting,'server pickup can arrive while waypoint is pending');
   f.advance(1000);
   f.agent.pulse();
   assert.equal(f.agent.snapshot().collectedDrops,1);
+  assert.equal(f.agent.awaiting,null,'receipt preempts movement waiter');
   assert.equal(f.cancelled,1);
   assert.equal(f.agent.snapshot().currentSubgoal,null);
   assert.equal(f.agent.snapshot().autonomousEating,false);
