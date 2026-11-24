@@ -7,6 +7,12 @@ on:
       - scripts/stage-android-node-smoke.sh
       - 'scripts/stage-android-bedrock-sdk.*'
       - scripts/android-node-bedrock-smoke.cjs
+      - scripts/bedrock-gameplay-bridge.cjs
+      - scripts/bedrock-gameplay-bridge.test.cjs
+      - scripts/bedrock-stack-request-manager.cjs
+      - scripts/bedrock-stack-request-manager.test.cjs
+      - scripts/bedrock-odyssey-observation-executor.cjs
+      - scripts/bedrock-odyssey-observation-executor.test.cjs
       - 'scripts/android-xbox-auth-probe*.cjs'
       - 'scripts/android-friend-world-session*.cjs'
       - src/connection/prismarine-world-client.ts
