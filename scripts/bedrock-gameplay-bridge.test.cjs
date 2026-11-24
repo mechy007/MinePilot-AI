@@ -1336,6 +1336,9 @@ test('bridge mirrors full Bedrock inventory content and incremental slots withou
   assert.equal(snapshot.inventory.player.fresh, true);
   assert.equal(snapshot.inventory.player.items[0].itemName, 'minecraft:oak_log');
   assert.equal(snapshot.inventory.player.items[0].stackId, 22);
+  assert.equal(odysseyCapabilityStates(bridge, {
+    worldReady: true, localNavigationReady: false, skills: []
+  }).inventory_read.state, 'ready');
 
   now = 12000;
   client.emit('inventory_slot', { window_id: 0, slot: 0,
@@ -1345,5 +1348,8 @@ test('bridge mirrors full Bedrock inventory content and incremental slots withou
   assert.equal(snapshot.inventory.player.fresh, false,
     'an incremental slot update must not renew the complete inventory snapshot');
   assert.equal(snapshot.inventory.player.items[0].stackId, 23);
+  assert.equal(odysseyCapabilityStates(bridge, {
+    worldReady: true, localNavigationReady: false, skills: []
+  }).inventory_read.state, 'partial');
   bridge.stop();
 });
