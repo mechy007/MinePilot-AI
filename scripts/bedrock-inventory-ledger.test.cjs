@@ -1,0 +1,114 @@
+'use strict';
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { BedrockInventoryLedger, normalizeContainer, normalizeItem } = require('./bedrock-inventory-ledger.cjs');
+
+const container = { container_id: 'hotbar_and_inventory' };
+const item = (network_id, count = 1, stack_id = 7) => ({
+  network_id, count, metadata: 0, has_stack_id: network_id !== 0,
+  ...(network_id === 0 ? {} : { stack_id }), block_runtime_id: 0
+});
+const full = (input, window_id = 0, containerValue = container) => ({
+  window_id, input, container: containerValue, storage_item: item(0, 0)
+});
+
+test('decodes Bedrock 1.26.60 ItemV4 stack IDs and full container identity', () => {
+  assert.deepEqual(normalizeContainer({ container_id: 'container', dynamic_container_id: 3 }),
+    { container_id: 'container', dynamic_container_id: 3 });
+  assert.equal(normalizeContainer({ container_id: 'not_a_protocol_container' }), null);
+  assert.deepEqual(normalizeItem(item(5, 12, 41)), {
+    empty: false, networkId: 5, count: 12, metadata: 0,
+    hasStackId: true, stackId: 41, blockRuntimeId: 0
+  });
+  assert.equal(normalizeItem(item(0, 0)).empty, true);
+  assert.equal(normalizeItem({ network_id: 5, count: 1, metadata: 0, has_stack_id: true }), null);
+  assert.equal(normalizeItem({ network_id: 5, count: 1, metadata: 0,
+    has_stack_id: false, stack_id: 99 }), null === undefined ? false : false);
+});
+
+test('full inventory snapshot distinguishes known empty slots from unknown inventory', () => {
+  let now = 1000;
+  const ledger = new BedrockInventoryLedger({ clock: () => now });
+  assert.equal(ledger.playerInventory().known, false);
+  const slots = Array.from({ length: 36 }, () => item(0, 0));
+  slots[0] = item(5, 12, 41);
+  slots[9] = item(8, 4, 44);
+  assert.equal(ledger.observeItemRegistry({ itemstates: [
+    { runtime_id: 5, name: 'minecraft:oak_log' },
+    { runtime_id: 8, name: 'minecraft:stick' }
+  ] }), true);
+  assert.equal(ledger.observeContent(full(slots)), true);
+  const inventory = ledger.playerInventory();
+  assert.equal(inventory.known, true);
+  assert.equal(inventory.fresh, true);
+  assert.equal(inventory.slotCount, 36);
+  assert.equal(inventory.occupied, 2);
+  assert.equal(inventory.items[0].itemName, 'minecraft:oak_log');
+  assert.equal(inventory.items[9].stackId, 44);
+  assert.equal(inventory.items[1].empty, true);
+  ledger.reset();
+  assert.equal(ledger.playerInventory().known, false);
+});
+
+test('incremental slot updates preserve full-snapshot freshness and stack identity', () => {
+  let now = 1000;
+  const ledger = new BedrockInventoryLedger({ clock: () => now, maxAgeMs: 5000 });
+  const slots = Array.from({ length: 36 }, () => item(0, 0));
+  slots[2] = item(5, 3, 31);
+  ledger.observeContent(full(slots));
+  now = 4000;
+  assert.equal(ledger.observeSlot({ window_id: 0, slot: 2, item: item(5, 2, 32) }), true);
+  const updated = ledger.getSlot({ window_id: 0, container, slot: 2 });
+  assert.equal(updated.item.stackId, 32);
+  assert.equal(updated.source, 'incremental');
+  assert.equal(updated.fresh, true);
+  assert.equal(updated.fullSnapshotFresh, true);
+  now = 7000;
+  const stale = ledger.playerInventory();
+  assert.equal(stale.known, true);
+  assert.equal(stale.fresh, false, 'slot delta must not renew the full inventory snapshot');
+  assert.equal(ledger.getSlot({ window_id: 0, container, slot: 2 }).fresh, true,
+    'the changed slot has its own freshness timestamp');
+});
+
+test('container snapshots are isolated by window and dynamic container ID', () => {
+  const ledger = new BedrockInventoryLedger();
+  const chest = { container_id: 'container', dynamic_container_id: 5 };
+  const otherChest = { container_id: 'container', dynamic_container_id: 6 };
+  assert.equal(ledger.observeContent(full([item(5, 2, 10)], 1, chest)), true);
+  assert.equal(ledger.observeContent(full([item(8, 4, 11)], 1, otherChest)), true);
+  assert.equal(ledger.getSlot({ window_id: 1, container: chest, slot: 0 }).item.networkId, 5);
+  assert.equal(ledger.getSlot({ window_id: 1, container: otherChest, slot: 0 }).item.networkId, 8);
+  assert.equal(ledger.observeSlot({ window_id: 1, slot: 0, item: item(9, 1, 12) }), false,
+    'container-less slot delta is rejected when its window is ambiguous');
+  assert.equal(ledger.observeSlot({ window_id: 1, container: chest, slot: 0, item: item(9, 1, 12) }), true);
+  assert.equal(ledger.getSlot({ window_id: 1, container: chest, slot: 0 }).item.networkId, 9);
+  assert.equal(ledger.getSlot({ window_id: 1, container: otherChest, slot: 0 }).item.networkId, 8);
+});
+
+test('malformed and out-of-range packets are rejected atomically', () => {
+  const ledger = new BedrockInventoryLedger();
+  assert.equal(ledger.observeContent(full([item(5, 1, 7), { network_id: 5, count: 0 }])), false);
+  assert.equal(ledger.playerInventory().known, false);
+  assert.equal(ledger.observeContent({ window_id: 0, input: [item(5)], container: { container_id: 'unknown' } }), false);
+  assert.equal(ledger.observeContent(full([item(5)])), true);
+  assert.equal(ledger.observeSlot({ window_id: 0, slot: 9, item: item(5) }), false);
+  assert.equal(ledger.observeSlot({ window_id: 0, slot: 0, item: { network_id: 5, count: 1,
+    metadata: 0, has_stack_id: true } }), false);
+  assert.equal(ledger.snapshot().lastError, 'invalid_inventory_item');
+});
+
+test('inventory windows remain bounded and session reset invalidates all old slot identities', () => {
+  const ledger = new BedrockInventoryLedger();
+  for (let id = 1; id <= 20; id++) {
+    assert.equal(ledger.observeContent(full([item(id, 1, id)], id, { container_id: 'container',
+      dynamic_container_id: id })), true);
+  }
+  assert.ok(ledger.snapshot().windows.length <= 16);
+  const generation = ledger.snapshot().generation;
+  ledger.reset();
+  assert.equal(ledger.snapshot().windows.length, 0);
+  assert.equal(ledger.snapshot().generation, generation + 1);
+  assert.equal(ledger.getSlot({ window_id: 1,
+    container: { container_id: 'container', dynamic_container_id: 20 }, slot: 0 }).known, false);
+});
