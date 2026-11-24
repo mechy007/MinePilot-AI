@@ -197,7 +197,7 @@ export class LayerThreePlanner {
     if (p.window_id !== 0 && p.window_id !== 'inventory') return false;
     if (!Array.isArray(p.input) || p.input.length > 128) return false;
     const totals = new Map<number, number>();
-    const hotbar = new Map<number, number>();
+    const hotbar = new Map<number, { networkId: number; count: number }>();
     for (let slot = 0; slot < 9; slot++) {
       const item = p.input[slot];
       const id = idNumber(item?.network_id);
@@ -236,7 +236,7 @@ export class LayerThreePlanner {
     this.inventoryKnown = true;
     this.inventorySeenAt = this.now();
     this.hotbar.clear();
-    for (const [slot, id] of hotbar) this.hotbar.set(slot, { networkId: id, count: count as number });
+    for (const [slot, item] of hotbar) this.hotbar.set(slot, item);
     this.hotbarKnown = p.input.length >= 9;
     this.hotbarSeenAt = this.hotbarKnown ? this.now() : null;
     return true;
