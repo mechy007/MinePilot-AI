@@ -76,7 +76,21 @@ test('bucket actions require the dedicated bucket_use capability',()=>{
  const water=CATALOG.compositions.find(s=>s.id==='place_water');
  assert.ok(water.requiredCapabilities.includes('bucket_use'));
  assert.ok(!water.requiredCapabilities.includes('eat_food') && !water.requiredCapabilities.includes('item_use'));
- const r=evaluateOdysseySkill('place_water',{...allReady,bucket_use:'unsupported'});
+ const r=evaluateOdysseySkill('place_water',{...allReady,bucket_use:'ready'});
  assert.equal(r.status,'blocked');
  assert.ok(r.blockedCapabilities.some(x=>x.name==='bucket_use'));
+});
+
+
+test('unsupported Bedrock capability families cannot be promoted by caller-supplied ready states', () => {
+ const forced = {...allReady, bucket_use:'ready', craft:'ready', combat:'ready',
+   block_placement:'ready', equip_items:'ready', farming:'ready', cook:'ready',
+   smelt:'ready', breed_animals:'ready', fishing:'ready', container_transfer:'ready',
+   vehicle_control:'ready', shear_animals:'ready', collect_resources:'ready'};
+ const water = evaluateOdysseySkill('place_water', forced);
+ assert.equal(water.status, 'blocked');
+ assert.ok(water.blockedCapabilities.some(x => x.name === 'bucket_use' && x.state === 'unsupported'));
+ const build = evaluateOdysseySkill('build_shelter', forced);
+ assert.equal(build.status, 'blocked');
+ assert.ok(build.blockedCapabilities.some(x => x.name === 'block_placement' && x.state === 'unsupported'));
 });
