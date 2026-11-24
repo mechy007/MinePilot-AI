@@ -159,6 +159,7 @@ class BedrockGameplayBridge {
   }
   startGame(packet) {
     if (!packet || typeof packet !== 'object') return;
+    stopLocalAutopilot(this, 'new_world_session');
     this.gameplayAgent?.stop('new_world_session');
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
     this.selfUnique = ident(packet.entity_id);
@@ -987,6 +988,7 @@ class BedrockGameplayBridge {
   stop() {
     if (this.closed) return;
     this.closed = true;
+    stopLocalAutopilot(this, 'session_closed');
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
     this.gameplayAgent?.stop('session_closed');
