@@ -10,7 +10,8 @@
  */
 const { AuthInputTickClock, TICK_MS: INPUT_TICK_MS } = require('./bedrock-auth-input-clock.cjs');
 const PROBE_TICKS = 6;
-const PROBE_STEP = 0.065; // Conservative predicted 0.39-block pulse, not a physics engine.
+const PROBE_STEP = 0.065; // User-confirmed diagnostic only.
+const VERIFIED_STEP = 0.11; // Conservative flat-ground target, not full Bedrock physics.
 // A stopped client may receive no periodic self-position echoes. The probe is
 // still explicitly confirmed and only allowed shortly after a real StartGame.
 const MAX_FRESH_MS = 30_000;
@@ -20,11 +21,13 @@ const normalYaw = v => ((v % 360) + 360) % 360;
 function buildInputPacket(position, yaw, tick, moving, options = {}) {
   if (!finite3(position) || !Number.isFinite(yaw) || typeof tick !== 'bigint' || tick < 0n)
     throw new TypeError('Invalid player_auth_input state');
+  const step=Number.isFinite(options.step) &&
+    options.step>=0.02 && options.step<=0.13?options.step:PROBE_STEP;
   const angle = yaw * Math.PI / 180;
   const pitch = Number.isFinite(options.pitch) && Math.abs(options.pitch)<=90
     ? options.pitch : 0;
   const vertical = pitch * Math.PI / 180;
-  const shift = moving ? { x: -Math.sin(angle) * PROBE_STEP, y: 0, z: Math.cos(angle) * PROBE_STEP }
+  const shift = moving ? { x: -Math.sin(angle) * step, y: 0, z: Math.cos(angle) * step }
     : { x: 0, y: 0, z: 0 };
   const predicted = { x: position.x + shift.x, y: position.y, z: position.z + shift.z };
   const forward = moving ? 1 : 0;
@@ -77,6 +80,8 @@ class ExperimentalPlayerInput {
     this.world = null;
     this.lastYaw = 0;
     this.mode = null;
+    this.requireVerifiedTerrain = false;
+    this.predictionStep = PROBE_STEP;
     this.framesSent = 0;
     this.serverUpdates = 0;
     this.corrections = 0;
@@ -185,6 +190,8 @@ class ExperimentalPlayerInput {
     this.lastYaw = Number.isFinite(options.initialYaw)
       ? normalYaw(options.initialYaw) : Number.isFinite(world.yaw) ? world.yaw : 0;
     this.mode = mode;
+    this.requireVerifiedTerrain=options.verifiedTerrain===true;
+    this.predictionStep=this.requireVerifiedTerrain?VERIFIED_STEP:PROBE_STEP;
     this.framesSent = 0;
     this.serverUpdates = 0;
     this.corrections = 0;
@@ -215,8 +222,14 @@ class ExperimentalPlayerInput {
         const yaw = this.mode === 'turn_left' ? this.lastYaw - 5
           : this.mode === 'turn_right' ? this.lastYaw + 5 : this.lastYaw;
         const packet = buildInputPacket(this.predicted, yaw, nextTick, isMoving,
-          {pitch:world.pitch});
-        // The packet builder does not predict jumping/falling or voxel collisions.
+          {pitch:world.pitch,step:this.predictionStep});
+        if(isMoving&&this.requireVerifiedTerrain &&
+          !this.verifiedFlatFootprint(world,this.predicted,packet.position)){
+          this.stop('unverified_or_blocked_next_step');
+          return;
+        }
+        // No jump, flight or speculative vertical physics. Use decoded
+        // walkable AABB footprint for this bounded flat movement segment.
         this.client.queue('player_auth_input', packet);
         this.lastTick = nextTick;
         this.lastYaw = yaw;
@@ -236,6 +249,24 @@ class ExperimentalPlayerInput {
    * The caller must validate terrain and obtain user approval before invocation.
    * This does not assert server acceptance or actual locomotion.
    */
+  verifiedFlatFootprint(world,from,to) {
+    if(!finite3(from)||!finite3(to)||!world?.terrain ||
+      !Number.isInteger(world.dimension))return false;
+    if(Math.abs(to.y-from.y)>0.01)return false;
+    const y=Math.floor(to.y-1.62+0.01);
+    if(!Number.isInteger(y))return false;
+    // Check path and body corners: moving diagonally near a wall must not
+    // consider only the center cell and walk through its solid neighbor.
+    for(const factor of [0.5,1]){
+      const x=from.x+(to.x-from.x)*factor;
+      const z=from.z+(to.z-from.z)*factor;
+      for(const dx of [-0.29,0,0.29])for(const dz of [-0.29,0,0.29]){
+        if(world.terrain.tile(world.dimension,Math.floor(x+dx),y,
+          Math.floor(z+dz))!=='walkable')return false;
+      }
+    }
+    return true;
+  }
   runVerifiedStep(world, target, ticks = 8) {
     if (!finite3(world?.position) || !finite3(target) ||
         !Number.isInteger(ticks) || ticks < 1 || ticks > 12)
@@ -245,7 +276,11 @@ class ExperimentalPlayerInput {
     if (distance<0.08 || distance>2.1 || Math.abs(target.y-world.position.y)>0.85)
       return {status:'rejected', reason:'waypoint_outside_verified_step'};
     const yaw=normalYaw(Math.atan2(-dx,dz)*180/Math.PI);
-    const result=this.runDiagnostic(world,{mode:'forward',ticks,initialYaw:yaw});
+    if(!this.verifiedFlatFootprint(world,world.position,target))
+      return {status:'rejected',reason:'unverified_waypoint_footprint'};
+    const result=this.runDiagnostic(world,{
+      mode:'forward',ticks,initialYaw:yaw,verifiedTerrain:true
+    });
     return result.status==='accepted'
       ? {status:'accepted',reason:'verified_waypoint_queued_not_host_confirmed'}
       : result;
@@ -316,6 +351,8 @@ class ExperimentalPlayerInput {
     this.predicted = null;
     this.world = null;
     this.mode = null;
+    this.requireVerifiedTerrain=false;
+    this.predictionStep=PROBE_STEP;
   }
   /** New Xbox world session may restart the authoritative tick counter. */
   resetSession() {
@@ -349,6 +386,8 @@ class ExperimentalPlayerInput {
       serverUpdates: this.serverUpdates,
       corrections: this.corrections,
       maxDrift: Math.round(this.maxDrift * 1000) / 1000,
+      motionModel: this.requireVerifiedTerrain?'verified_flat_footprint':'bounded_diagnostic',
+      predictedStepSize: this.predictionStep,
       observedDisplacement: displacement === null ? null : Math.round(displacement * 1000) / 1000,
       stoppedReason: this.lastEndReason,
       inputClock: this.tickClock.snapshot(),
