@@ -59,3 +59,46 @@ test('gameplay snapshot publishes camera scene from server packet position, not 
   assert.equal(bridge.snapshot().firstPerson.available,false);
   bridge.stop();
 });
+
+test('camera V2 removes adjacent invisible faces but preserves unknown boundaries',()=>{
+  const w=world();
+  w.position={x:0.5,y:64,z:0.5};
+  const known=new Map([
+    ['0,64,0','minecraft:stone'],
+    ['1,64,0','minecraft:stone']
+  ]);
+  w.terrain={
+    blockName(dim,x,y,z){return known.get([x,y,z].join(','))??null;},
+    kind(dim,x,y,z){return known.has([x,y,z].join(','))?'solid':null;}
+  };
+  const result=buildFirstPersonScene(w);
+  assert.equal(result.cubes.length,2);
+  const left=result.cubes.find(b=>b[0]===-0.5);
+  const right=result.cubes.find(b=>b[0]===0.5);
+  assert.equal(left.length,5,'scene includes an explicit face mask');
+  assert.equal(left[4] & (1<<1),0,'east face hidden by solid neighbor');
+  assert.equal(right[4] & (1<<0),0,'west face hidden by solid neighbor');
+  assert.notEqual(left[4] & (1<<4),0,'unknown north neighbor stays visible');
+  assert.equal(result.visibleFaces,10);
+});
+
+test('fully enclosed surfaces consume no scene slots, but transparent neighbors do not occlude',()=>{
+  const w=world();w.position={x:0.5,y:64,z:0.5};
+  w.terrain={
+    blockName:()=> 'minecraft:stone',
+    kind:()=> 'solid'
+  };
+  assert.deepEqual(buildFirstPersonScene(w).cubes,[]);
+  assert.equal(buildFirstPersonScene(w).visibleFaces,0);
+  w.terrain={
+    blockName(dim,x,y,z){
+      if(x===0&&y===64&&z===0)return 'minecraft:stone';
+      return 'minecraft:water';
+    },
+    kind(dim,x,y,z){return x===0&&y===64&&z===0?'solid':'hazard';}
+  };
+  const cubes=buildFirstPersonScene(w).cubes;
+  const stone=cubes.find(b=>b[3]===2);
+  assert.ok(stone);
+  assert.equal(stone[4],63,'water does not occlude any stone faces');
+});

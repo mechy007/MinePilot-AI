@@ -18,7 +18,7 @@ import java.util.Comparator;
  */
 public final class FirstPersonVoxelView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private float[] blocks = new float[0];   // dx, dy, dz, type
+    private float[] blocks = new float[0];   // dx, dy, dz, type, visible-face mask
     private float[] actors = new float[0];   // dx, dy, dz, classification
     private float yaw, pitch, eyeHeight = 1.62f;
     private boolean available;
@@ -31,8 +31,8 @@ public final class FirstPersonVoxelView extends View {
     };
     // Face vertex indices (west, east, bottom, top, north, south)
     private static final int[][] FACES = {
-        {0,2,6,4}, {1,5,7,3}, {0,1,3,2},
-        {4,6,7,5}, {0,4,5,1}, {2,3,7,6}
+        {0,2,6,4}, {1,5,7,3}, {0,1,5,4},
+        {2,6,7,3}, {0,1,3,2}, {4,5,7,6}
     };
     private static final float[][] VERTICES = {
         {0,0,0},{1,0,0},{0,1,0},{1,1,0},
@@ -56,60 +56,105 @@ public final class FirstPersonVoxelView extends View {
         } else {
             float[] next=data.getFloatArray("fp_blocks");
             float[] entities=data.getFloatArray("fp_entities");
-            blocks=next!=null && next.length<=576 && next.length%4==0?
+            blocks=next!=null && next.length<=720 && next.length%5==0?
                     next.clone():new float[0];
             actors=entities!=null && entities.length<=64 && entities.length%4==0?
                     entities.clone():new float[0];
             yaw=data.getFloat("fp_yaw",0f);
             pitch=Math.max(-89,Math.min(89,data.getFloat("fp_pitch",0f)));
             eyeHeight=1.62f;
-            reason="Decoded scene: "+(blocks.length/4)+" voxels";
+            reason="Decoded scene: "+(blocks.length/5)+" voxels";
         }
         invalidate();
     }
-    private float[] project(float x,float y,float z,float width,float height) {
+
+    // Minecraft's yaw/pitch are derived from network packets, not from device
+    // sensors. Transform into camera space before clipping against the near plane.
+    private float[] cameraPoint(float x,float y,float z) {
         double angle=Math.toRadians(yaw);
-        float s=(float)Math.sin(angle), c=(float)Math.cos(angle);
-        float horizontal=x*c+z*s;
-        float depth=-x*s+z*c;
+        float sine=(float)Math.sin(angle), cosine=(float)Math.cos(angle);
+        float horizontal=x*cosine+z*sine;
+        float forward=-x*sine+z*cosine;
         double tilt=Math.toRadians(pitch);
-        float sy=(float)(y*Math.cos(tilt)+depth*Math.sin(tilt));
-        float sz=(float)(depth*Math.cos(tilt)-y*Math.sin(tilt));
-        if (sz<=NEAR) return null;
+        return new float[]{horizontal,
+                (float)(y*Math.cos(tilt)+forward*Math.sin(tilt)),
+                (float)(forward*Math.cos(tilt)-y*Math.sin(tilt))};
+    }
+    private float[] screenPoint(float[] xyz,float width,float height) {
+        if(xyz[2]<NEAR)return null;
         float focal=width*0.94f;
-        float px=width/2+horizontal*focal/sz;
-        float py=height/2-sy*focal/sz;
-        if (!Float.isFinite(px)||!Float.isFinite(py))return null;
-        return new float[]{px,py,sz};
+        float px=width/2+xyz[0]*focal/xyz[2];
+        float py=height/2-xyz[1]*focal/xyz[2];
+        return Float.isFinite(px)&&Float.isFinite(py)?
+                new float[]{px,py,xyz[2]}:null;
+    }
+    private float[] project(float x,float y,float z,float width,float height) {
+        return screenPoint(cameraPoint(x,y,z),width,height);
     }
     private static int shade(int color,float ratio) {
         return Color.rgb(Math.min(255,(int)(Color.red(color)*ratio)),
                 Math.min(255,(int)(Color.green(color)*ratio)),
                 Math.min(255,(int)(Color.blue(color)*ratio)));
     }
+    // Sutherland-Hodgman near-plane clipping. V1 dropped the entire face if
+    // just one corner was behind the camera, creating large holes up close.
+    private static ArrayList<float[]> clipNear(float[][] vertices,int[] indices) {
+        ArrayList<float[]> polygon=new ArrayList<>(6);
+        for(int id:indices)polygon.add(vertices[id]);
+        ArrayList<float[]> clipped=new ArrayList<>(6);
+        for(int i=0;i<polygon.size();i++){
+            float[] start=polygon.get(i);
+            float[] end=polygon.get((i+1)%polygon.size());
+            boolean a=start[2]>=NEAR,b=end[2]>=NEAR;
+            if(a)clipped.add(start);
+            if(a!=b) {
+                float fraction=(NEAR-start[2])/(end[2]-start[2]);
+                clipped.add(new float[]{
+                    start[0]+fraction*(end[0]-start[0]),
+                    start[1]+fraction*(end[1]-start[1]),NEAR
+                });
+            }
+        }
+        return clipped;
+    }
+    // Back-face culling uses the viewer's observed position relative to each
+    // cube; never draw an opposite face through its own solid geometry.
+    private static boolean cameraSeesFace(int face,float bx,float by,float bz) {
+        switch(face) {
+            case 0:return bx>0f;       // west
+            case 1:return bx+1f<0f;    // east
+            case 2:return by>0f;       // bottom
+            case 3:return by+1f<0f;    // top
+            case 4:return bz>0f;       // north
+            case 5:return bz+1f<0f;    // south
+            default:return false;
+        }
+    }
     private void buildFaces(int index,float width,float height) {
-        float bx=blocks[index], by=blocks[index+1]-eyeHeight, bz=blocks[index+2];
+        float bx=blocks[index],by=blocks[index+1]-eyeHeight,bz=blocks[index+2];
         int type=Math.max(1,Math.min(COLORS.length-1,(int)blocks[index+3]));
-        float[][] projected=new float[8][];
+        int mask=(int)blocks[index+4];
+        float[][] vertices=new float[8][];
         for(int v=0;v<8;v++) {
             float[] corner=VERTICES[v];
-            projected[v]=project(bx+corner[0],by+corner[1],bz+corner[2],width,height);
+            vertices[v]=cameraPoint(bx+corner[0],by+corner[1],bz+corner[2]);
         }
         for(int f=0;f<FACES.length;f++) {
+            if((mask&(1<<f))==0||!cameraSeesFace(f,bx,by,bz))continue;
+            ArrayList<float[]> clipped=clipNear(vertices,FACES[f]);
+            if(clipped.size()<3)continue;
             Path path=new Path();
-            boolean visible=true;
-            float depth=0;
-            for(int j=0;j<4;j++){
-                float[] p=projected[FACES[f][j]];
-                if(p==null){visible=false;break;}
+            float depth=0f;boolean valid=true;
+            for(int j=0;j<clipped.size();j++) {
+                float[] p=screenPoint(clipped.get(j),width,height);
+                if(p==null){valid=false;break;}
                 if(j==0)path.moveTo(p[0],p[1]);else path.lineTo(p[0],p[1]);
                 depth+=p[2];
             }
-            if(!visible)continue;
+            if(!valid)continue;
             path.close();
-            // Fixed lighting for legibility, not a simulation of sky lighting.
             float brightness=f==3?1.18f:f==2?0.58f:f==4?0.88f:f==5?0.76f:0.66f;
-            faces.add(new Face(path,depth/4f,shade(COLORS[type],brightness)));
+            faces.add(new Face(path,depth/clipped.size(),shade(COLORS[type],brightness)));
         }
     }
     private void text(Canvas canvas,String message,float x,float y,int color,float size){
@@ -128,28 +173,28 @@ public final class FirstPersonVoxelView extends View {
                     0xff9fb0ca,11*density);
             return;
         }
+
         faces.clear();
-        for(int i=0;i+3<blocks.length;i+=4)
+        for(int i=0;i+4<blocks.length;i+=5)
             buildFaces(i,w,h);
+        // Billboard markers participate in the depth sort. They no longer
+        // appear painted over every foreground block regardless of distance.
+        for(int i=0;i+3<actors.length;i+=4){
+            float[] point=project(actors[i],actors[i+1]-0.65f,actors[i+2],w,h);
+            if(point==null||point[0]<0||point[0]>w||point[1]<0||point[1]>h)
+                continue;
+            int color=actors[i+3]==2?0xffff7585:
+                    actors[i+3]==1?0xff70b8ff:0xffffc07a;
+            float radius=Math.max(3*density,Math.min(12*density,26*density/point[2]));
+            Path marker=new Path();
+            marker.addCircle(point[0],point[1],radius,Path.Direction.CW);
+            faces.add(new Face(marker,point[2],color));
+        }
         Collections.sort(faces,Comparator.comparingDouble((Face face)->face.depth).reversed());
         for(Face face:faces){
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(face.color);
             canvas.drawPath(face.path,paint);
-        }
-        // Entity billboards are intentionally approximate markers: no model data.
-        ArrayList<float[]> markers=new ArrayList<>();
-        for(int i=0;i+3<actors.length;i+=4){
-            float[] point=project(actors[i],actors[i+1]-0.65f,actors[i+2],w,h);
-            if(point!=null)markers.add(new float[]{point[0],point[1],point[2],actors[i+3]});
-        }
-        markers.sort((a,b)->Float.compare(b[2],a[2]));
-        for(float[] marker:markers){
-            if(marker[0]<0||marker[0]>w||marker[1]<0||marker[1]>h)continue;
-            paint.setColor(marker[3]==2?0xffff7585:marker[3]==1?0xff70b8ff:0xffffc07a);
-            paint.setStyle(Paint.Style.FILL);
-            float radius=Math.max(3*density,Math.min(12*density,26*density/marker[2]));
-            canvas.drawCircle(marker[0],marker[1],radius,paint);
         }
         paint.setColor(0xff65e4ad);
         paint.setStrokeWidth(1.4f*density);
@@ -161,7 +206,7 @@ public final class FirstPersonVoxelView extends View {
         text(canvas,"FIRST PERSON  ·  VOXEL RECONSTRUCTION",10*density,15*density,
                 0xff65e4ad,11*density);
         text(canvas,"Yaw "+Math.round(yaw)+"° · Pitch "+Math.round(pitch)+
-                "°  ·  "+(blocks.length/4)+" observed cubes",10*density,31*density,
+                "°  ·  "+(blocks.length/5)+" observed cubes",10*density,31*density,
                 0xffd3dce7,10*density);
         text(canvas,"Unknown blocks hidden · Textures and lighting approximated",
                 8*density,h-10*density,0xffcad5e3,9*density);

@@ -145,20 +145,22 @@ public final class WorldSessionProvider extends ContentProvider {
                             result.putFloat("fp_pitch", (float)pitch);
                             org.json.JSONArray cubes = firstPerson.optJSONArray("cubes");
                             if (cubes != null) {
-                                float[] output = new float[Math.min(144,cubes.length())*4];
+                                float[] output = new float[Math.min(144,cubes.length())*5];
                                 int n=0;
                                 for(int i=0;i<Math.min(144,cubes.length());i++) {
                                     org.json.JSONArray cube=cubes.optJSONArray(i);
-                                    if(cube==null || cube.length()!=4)continue;
+                                    if(cube==null || cube.length()!=5)continue;
                                     double x=cube.optDouble(0,Double.NaN),
                                             y=cube.optDouble(1,Double.NaN),
                                             z=cube.optDouble(2,Double.NaN);
                                     int type=cube.optInt(3,0);
+                                    int mask=cube.optInt(4,0);
                                     if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(z)||
                                             Math.abs(x)>8||Math.abs(y)>8||Math.abs(z)>8||
-                                            type<1||type>8)continue;
+                                            type<1||type>8||mask<1||mask>63)continue;
                                     output[n++]=(float)x;output[n++]=(float)y;
                                     output[n++]=(float)z;output[n++]=type;
+                                    output[n++]=mask;
                                 }
                                 result.putFloatArray("fp_blocks",java.util.Arrays.copyOf(output,n));
                             }
