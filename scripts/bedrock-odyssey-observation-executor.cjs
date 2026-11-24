@@ -55,7 +55,7 @@ function executeBedrockObservation(bridge, primitive, args = {}) {
 
   if (primitive === 'checkBlocksAround' || primitive === 'findSuitablePosition') {
     const center = finiteBlock(args.position) ? args.position : {
-      x: Math.floor(bridge.position.x), y: Math.floor(bridge.position.y), z: Math.floor(bridge.position.z)
+      x: Math.floor(bridge.position.x), y: Math.floor(bridge.position.y - 1.62 + 0.01), z: Math.floor(bridge.position.z)
     };
     const radius = primitive === 'findSuitablePosition' ? 3 : 2;
     const observations = [];
