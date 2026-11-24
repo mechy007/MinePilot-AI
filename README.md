@@ -113,7 +113,7 @@ Long-running operation requires lifecycle-safe foreground service behavior, a us
 | **5 — Stability and optimization** | Not started | Long-duration Android tests, battery/memory profiling, reconnection and resource cleanup |
 | **6 — Release and QA** | In progress | Green CI, verified device/world tests, security review and installable signed release |
 
-Read the [detailed roadmap](docs/ROADMAP.md). Features such as automatic mining, building, combat, navigation, friend selection and AI decisions are **goals or partial foundations**, not promises about the current APK.
+Read the [detailed roadmap](docs/ROADMAP.md), the [architecture rebuild and subsystem contracts](docs/ARCHITECTURE_REBUILD.md), and the [runtime function catalog](docs/FUNCTION_CONTRACTS.md). Features such as automatic mining, building, combat, navigation, friend selection and AI decisions are **goals or partial foundations**, not promises about the current APK.
 
 ## Download and install an Android APK
 
