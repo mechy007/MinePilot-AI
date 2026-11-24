@@ -156,6 +156,64 @@ The gameplay agent is an experimental bounded navigator/survival task runner. It
 - `showSkills()`, `skillCard(...)`: render catalog status; UI labels never grant capability.
 - UI helpers (`dp`, `surface`, `text`, `label`, `button`, `primaryButton`, `action`, `panelLayout`, `actionButton`, `section`, `card`, `hero`, `accountCard`, `addVital`) only construct presentation. They must not issue network/gameplay commands.
 
+### Full `DashboardActivity` method map
+
+The dashboard is still a large Activity and should be split into screen controllers/components in a later Android refactor. Until then, these methods have the following responsibilities:
+
+| Method | Responsibility / contract |
+|---|---|
+| `dp(value)` | Convert layout dimensions from density-independent units. |
+| `surface(color, radius)` | Build a presentation-only rounded surface. |
+| `text(value, size, color, bold)` | Build a text view with explicit typography. |
+| `label(value, size)` | Build a secondary text label. |
+| `button(name, callback)` | Build a non-primary action button. |
+| `primaryButton(name, callback)` | Build the primary action button for the current screen. |
+| `action(name, primary, callback)` | Select the appropriate action-button style. |
+| `panelLayout(margin)` | Return standard panel layout parameters. |
+| `actionButton(name, primary, callback)` | Build and style a clickable action row/button. |
+| `section(name)` | Add a screen section heading. |
+| `accountCard(signedIn)` | Render account identity/sign-in status without showing secrets. |
+| `hero(eyebrow, headline, detail)` | Render the dashboard's introductory hero. |
+| `launchDiagnostic(activityName)` | Start an allowlisted diagnostics activity and report unavailable screens safely. |
+| `showSignInReturnStatus(intent)` | Process the sanitized result after returning from account sign-in. |
+| `openBotFlow(host, switchAccount)` | Begin the selected bot join flow with optional account switching. |
+| `launchBotFlow(host, switchAccount)` | Launch the join flow for the selected host/account mode. |
+| `launchBotFlow(host, switchAccount, friends)` | Launch the join flow with the friend-world flag explicitly chosen. |
+| `showXboxFriends()` | Render friend/owner discovery choices; no account identity is inferred. |
+| `show(tab)` | Select and render one dashboard tab. |
+| `card()` | Create a presentation-only card container. |
+| `showCommandCenter(signedIn)` | Compose the main authenticated command-center screen. |
+| `addVital(row, title, gap)` | Add one bounded vital metric to the screen. |
+| `showSkills()` | Render the capability/skill catalog from runtime readiness, not UI assumptions. |
+| `skillCard(name, availability, color, description)` | Render one skill and its current supported/blocked status. |
+| `worldRequest(method, sessionId)` | Call the private provider with no extra payload. |
+| `worldRequest(method, sessionId, extras)` | Call the private provider with a bounded typed payload; catch provider lifecycle/security errors. |
+| `refreshCommandCenter()` | Request one status snapshot off the UI thread and discard stale screen generations. |
+| `showWorldStatus(current)` | Render connection, vitals, gameplay, learning, Autopilot and capability state from one snapshot. |
+| `configureMovementProbe(enable)` | Change the explicitly user-authorized experimental movement setting. |
+| `showMovementDiagnostics()` | Render movement authority, freshness and verified-step diagnostics. |
+| `requestMotionDiagnostic(mode, ticks)` | Request a bounded diagnostic with validated mode/tick count. |
+| `confirmMovementProbe()` | Obtain explicit confirmation before sending an experimental movement probe. |
+| `requestFollowPlan()` | Select/preview a follow target; preview is not movement success. |
+| `showBlockBreakDialog()` | Explain the single-block experimental/manual action and require confirmation. |
+| `showVerifiedStep()` | Request one bounded verified movement step after user confirmation. |
+| `chooseIntelligentGameplayGoal()` | Present supported gameplay goals; do not enable actions beyond the selected goal's capabilities. |
+| `requestGameplayAgent(goal, playerName)` | Submit a confirmed bounded gameplay goal to the active session. |
+| `showAutonomyConfirmation()` | Explain limits and obtain confirmation before enabling bounded autonomy. |
+| `requestCollectionPlan()` | Preview a currently observed item-drop collection objective. |
+| `requestShelterPlan()` | Preview shelter prerequisites only; do not claim block placement is executable. |
+| `requestPlankCraftPlan()` | Preview recipe prerequisites only; do not claim crafting is executable. |
+| `requestGameplay(action, confirmed)` | Submit one allowlisted gameplay command without player-target parameters. |
+| `requestGameplay(action, confirmed, playerName)` | Submit one allowlisted gameplay command with a validated selected player name. |
+| `toggleLocalAutopilot()` | Show the confirmation step and then enable/disable the user-owned local curriculum. |
+| `confirmLearningStart()` | Confirm and submit one selected built-in learning task. |
+| `requestWorldStop()` | Stop only the session ID currently owned by the dashboard. |
+| `showRuntimeLogs(signedIn)` | Render sanitized runtime diagnostics for the account/session state. |
+| `refreshRuntimeLogs()` | Refresh the bounded recent-event list. |
+| `formatRuntimeEvents(events)` | Convert a bounded deque of sanitized events into display text. |
+| `showManualJoin()` | Collect/validate host and friend-world settings before launching the join flow. |
+| `showStatus(message)` | Show one user-facing status message without treating queueing as success. |
+
 ### `WorldSessionProvider`
 
 - `call(method, sessionId, extras)`: verify that the runtime session is active and route `status`, `gameplay` and `stop`.
