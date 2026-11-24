@@ -668,7 +668,9 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
                             y < -256 || y > 512) return;
                     args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
-                } else if (!"exploreUntil".equals(primitive)) {
+                } else if (!"exploreUntil".equals(primitive) && !"equipAxe".equals(primitive) &&
+                        !"equipHoe".equals(primitive) && !"equipPickaxe".equals(primitive) &&
+                        !"equipSword".equals(primitive)) {
                     return;
                 }
                 command.put("primitive", primitive).put("args", args).put("confirmed", true);
