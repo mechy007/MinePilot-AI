@@ -158,7 +158,7 @@ class BedrockOpenWorldLearningEngine {
     this.lastCounters = { gameplayAgent: 0, autonomy: 0 };
     this.lastPersistError = null;
     this.activeRun = null;
-    this.legacySkillCount = 0;
+    this.legacySkills = [];
     this.load();
   }
 
@@ -168,11 +168,35 @@ class BedrockOpenWorldLearningEngine {
       const raw = JSON.parse(readFileSync(this.storagePath, 'utf8'));
       if (raw?.version === 'minepilot.voyager-learning.v1') {
         this.totalVerifiedSteps = finiteInt(raw.totalVerifiedSteps, 10000000) ? raw.totalVerifiedSteps : 0;
-        this.legacySkillCount = Array.isArray(raw.skills) ? Math.min(raw.skills.length, 128) : 0;
+        this.legacySkills = (Array.isArray(raw.skills) ? raw.skills : [])
+          .slice(0, 128)
+          .filter(item => item && typeof item.id === 'string' &&
+            /^[a-z][a-z0-9_]{1,47}$/.test(item.id) &&
+            typeof item.title === 'string' && item.title.length <= 100 &&
+            ['survive', 'explore', 'follow', 'return_home', 'gather'].includes(item.goal) &&
+            item.status === 'verified' && finiteInt(item.verifiedRuns, 100000) &&
+            item.verifiedRuns >= 1 && Array.isArray(item.steps) && item.steps.length <= 16 &&
+            item.steps.every(step => typeof step === 'string' && /^[a-z][a-z0-9_]{1,47}$/.test(step)))
+          .map(item => ({ id: item.id, title: item.title, goal: item.goal,
+            status: 'verified', verifiedRuns: item.verifiedRuns,
+            steps: item.steps.slice(), updatedAt: finiteInt(item.updatedAt) ? item.updatedAt : 0 }));
         return;
       }
       if (raw?.version !== VERSION) return;
       this.totalVerifiedSteps = finiteInt(raw.totalVerifiedSteps, 10000000) ? raw.totalVerifiedSteps : 0;
+      if (Array.isArray(raw.legacySkills)) {
+        this.legacySkills = raw.legacySkills.slice(0, 128)
+          .filter(item => item && typeof item.id === 'string' &&
+            /^[a-z][a-z0-9_]{1,47}$/.test(item.id) &&
+            typeof item.title === 'string' && item.title.length <= 100 &&
+            ['survive', 'explore', 'follow', 'return_home', 'gather'].includes(item.goal) &&
+            item.status === 'verified' && finiteInt(item.verifiedRuns, 100000) &&
+            item.verifiedRuns >= 1 && Array.isArray(item.steps) && item.steps.length <= 16 &&
+            item.steps.every(step => typeof step === 'string' && /^[a-z][a-z0-9_]{1,47}$/.test(step)))
+          .map(item => ({ id: item.id, title: item.title, goal: item.goal,
+            status: 'verified', verifiedRuns: item.verifiedRuns,
+            steps: item.steps.slice(), updatedAt: finiteInt(item.updatedAt) ? item.updatedAt : 0 }));
+      }
       if (Array.isArray(raw.proposals)) {
         for (const value of raw.proposals.slice(0, MAX_PROPOSALS)) {
           const proposal = safeProposal(value);
@@ -225,6 +249,7 @@ class BedrockOpenWorldLearningEngine {
       const payload = {
         version: VERSION,
         totalVerifiedSteps: this.totalVerifiedSteps,
+        legacySkills: this.legacySkills.slice(0, 128),
         proposals: [...this.proposals.values()].slice(0, MAX_PROPOSALS),
         stats: [...this.stats.values()].slice(0, 128),
         learned: [...this.learned.values()].map(item => ({ ...item, status: 'verified' })).slice(0, 128),
@@ -339,6 +364,7 @@ class BedrockOpenWorldLearningEngine {
 
   updateCounters(world) {
     let changed = false;
+    const previousTotal = this.totalVerifiedSteps;
     const sources = [
       ['gameplayAgent', world?.gameplayAgent?.snapshot?.()?.serverVerifiedSteps],
       ['autonomy', world?.autonomy?.snapshot?.()?.serverVerifiedSteps]
@@ -355,7 +381,7 @@ class BedrockOpenWorldLearningEngine {
       }
       this.lastCounters[name] = raw;
     }
-    if (changed && this.totalVerifiedSteps % 5 === 0) this.persist();
+    if (changed && Math.floor(this.totalVerifiedSteps / 5) > Math.floor(previousTotal / 5)) this.persist();
   }
 
   critic(task, agent, activeRun) {
@@ -488,7 +514,7 @@ class BedrockOpenWorldLearningEngine {
       generatedSkillRuntime: 'disabled_model_outputs_are_declarative_only',
       persistence: this.storagePath ? (this.lastPersistError ? 'error' : 'enabled') : 'session_only',
       persistenceError: this.lastPersistError,
-      legacyVoyagerRecordsPreserved: this.legacySkillCount
+      legacyVoyagerRecordCountMigrated: this.legacySkills.length
     };
   }
 
