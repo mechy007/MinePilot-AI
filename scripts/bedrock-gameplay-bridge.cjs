@@ -69,6 +69,7 @@ class BedrockGameplayBridge {
     this.autonomy = options.autonomy ?? null;
     this.blockBreaker = options.blockBreaker ?? null;
     this.lifeSenses = options.lifeSenses ?? null;
+    this.intelligence = options.intelligence ?? null;
     this.clock = options.clock ?? Date.now;
     this.spawned = false;
     this.closed = false;
@@ -165,6 +166,7 @@ class BedrockGameplayBridge {
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
     this.terrain?.reset(this.dimension);
+    this.intelligence?.reset(this.dimension);
     this.navigationRoute = null;
     if (this.registryResolver && this.terrain) {
       try {
@@ -548,6 +550,7 @@ class BedrockGameplayBridge {
     this.respawnRecovery.state = 'alive';
     this.respawnRecovery.error = null;
     this.lifeSenses?.reset(this.dimension);
+    this.intelligence?.reset(this.dimension);
   }
   updateAddonNavigation() {
     if (!this.addonNavigation) return null;
@@ -574,6 +577,36 @@ class BedrockGameplayBridge {
         this.layerOne?.snapshot()?.safetyHold === true
     });
   }
+  intelligenceTick() {
+    if (!this.intelligence) return null;
+    const life=this.lifeSenses?.snapshot({
+      position:this.position,dimension:this.dimension,spawned:this.spawned,
+      closed:this.closed,respawnState:this.respawnRecovery.state,terrain:this.terrain
+    })??null;
+    const age=this.lastServerPositionAt==null?null:Math.max(0,this.clock()-this.lastServerPositionAt);
+    const outcome=this.autonomy?.snapshot?.();
+    // The planner may record results, but it never claims that queued input
+    // means movement succeeded. Only verified host feedback counts.
+    if(!this._lastIntelligenceVerified) this._lastIntelligenceVerified=0;
+    const verified=Number.isInteger(outcome?.verifiedSteps)?outcome.verifiedSteps:0;
+    if(verified>this._lastIntelligenceVerified)
+      for(let i=this._lastIntelligenceVerified;i<Math.min(verified,this._lastIntelligenceVerified+20);i++)
+        this.intelligence.noteOutcome('verified');
+    this._lastIntelligenceVerified=verified;
+    const result=this.intelligence.decide({
+      life,position:this.position,dimension:this.dimension,spawned:this.spawned,
+      respawnState:this.respawnRecovery.state,positionAgeMs:age,
+      terrainReady:(this.terrain?.snapshot()?.decodedSections??0)>0,
+      safetyHold:this.gameplayWorld().safetyHold
+    });
+    if(this.intelligence.shouldEmergencyStop()){
+      // A threat or critical health immediately stops *ongoing* unsafe movement;
+      // no autonomous retreat/combat is attempted without verified terrain.
+      if(this.autonomy?.snapshot?.()?.active) this.autonomy.stop('intelligence_safety_stop');
+      this.movement?.stop?.('intelligence_safety_stop',{silent:true});
+    }
+    return result;
+  }
   snapshot() {
     const now = this.clock();
     const age = this.lastServerPositionAt == null ? null : Math.max(0, now - this.lastServerPositionAt);
@@ -591,6 +624,7 @@ class BedrockGameplayBridge {
       ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
       firstPerson: buildFirstPersonScene(this),
+      ...(this.intelligence ? { intelligence: this.intelligenceTick() } : {}),
       ...(this.lifeSenses ? { life: this.lifeSenses.snapshot({
         position:this.position,dimension:this.dimension,spawned:this.spawned,
         closed:this.closed,respawnState:this.respawnRecovery.state,
@@ -660,6 +694,7 @@ class BedrockGameplayBridge {
       const plan=this.layerTwo.follow(raw.playerName,this.gameplayWorld());
       if(plan?.status!=='accepted')
         return plan??{status:'rejected',reason:'follow_plan_unavailable'};
+      this.intelligence?.setGoal('follow');
       this.movement?.stop?.();
       this.layerOne?.stop('new_navigation_plan');
       this.layerThree?.cancel();
@@ -920,6 +955,7 @@ class BedrockGameplayBridge {
     this.addonNavigation?.reset();
     this.terrain?.reset();
     this.lifeSenses?.reset();
+    this.intelligence?.reset();
     this.navigationRoute=null;
     this.playerNames.clear();
     for (const [event, callback] of this.listeners) this.client.removeListener(event, callback);
