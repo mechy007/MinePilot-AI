@@ -10,7 +10,7 @@ const { randomUUID } = require('node:crypto');
 const { executeBedrockObservation } = require('./bedrock-odyssey-observation-executor.cjs');
 const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
-const { gameplaySkillManifest, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
+const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
@@ -109,6 +109,7 @@ class BedrockGameplayBridge {
     this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
       actionRequests: 0, recovered: 0, error: null };
     this.watch = null;
+    this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
     this.listeners = [];
   }
   bind(event, callback) {
@@ -725,6 +726,7 @@ class BedrockGameplayBridge {
       ...(this.gameplayAgent ? { gameplayAgent: this.gameplayAgent.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
       firstPerson: buildFirstPersonScene(this),
+      learningRuntime: { ...this.learningTickStatus },
       gameplaySkills: gameplaySkillManifest(this),
       ...(this.intelligence ? { intelligence: this.intelligenceTick() } : {}),
       ...(this.lifeSenses ? { life: this.lifeSenses.snapshot({
@@ -1089,9 +1091,14 @@ class BedrockGameplayBridge {
   }
   poll() {
     if (this.closed || !this.commandPath || !this.receiptPath) return;
-    // This local deterministic tick advances the built-in curriculum without
-    // any external model request. It remains inert until the user enables it.
-    try { gameplaySkillManifest(this); } catch {}
+    // One explicit owner advances the learning engine. Status snapshots are
+    // read-only and cannot accidentally start or complete curriculum tasks.
+    try {
+      tickLearningEngine(this);
+      this.learningTickStatus = { state: 'healthy', reason: 'runtime_tick_ok' };
+    } catch {
+      this.learningTickStatus = { state: 'error', reason: 'learning_tick_failed' };
+    }
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
