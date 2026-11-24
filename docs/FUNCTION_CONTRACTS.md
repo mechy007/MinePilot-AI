@@ -24,7 +24,7 @@ This catalog assigns purpose and side-effect rules to the public functions in th
 | `constructor(client, options)` | Bind the bridge to the one authenticated SDK client and injected domain services. | Rejects clients lacking event subscription/removal. Does not open another connection. |
 | `bind(event, callback)` | Register one exact event handler and retain it for cleanup. | Adds the callback to the removal list. |
 | `start()` | Bind all supported Bedrock packet events and start the private IPC poller when configured. | Single-use; throws if started/used more than once. |
-| `startGame(packet)` | Establish a new world generation: self ID, dimension, server position, movement/transaction negotiation and reset transient models. | Invalidates prior dimension/session state; stops old autonomy. |
+| `startGame(packet)` | Establish a new world generation: self ID, dimension, server position, movement/transaction negotiation and reset transient models including inventory stack identities. | Invalidates prior dimension/session state; stops old autonomy. |
 | `modeName(mode)` | Normalize the pinned protocol's known game-mode representation. | Unknown values remain unknown. |
 | `gameModeChange(packet)` | Update local/world game-mode evidence from supported server packets. | Never changes a player's game mode. |
 | `observeHealth(health)` | Apply a validated local health observation and detect death/recovery transitions. | Stops unsafe motion on critical health/death. |
@@ -49,7 +49,7 @@ This catalog assigns purpose and side-effect rules to the public functions in th
 | `updateAddonNavigation()` | Update the optional add-on-derived navigation observation. | Advisory/observation only; cannot bypass the native action gate. |
 | `intelligenceTick()` | Run the deterministic local intelligence observer over current vitals, threat and world freshness. | State-changing decision tick; may stop unsafe active movement. Called only by the control loop or active gameplay agent. |
 | `tickControlPlane()` | Refresh safety/intelligence and optional add-on navigation state once per explicit bridge poll. | Owns control-side mutations and records stable tick health. |
-| `snapshot()` | Return the bounded state used by Android and logs. | Pure read; never starts/finishes a task, updates navigation intents or sends a packet. |
+| `snapshot()` | Return the bounded state used by Android and logs, including compact server inventory status. | Pure read; never starts/finishes a task, updates navigation intents or sends a packet. |
 | `execute(raw)` | Validate the command envelope, whitelist, consent, readiness, and action ownership, then dispatch one operation. | Returns typed receipt; dispatch is not verified success. |
 | `tickLearning()` | Explicitly advance the one learning/autopilot state machine and record tick health. | Called by the runtime control loop; errors become a stable diagnostic state. |
 | `poll()` | Tick the learning controller once and process at most one IPC command/receipt. | Runs on the private timer; errors are recorded, not silently swallowed. |
@@ -70,6 +70,7 @@ This catalog assigns purpose and side-effect rules to the public functions in th
 | `observeSlot(packet)` | Apply one server-observed slot update to an already-known window/container. | Does not refresh the full-container timestamp; rejects ambiguous container-less updates. |
 | `getSlot(address, options)` | Read one exact window/container/slot and return slot/full-snapshot freshness. | Pure read; no default stack ID is invented. |
 | `playerInventory(options)` | Return the canonical player inventory slots, names, counts and freshness. | Pure read; returns unknown/stale distinctly. |
+| `planPlayerInventorySwap(ledger, sourceSlot, destinationSlot, options)` | Build a reversible player-inventory swap plan from two fresh, occupied, server-identified slots. | Pure preflight only; returns `executable:false` until the asynchronous transaction executor and postcondition verifier are wired. |
 | `snapshot()` | Return compact bounded window metadata and the player inventory projection. | Does not expose item NBT or unbounded raw packet data. |
 
 ### `scripts/bedrock-stack-request-manager.cjs`
