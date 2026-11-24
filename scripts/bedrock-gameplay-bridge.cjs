@@ -288,7 +288,9 @@ class BedrockGameplayBridge {
   onRespawn(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.state)) return;
     const incomingId = ident(packet.runtime_entity_id);
-    if (incomingId && this.self && incomingId !== this.self) return;
+    // Bedrock Dedicated Server may encode the Respawn packet's runtime ID as
+    // zero. Treat that protocol sentinel as unspecified, not as another player.
+    if (incomingId && incomingId !== '0' && this.self && incomingId !== this.self) return;
     this.spawnTrace.respawnSeen++;
     this.lastRespawnState = packet.state;
     if (!this.self || typeof this.client.queue !== 'function') return;
