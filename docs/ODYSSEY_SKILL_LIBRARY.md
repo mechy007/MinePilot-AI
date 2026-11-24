@@ -13,7 +13,7 @@ MinePilot evaluates the complete recursive dependency closure for every skill ag
 | Status | Meaning |
 | --- | --- |
 | Ready | All declared prerequisites map to ready MinePilot capabilities. This still does not execute upstream code. |
-| Partial | At least one required Bedrock capability is experimental, and none are unavailable. |
+| Partial | At least one required Bedrock capability or primitive mapping is partial/experimental, and none are blocked. |
 | Manual | A required capability exists only behind explicit user confirmation. |
 | Blocked | A prerequisite is missing, unsupported, preview-only, protocol-only or cyclic. |
 
