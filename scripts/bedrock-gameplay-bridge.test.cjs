@@ -1127,11 +1127,16 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
   });
   assert.equal(call('exploreUntil',{},false).reason,'confirmation_required');
   assert.equal(call('exploreUntil').status,'accepted');
+  assert.equal(call('exploreUntil').awaitingServerConfirmation,true);
   assert.deepEqual(starts.at(-1),{confirmed:true,goal:'explore'});
-  assert.equal(call('goto',{targetPosition:{x:9,y:64,z:10}}).status,'accepted');
+  const goto = call('goto',{targetPosition:{x:9,y:64,z:10}});
+  assert.equal(goto.status,'accepted');
+  assert.equal(goto.awaitingServerConfirmation,true);
   assert.deepEqual(starts.at(-1),{confirmed:true,goal:'goto',targetPosition:{x:9,y:64,z:10}});
   assert.equal(call('goto',{targetPosition:{x:Infinity,y:64,z:10}}).reason,'valid_target_position_required');
-  assert.equal(call('mineBlock',{position:{x:8,y:63,z:10}}).status,'accepted');
+  const mine = call('mineBlock',{position:{x:8,y:63,z:10}});
+  assert.equal(mine.status,'accepted');
+  assert.equal(mine.awaitingServerConfirmation,true);
   assert.deepEqual(breaks.at(-1),{position:{x:8,y:63,z:10},confirmed:true});
   assert.equal(call('craftItem').reason,'primitive_executor_unavailable');
   bridge.stop();
