@@ -2,7 +2,7 @@
 
 // Bedrock-safe metadata bridge. Upstream Mineflayer source is never loaded.
 const CATALOG = require('./bedrock-odyssey-skill-catalog.json');
-const { buildBedrockPrimitivePlan, validatePrimitiveCoverage } = require('./bedrock-odyssey-bedrock-adapter.cjs');
+const { buildBedrockPrimitivePlan, evaluatePrimitive, validatePrimitiveCoverage } = require('./bedrock-odyssey-bedrock-adapter.cjs');
 const BY_ID = new Map(CATALOG.compositions.map(skill => [skill.id, skill]));
 const ALLOWED_STATES = new Set(['ready','experimental','partial','manual_experimental','unsupported','preview_only','protocol_only','blocked']);
 
@@ -38,19 +38,24 @@ function evaluateOdysseySkill(skillId, capabilities = {}) {
   for (const id of closure.order)
     for (const capability of BY_ID.get(id)?.requiredCapabilities ?? []) required.add(capability);
   const states = [...required].sort().map(name => ({name,state:stateOf(capabilities,name),reason:reasonOf(capabilities,name)}));
+  const primitiveCalls = [...new Set(closure.order.flatMap(id => BY_ID.get(id)?.primitiveCalls ?? []))].sort();
+  const primitiveStates = primitiveCalls.map(name => evaluatePrimitive(name, capabilities));
   const blocked = states.filter(item => !['ready','experimental','partial','manual_experimental'].includes(item.state));
   const partial = states.filter(item => ['experimental','partial'].includes(item.state));
   const manual = states.filter(item => item.state === 'manual_experimental');
+  const blockedPrimitives = primitiveStates.filter(item => item.status === 'blocked');
+  const partialPrimitives = primitiveStates.filter(item => item.status === 'partial');
+  const manualPrimitives = primitiveStates.filter(item => item.status === 'manual');
   let status = 'ready';
-  if (closure.missing.length || closure.cycle.length || blocked.length) status = 'blocked';
-  else if (partial.length) status = 'partial';
-  else if (manual.length) status = 'manual';
+  if (closure.missing.length || closure.cycle.length || blocked.length || blockedPrimitives.length) status = 'blocked';
+  else if (partial.length || partialPrimitives.length) status = 'partial';
+  else if (manual.length || manualPrimitives.length) status = 'manual';
   if (!closure.order.length) status = 'blocked';
   return {
     id:skill.id,upstreamName:skill.upstreamName,family:skill.family,status,
     dependencyOrder:closure.order,missingDependencies:closure.missing,dependencyCycle:closure.cycle,
-    requiredCapabilities:[...required].sort(),blockedCapabilities:blocked,
-    partialCapabilities:partial,manualCapabilities:manual,executable:false,
+    requiredCapabilities:[...required].sort(),primitiveCalls,blockedCapabilities:blocked,
+    partialCapabilities:partial,manualCapabilities:manual,blockedPrimitives,partialPrimitives,manualPrimitives,executable:false,
     reason:status==='ready'?'catalog_prerequisites_ready_but_no_odyssey_executor_is_connected'
       :status==='partial'?'one_or_more_bedrock_capabilities_are_experimental'
       :status==='manual'?'one_or_more_bedrock_capabilities_require_user_confirmation'
@@ -84,13 +89,14 @@ function summarizeOdysseyLibrary(capabilities = {}) {
 }
 function planOdysseySkill(skillId, capabilities = {}) {
   const compatibility=evaluateOdysseySkill(skillId,capabilities),skill=BY_ID.get(skillId);
-  if(!skill)return {status:'rejected',reason:compatibility.reason,compatibility};
+  if(!skill)return {status:'rejected',reason:compatibility.reason,execution:'bedrock_action_plan_only',
+    executable:false,arbitraryCodeExecution:false,compatibility};
   return {
     status:compatibility.status==='blocked'?'blocked':'preview',reason:compatibility.reason,
     skillId,title:skill.upstreamName,dependencyOrder:compatibility.dependencyOrder,
-    primitiveCalls:[...new Set(compatibility.dependencyOrder.flatMap(id=>BY_ID.get(id)?.primitiveCalls??[]))].sort(),
+    primitiveCalls:compatibility.primitiveCalls,
     requiredCapabilities:compatibility.requiredCapabilities,
-    bedrockPlan:buildBedrockPrimitivePlan(skill, capabilities),
+    bedrockPlan:buildBedrockPrimitivePlan({...skill,primitiveCalls:compatibility.primitiveCalls}, capabilities),
     execution:'bedrock_action_plan_only',executable:false,arbitraryCodeExecution:false,compatibility
   };
 }
