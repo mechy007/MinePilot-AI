@@ -4,10 +4,10 @@
 // This module never imports or evaluates upstream Mineflayer code.
 const PRIMITIVES = Object.freeze({
   checkBlockAbove: { capability: 'spatial_observation', action: 'inspect_block', mode: 'observe', executor: 'odyssey_observe' },
-  checkBlocksAround: { capability: 'spatial_observation', action: 'inspect_nearby_blocks', mode: 'observe' },
-  findSuitablePosition: { capability: 'spatial_observation', action: 'find_safe_position', mode: 'observe' },
-  getLogsCount: { capability: 'inventory_read', action: 'count_inventory_item', mode: 'observe' },
-  getPlanksCount: { capability: 'inventory_read', action: 'count_inventory_item', mode: 'observe' },
+  checkBlocksAround: { capability: 'spatial_observation', action: 'inspect_nearby_blocks', mode: 'observe', executor: 'odyssey_observe' },
+  findSuitablePosition: { capability: 'spatial_observation', action: 'find_safe_position', mode: 'observe', executor: 'odyssey_observe' },
+  getLogsCount: { capability: 'inventory_read', action: 'count_inventory_item', mode: 'observe', executor: 'odyssey_observe' },
+  getPlanksCount: { capability: 'inventory_read', action: 'count_inventory_item', mode: 'observe', executor: 'odyssey_observe' },
   goto: { capability: 'navigation', action: 'navigate_to_observed_target', mode: 'bounded', executor: 'odyssey_execute' },
   exploreUntil: { capability: 'navigation', action: 'explore_verified_terrain', mode: 'bounded', executor: 'odyssey_execute' },
   mineBlock: { capability: 'mine', action: 'break_observed_block', mode: 'manual_experimental', executor: 'odyssey_execute' },
