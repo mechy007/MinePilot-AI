@@ -131,6 +131,30 @@ public final class WorldSessionProvider extends ContentProvider {
                         }
                     }
                 }
+                JSONObject intelligence = gameplay.optJSONObject("intelligence");
+                if (intelligence != null) {
+                    result.putBoolean("brain_available", true);
+                    for (String key : new String[]{"goal","action","reason","execution"}) {
+                        String value=intelligence.optString(key, "");
+                        if (value.matches("[a-z_]{1,48}"))
+                            result.putString("brain_" + key, value);
+                    }
+                    result.putInt("brain_priority", Math.max(0,
+                            Math.min(100, intelligence.optInt("priority", 0))));
+                    result.putInt("brain_memory_cells", Math.max(0,
+                            Math.min(64, intelligence.optInt("memoryCells", 0))));
+                    result.putInt("brain_decisions", Math.max(0,
+                            intelligence.optInt("decisionCount", 0)));
+                    result.putBoolean("brain_world_verified",
+                            intelligence.optBoolean("verifiedWorld", false));
+                    JSONObject outcomes = intelligence.optJSONObject("outcomes");
+                    if (outcomes != null) {
+                        result.putInt("brain_verified_steps", Math.max(0,
+                                outcomes.optInt("verified", 0)));
+                        result.putInt("brain_failed_steps", Math.max(0,
+                                outcomes.optInt("failed", 0)));
+                    }
+                }
                 JSONObject firstPerson = gameplay.optJSONObject("firstPerson");
                 if (firstPerson != null) {
                     result.putBoolean("fp_available", firstPerson.optBoolean("available", false));
