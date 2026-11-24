@@ -145,6 +145,29 @@ public final class WorldSessionProvider extends ContentProvider {
                             Math.min(40,agent.optInt("serverVerifiedSteps",0))));
                     result.putInt("agent_failures",Math.max(0,
                             Math.min(2,agent.optInt("failures",0))));
+                    result.putInt("agent_collected",Math.max(0,
+                            Math.min(64,agent.optInt("collectedDrops",0))));
+                }
+                JSONObject capabilities=gameplay.optJSONObject("gameplaySkills");
+                if(capabilities!=null) {
+                    org.json.JSONArray known=capabilities.optJSONArray("skills");
+                    int usable=0,preview=0,unsupported=0;
+                    if(known!=null){
+                        for(int i=0;i<Math.min(24,known.length());i++){
+                            JSONObject skill=known.optJSONObject(i);
+                            if(skill==null)continue;
+                            String state=skill.optString("state","");
+                            if("ready".equals(state)||"experimental".equals(state))
+                                usable++;
+                            else if("preview_only".equals(state)||"manual_experimental".equals(state)||
+                                    "protocol_only".equals(state)||"partial".equals(state))
+                                preview++;
+                            else if("unsupported".equals(state))unsupported++;
+                        }
+                    }
+                    result.putInt("gameplay_skill_ready",usable);
+                    result.putInt("gameplay_skill_limited",preview);
+                    result.putInt("gameplay_skill_unsupported",unsupported);
                 }
                 JSONObject intelligence = gameplay.optJSONObject("intelligence");
                 if (intelligence != null) {
@@ -502,7 +525,8 @@ public final class WorldSessionProvider extends ContentProvider {
             }
             if ("agent_start".equals(action)) {
                 String goal=extras.getString("agent_goal","");
-                if (!"explore".equals(goal) && !"follow".equals(goal) &&
+                if (!"survive".equals(goal) && !"explore".equals(goal) &&
+                        !"follow".equals(goal) &&
                         !"return_home".equals(goal) && !"gather".equals(goal)) return;
                 command.put("goal",goal);
                 if ("follow".equals(goal)) {
