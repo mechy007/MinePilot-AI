@@ -985,7 +985,11 @@ class BedrockGameplayBridge {
       requestId: typeof command?.requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(command.requestId)
         ? command.requestId : '',
       status: result.status,
-      reason: result.reason
+      reason: result.reason,
+      ...(command?.action === 'odyssey_observe' && result.status === 'ok' ? {
+        primitive: result.primitive, result: result.result, observedAt: result.observedAt,
+        verifiedBy: result.verifiedBy, readOnly: true, executed: false
+      } : {})
     };
     this.lastReceipt = receipt;
     try { atomicJson(this.receiptPath, receipt); }
