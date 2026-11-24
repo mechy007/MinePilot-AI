@@ -31,6 +31,8 @@ test('normalizes Bedrock 1.26.60 action IDs and validates slot addresses', () =>
     source: slot('inventory', 9), destination: slot('hotbar', 0) }), /count/);
   assert.throws(() => normalizeAction({ type_id: 'craft_recipe', recipe_network_id: -1 }), /recipe network id/);
   assert.throws(() => normalizeAction({ type_id: 'execute_javascript' }), /unsupported action/);
+  for (const type_id of ['drop','destroy','consume','craft_recipe_auto','craft_creative'])
+    assert.throws(() => normalizeAction({ type_id, count: 1, source: slot('inventory', 9) }), /unsupported action/);
   assert.throws(() => normalizeAction({ type_id: 'take', count: 1,
     source: slot('inventory', 256), destination: slot('hotbar', 0) }), /slot/);
 });
