@@ -4,6 +4,23 @@
 // blocks with registry-resolved names are exported. No synthetic world fill.
 const MAX_CUBES = 144;
 const MAX_ENTITIES = 16;
+// Bit order follows the Android renderer: west, east, bottom, top, north, south.
+const NEIGHBORS = [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]];
+function visibleMask(terrain,dim,x,y,z) {
+  let mask = 0;
+  for(let i=0;i<6;i++){
+    const [dx,dy,dz]=NEIGHBORS[i];
+    const nx=x+dx,ny=y+dy,nz=z+dz;
+    const adjacent=terrain.blockName(dim,nx,ny,nz);
+    // Unknown and transparent neighbors must NEVER hide observed faces.
+    // Only a registry-verified solid full cube can occlude.
+    const opaque=adjacent && type(adjacent)!==0 &&
+      ![4,5,6].includes(type(adjacent)) &&
+      terrain.kind?.(dim,nx,ny,nz)==='solid';
+    if(!opaque)mask|=(1<<i);
+  }
+  return mask;
+}
 function type(name) {
   if (!name || /^(minecraft:)?(?:air|cave_air|void_air)$/.test(name)) return 0;
   if (/minecraft:(?:water|flowing_water)$/.test(name)) return 5;
@@ -43,12 +60,14 @@ function scene(world) {
     if(!color)continue;
     // Exclude voxels that cannot safely be approximated as cubes.
     if (color===8 && terrain.kind(dim,bx,by,bz)!=='solid')continue;
+    const mask=visibleMask(terrain,dim,bx,by,bz);
+    if(!mask)continue; // enclosed faces should not consume the scene budget
     const dist=dx*dx+dz*dz+dy*dy;
-    found.push({dx:bx-p.x,dy:by-p.y,dz:bz-p.z,type:color,dist});
+    found.push({dx:bx-p.x,dy:by-p.y,dz:bz-p.z,type:color,mask,dist});
   }
   found.sort((a,b)=>a.dist-b.dist);
-  const cubes=found.slice(0,MAX_CUBES).map(({dx,dy,dz,type})=>[
-    Math.round(dx*100)/100,Math.round(dy*100)/100,Math.round(dz*100)/100,type
+  const cubes=found.slice(0,MAX_CUBES).map(({dx,dy,dz,type,mask})=>[
+    Math.round(dx*100)/100,Math.round(dy*100)/100,Math.round(dz*100)/100,type,mask
   ]);
   const seen=world.lifeSenses?.snapshot?.({
     position:p,dimension:dim,spawned:world.spawned,
@@ -68,7 +87,8 @@ function scene(world) {
     available:true,kind:'reconstructed_voxel_camera',
     yaw:Math.round(yaw*10)/10,pitch:Math.round(pitch*10)/10,
     eyeHeight:1.62,range:6,decodedBlocks:cubes.length,
-    cubes,entities,model:'untextured_approximate_cubes',
+    cubes,entities,model:'surface_culled_voxels_v2',
+    faceMaskVersion:1,visibleFaces:cubes.reduce((sum,b)=>sum+b[4].toString(2).replace(/0/g,'').length,0),
     limitations:'partial_blocks_unrendered_unknown_terrain_hidden'
   };
 }
