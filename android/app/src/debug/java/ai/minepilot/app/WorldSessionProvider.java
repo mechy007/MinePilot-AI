@@ -131,6 +131,62 @@ public final class WorldSessionProvider extends ContentProvider {
                         }
                     }
                 }
+                JSONObject firstPerson = gameplay.optJSONObject("firstPerson");
+                if (firstPerson != null) {
+                    result.putBoolean("fp_available", firstPerson.optBoolean("available", false));
+                    String reason = firstPerson.optString("reason", "awaiting_camera");
+                    if (reason.matches("[a-z_]{1,40}")) result.putString("fp_reason", reason);
+                    if (firstPerson.optBoolean("available", false)) {
+                        double yaw = firstPerson.optDouble("yaw", Double.NaN);
+                        double pitch = firstPerson.optDouble("pitch", Double.NaN);
+                        if (Double.isFinite(yaw) && Double.isFinite(pitch) &&
+                                Math.abs(yaw) <= 36000 && Math.abs(pitch) <= 89.9) {
+                            result.putFloat("fp_yaw", (float)yaw);
+                            result.putFloat("fp_pitch", (float)pitch);
+                            org.json.JSONArray cubes = firstPerson.optJSONArray("cubes");
+                            if (cubes != null) {
+                                float[] output = new float[Math.min(144,cubes.length())*4];
+                                int n=0;
+                                for(int i=0;i<Math.min(144,cubes.length());i++) {
+                                    org.json.JSONArray cube=cubes.optJSONArray(i);
+                                    if(cube==null || cube.length()!=4)continue;
+                                    double x=cube.optDouble(0,Double.NaN),
+                                            y=cube.optDouble(1,Double.NaN),
+                                            z=cube.optDouble(2,Double.NaN);
+                                    int type=cube.optInt(3,0);
+                                    if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(z)||
+                                            Math.abs(x)>8||Math.abs(y)>8||Math.abs(z)>8||
+                                            type<1||type>8)continue;
+                                    output[n++]=(float)x;output[n++]=(float)y;
+                                    output[n++]=(float)z;output[n++]=type;
+                                }
+                                result.putFloatArray("fp_blocks",java.util.Arrays.copyOf(output,n));
+                            }
+                            org.json.JSONArray entities = firstPerson.optJSONArray("entities");
+                            if(entities!=null){
+                                float[] output=new float[Math.min(16,entities.length())*4];
+                                int n=0;
+                                for(int i=0;i<Math.min(16,entities.length());i++){
+                                    org.json.JSONArray entity=entities.optJSONArray(i);
+                                    if(entity==null || entity.length()!=4)continue;
+                                    double x=entity.optDouble(0,Double.NaN),
+                                            y=entity.optDouble(1,Double.NaN),
+                                            z=entity.optDouble(2,Double.NaN);
+                                    int type=entity.optInt(3,0);
+                                    if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(z)||
+                                            Math.abs(x)>17||Math.abs(y)>17||Math.abs(z)>17||
+                                            type<1||type>3)continue;
+                                    output[n++]=(float)x;output[n++]=(float)y;
+                                    output[n++]=(float)z;output[n++]=type;
+                                }
+                                result.putFloatArray("fp_entities",java.util.Arrays.copyOf(output,n));
+                            }
+                        } else {
+                            result.putBoolean("fp_available",false);
+                            result.putString("fp_reason","camera_rotation_unobserved");
+                        }
+                    }
+                }
                 JSONObject spawnHandshake = gameplay.optJSONObject("spawnHandshake");
                 if (spawnHandshake != null) {
                     result.putBoolean("spawn_loading_completed", spawnHandshake.optBoolean("loadingCompleted", false));
