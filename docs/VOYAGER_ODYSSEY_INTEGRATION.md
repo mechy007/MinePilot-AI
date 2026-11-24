@@ -6,6 +6,8 @@ MinePilot adopts the useful learning architecture from Voyager and ODYSSEY, but 
 
 The upstream projects are built around Mineflayer/Java Edition interfaces. Importing their runtime would create a second Minecraft client and would not make their actions compatible with Bedrock. MinePilot therefore ports the concepts and routes every executable task through the existing Bedrock gameplay bridge.
 
+Research references: [Voyager source](https://github.com/MineDojo/Voyager) · [Voyager paper](https://arxiv.org/abs/2305.16291) · [ODYSSEY source](https://github.com/zju-vipa/odyssey) · [ODYSSEY paper](https://ijcai.org/proceedings/2025/22).
+
 ## Architecture now present
 
 | Research idea | MinePilot implementation |
