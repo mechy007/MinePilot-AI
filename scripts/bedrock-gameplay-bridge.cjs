@@ -792,15 +792,19 @@ class BedrockGameplayBridge {
       if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
       const args = raw.args && typeof raw.args === 'object' && !Array.isArray(raw.args) ? raw.args : {};
       if (raw.primitive === 'exploreUntil') {
-        return this.gameplayAgent?.start(this, { confirmed: true, goal: 'explore' }) ??
+        const result = this.gameplayAgent?.start(this, { confirmed: true, goal: 'explore' }) ??
           { status: 'rejected', reason: 'gameplay_agent_unavailable' };
+        return result.status === 'accepted' ? { ...result, primitive: raw.primitive,
+          awaitingServerConfirmation: true } : result;
       }
       if (raw.primitive === 'goto') {
         if (!finitePosition(args.targetPosition))
           return { status: 'rejected', reason: 'valid_target_position_required' };
-        return this.gameplayAgent?.start(this, {
+        const result = this.gameplayAgent?.start(this, {
           confirmed: true, goal: 'goto', targetPosition: args.targetPosition
         }) ?? { status: 'rejected', reason: 'gameplay_agent_unavailable' };
+        return result.status === 'accepted' ? { ...result, primitive: raw.primitive,
+          awaitingServerConfirmation: true } : result;
       }
       if (['equipAxe','equipHoe','equipPickaxe','equipSword'].includes(raw.primitive))
         return this.selectHotbarTool(raw.primitive);
@@ -808,8 +812,10 @@ class BedrockGameplayBridge {
         const p = args.position;
         if (!p || !['x','y','z'].every(k => Number.isInteger(p[k])))
           return { status: 'rejected', reason: 'integer_block_position_required' };
-        return this.blockBreaker?.start(this, p, true) ??
+        const result = this.blockBreaker?.start(this, p, true) ??
           { status: 'rejected', reason: 'block_break_unavailable' };
+        return result.status === 'accepted' ? { ...result, primitive: raw.primitive,
+          awaitingServerConfirmation: true } : result;
       }
       return { status: 'rejected', reason: 'primitive_executor_unavailable' };
     }
