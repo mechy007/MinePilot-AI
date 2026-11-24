@@ -80,6 +80,57 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("world_difficulty", gameplay.optInt("difficulty", -1));
                 if (!gameplay.isNull("movementAuthority"))
                     result.putString("movement_authority", gameplay.optString("movementAuthority", ""));
+                // Explicitly bounded, sanitized life telemetry from the authenticated
+                // Bedrock client. No raw identity, chat, token or arbitrary JSON.
+                JSONObject life = gameplay.optJSONObject("life");
+                JSONObject botPosition = gameplay.optJSONObject("position");
+                if (life != null) {
+                    result.putBoolean("life_available", true);
+                    String state = life.optString("state", "awaiting_world");
+                    String intent = life.optString("intent", "observe");
+                    if (state.matches("[a-z_]{1,36}")) result.putString("life_state", state);
+                    if (intent.matches("[a-z_]{1,36}")) result.putString("life_intent", intent);
+                    for (String key : new String[]{"health","hunger"}) {
+                        Object value = life.opt(key);
+                        if (value instanceof Number && Double.isFinite(((Number)value).doubleValue())) {
+                            int count = ((Number)value).intValue();
+                            if (count >= 0 && count <= 20)
+                                result.putInt("life_" + key, count);
+                        }
+                    }
+                    result.putInt("life_hostiles", Math.max(0, Math.min(24,
+                            life.optInt("hostilesNearby", 0))));
+                    JSONObject terrain = life.optJSONObject("localTerrain");
+                    if (terrain != null) {
+                        for (String key : new String[]{"walkable","hazard","blocked","unknown"})
+                            result.putInt("life_" + key, Math.max(0, Math.min(25, terrain.optInt(key, 0))));
+                    }
+                    org.json.JSONArray nearby = life.optJSONArray("nearbyEntities");
+                    if (nearby != null && botPosition != null) {
+                        double bx = botPosition.optDouble("x", Double.NaN);
+                        double bz = botPosition.optDouble("z", Double.NaN);
+                        if (Double.isFinite(bx) && Double.isFinite(bz)) {
+                            float[] vectors = new float[Math.min(24, nearby.length()) * 4];
+                            int n = 0;
+                            for (int i = 0; i < Math.min(24, nearby.length()); i++) {
+                                JSONObject entity = nearby.optJSONObject(i);
+                                if (entity == null) continue;
+                                JSONObject pos = entity.optJSONObject("position");
+                                if (pos == null) continue;
+                                double dx = pos.optDouble("x", Double.NaN) - bx;
+                                double dz = pos.optDouble("z", Double.NaN) - bz;
+                                if (!Double.isFinite(dx) || !Double.isFinite(dz) ||
+                                        Math.hypot(dx,dz) > 24) continue;
+                                vectors[n++] = (float)dx;
+                                vectors[n++] = (float)dz;
+                                vectors[n++] = entity.optBoolean("hostile", false) ? 1f : 0f;
+                                vectors[n++] = "player".equals(entity.optString("kind")) ? 1f : 0f;
+                            }
+                            result.putFloatArray("life_entity_vectors",
+                                    java.util.Arrays.copyOf(vectors, n));
+                        }
+                    }
+                }
                 JSONObject spawnHandshake = gameplay.optJSONObject("spawnHandshake");
                 if (spawnHandshake != null) {
                     result.putBoolean("spawn_loading_completed", spawnHandshake.optBoolean("loadingCompleted", false));
