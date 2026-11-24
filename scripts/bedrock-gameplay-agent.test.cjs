@@ -205,7 +205,7 @@ test('follow/return/gather require explicit prior goal or identifiable player an
   const h=fixture();
   assert.equal(h.agent.start(h.world,{confirmed:true,goal:'gather'}).reason,
     'select_observed_item_goal_first');
-  h.layerThree.preview=()=>({status:'waiting_for_item',itemName:'minecraft:apple'});
+  h.layerThree.preview=()=>({status:'waiting_for_item',itemName:'minecraft:apple',reason:'no_matching_drop_observed'});
   assert.equal(h.agent.start(h.world,{confirmed:true,goal:'gather'}).status,'accepted');
   h.tick();
   assert.equal(h.agent.snapshot().reason,'no_matching_drop_observed');
