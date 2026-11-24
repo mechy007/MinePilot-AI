@@ -1313,3 +1313,37 @@ test('world snapshots do not run intelligence decisions or update navigation int
   assert.equal(navigationUpdates, 1);
   bridge.stop();
 });
+
+
+test('bridge mirrors full Bedrock inventory content and incremental slots without refreshing snapshot age', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  client.emit('item_registry', { itemstates: [
+    { runtime_id: 5, name: 'minecraft:oak_log' },
+    { runtime_id: 8, name: 'minecraft:stick' }
+  ] });
+  const empty = () => ({ network_id: 0, count: 0, metadata: 0,
+    has_stack_id: false, block_runtime_id: 0 });
+  const items = Array.from({ length: 36 }, empty);
+  items[0] = { network_id: 5, count: 4, metadata: 0, has_stack_id: true,
+    stack_id: 22, block_runtime_id: 0 };
+  client.emit('inventory_content', { window_id: 0, input: items,
+    container: { container_id: 'hotbar_and_inventory' }, storage_item: empty() });
+  let snapshot = bridge.snapshot();
+  assert.equal(snapshot.inventory.player.known, true);
+  assert.equal(snapshot.inventory.player.fresh, true);
+  assert.equal(snapshot.inventory.player.items[0].itemName, 'minecraft:oak_log');
+  assert.equal(snapshot.inventory.player.items[0].stackId, 22);
+
+  now = 12000;
+  client.emit('inventory_slot', { window_id: 0, slot: 0,
+    item: { network_id: 5, count: 3, metadata: 0, has_stack_id: true,
+      stack_id: 23, block_runtime_id: 0 } });
+  snapshot = bridge.snapshot();
+  assert.equal(snapshot.inventory.player.fresh, false,
+    'an incremental slot update must not renew the complete inventory snapshot');
+  assert.equal(snapshot.inventory.windows[0].slots[0].item.stackId, 23);
+  bridge.stop();
+});
