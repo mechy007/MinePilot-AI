@@ -90,7 +90,7 @@ test('unsupported Bedrock capability families cannot be promoted by caller-suppl
  const water = evaluateOdysseySkill('place_water', forced);
  assert.equal(water.status, 'blocked');
  assert.ok(water.blockedCapabilities.some(x => x.name === 'bucket_use' && x.state === 'unsupported'));
- const build = evaluateOdysseySkill('build_shelter', forced);
+ const build = evaluateOdysseySkill('craft_chest', forced);
  assert.equal(build.status, 'blocked');
  assert.ok(build.blockedCapabilities.some(x => x.name === 'block_placement' && x.state === 'unsupported'));
 });
