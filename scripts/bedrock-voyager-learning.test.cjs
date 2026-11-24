@@ -239,3 +239,42 @@ test('legacy Voyager records migrate only when every stored step is in the previ
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test('local autopilot advances through built-in Bedrock tasks without external model prompts', () => {
+  const { world, setAgent } = worldFixture();
+  const engine = new BedrockOpenWorldLearningEngine({ sessionId: 'offline-session' });
+  const manifest = gameplaySkillManifest(world);
+  const enabled = engine.enableAutopilot(world, manifest, { confirmed: true });
+  assert.equal(enabled.status, 'accepted');
+  assert.equal(enabled.reason, 'local_autopilot_started');
+  assert.equal(engine.snapshot(world, manifest).localAutopilot.enabled, true);
+  assert.equal(world.gameplayAgent.snapshot().goal, 'survive');
+
+  // A completed task is accepted only from the same server-verified terminal evidence
+  // used by the existing Bedrock gameplay agent.
+  setAgent({ active: false, phase: 'idle', reason: 'gameplay_run_budget_exhausted',
+    serverVerifiedSteps: 3 });
+  const next = engine.observe(world, manifest);
+  assert.equal(next.recentRuns.at(-1).outcome, 'verified');
+  assert.equal(next.localAutopilot.enabled, true);
+  assert.equal(next.activeTask.goal, 'explore');
+  assert.equal(world.gameplayAgent.snapshot().goal, 'explore');
+  assert.equal(next.localAutopilot.attemptedThisSession, 2);
+});
+
+test('local autopilot requires one explicit enable and can be stopped immediately', () => {
+  const { world } = worldFixture();
+  const engine = new BedrockOpenWorldLearningEngine();
+  const manifest = gameplaySkillManifest(world);
+  assert.equal(engine.enableAutopilot(world, manifest, { confirmed: false }).reason,
+    'confirmation_required');
+  assert.equal(engine.snapshot(world, manifest).localAutopilot.enabled, false);
+  assert.equal(engine.enableAutopilot(world, manifest, { confirmed: true }).status, 'accepted');
+  const stopped = engine.disableAutopilot(world, 'user_disabled_autopilot');
+  assert.equal(stopped.status, 'ok');
+  const state = engine.snapshot(world, manifest);
+  assert.equal(state.localAutopilot.enabled, false);
+  assert.equal(state.activeTask, null);
+  assert.equal(state.recentRuns.at(-1).outcome, 'interrupted');
+});
