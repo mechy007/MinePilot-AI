@@ -125,7 +125,7 @@ test('verified movement requires safe 0.6-block footprint, not merely a clear ce
     movementAuthority:1,serverTick:100n,serverTickObservedAt:1000,
     lastServerPositionAt:1000,receivedChunks:new Set(['0,0']),
     terrain:{tile(dim,x,y,z){
-      if(blocked&&x===8&&z===11)return 'unknown';
+      if(blocked&&x===8&&z===10)return 'unknown';
       return 'walkable';
     }}
   };
