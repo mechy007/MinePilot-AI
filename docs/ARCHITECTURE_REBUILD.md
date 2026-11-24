@@ -111,7 +111,21 @@ Target interfaces:
 
 Required models: vitals/life, player and entity observations, dimension and position, decoded terrain/collision, block updates, item registry, full inventory snapshots, incremental inventory slots, selected hotbar/equipment, dropped items and world memory.
 
-Inventory must distinguish unknown inventory from known-empty inventory. A slot update must not make the whole container fresh. Full inventory content snapshots establish the container baseline; stack IDs/network IDs are trusted only when observed and negotiated.
+**Implemented first inventory foundation:** `scripts/bedrock-inventory-ledger.cjs` now mirrors Bedrock 1.26.60 `ItemV4` item IDs/counts/metadata/stack IDs, full container names and dynamic container IDs. It stores atomic full-window snapshots separately from incremental slot updates, preserves known-empty slots, keeps per-slot timestamps, and invalidates old stack identities on a new session. The bridge feeds it from `item_registry`, `inventory_content` and `inventory_slot` packets and publishes a compact status view.
+
+Inventory must distinguish unknown inventory from known-empty inventory. A slot update must not make the whole container fresh. Full inventory content snapshots establish the container baseline; stack IDs/network IDs are trusted only when observed and negotiated. Action requests must use the exact server-observed stack ID and container address; missing stack identity is a hard rejection. The ledger is an observation foundation, not yet a general inventory action executor.
+
+### 3.4.1 Inventory transaction boundary
+
+The inventory ledger and the transaction manager are separate by design:
+
+1. The ledger records the exact server-observed slot identity, item runtime ID, count, metadata, stack ID, window, container and dynamic container ID.
+2. A transaction planner resolves source and destination from fresh ledger slots and checks that the server negotiated `enable_item_stack_net_manager`.
+3. The transaction manager serializes one allowlisted request at a time and correlates only the matching `item_stack_response`.
+4. The executor waits for the resulting inventory content/slot updates and verifies the postcondition against a new server observation.
+5. Timeout, rejection, stale identity, ambiguous container, dimension/session change or cancellation must stop the operation without claiming success.
+
+The first supported transaction family should be a reversible player-inventory slot transfer/swap. Crafting, armor, furnace, container, block placement and item-use actions remain blocked until their own packet schemas, UI/container lifecycle and server postconditions are implemented and tested. No speculative request may be sent to discover protocol behavior.
 
 ### 3.5 Capability registry
 
