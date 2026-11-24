@@ -94,6 +94,7 @@ function odysseyCapabilityStates(world, manifest) {
       existing('mine').reason ?? 'single_block_action_unavailable'),
     eat_food: state(existing('eat_food').state ?? 'blocked',
       existing('eat_food').reason ?? 'food_use_unavailable'),
+    item_use: state('unsupported', 'bucket_and_general_item_use_transaction_unavailable'),
     combat: state(existing('attack_hostile').state ?? 'blocked',
       existing('attack_hostile').reason ?? 'combat_executor_unavailable'),
     craft: state(existing('craft').state ?? 'blocked',
