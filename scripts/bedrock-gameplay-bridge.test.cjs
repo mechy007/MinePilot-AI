@@ -1107,3 +1107,32 @@ test('general gameplay start reconciles learning results and generic stop cannot
   assert.equal(stops, beforeStops);
   bridge.stop();
 });
+
+
+test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil and manual mineBlock', () => {
+  const client=new Client();
+  const starts=[];
+  const gameplayAgent={
+    snapshot:()=>({active:false}),
+    start(_world,options){starts.push(options);return {status:'accepted',reason:'started'};},
+    stop(){return {status:'ok'};}
+  };
+  const breaks=[];
+  const blockBreaker={start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
+  const bridge=new BedrockGameplayBridge(client,{gameplayAgent,blockBreaker}).start();
+  initialized(client,bridge);
+  const call=(primitive,args={},confirmed=true)=>bridge.execute({
+    version:'minepilot.gameplay.v1',requestId:'odyssey-exec',action:'odyssey_execute',
+    primitive,args,confirmed
+  });
+  assert.equal(call('exploreUntil',{},false).reason,'confirmation_required');
+  assert.equal(call('exploreUntil').status,'accepted');
+  assert.deepEqual(starts.at(-1),{confirmed:true,goal:'explore'});
+  assert.equal(call('goto',{targetPosition:{x:9,y:64,z:10}}).status,'accepted');
+  assert.deepEqual(starts.at(-1),{confirmed:true,goal:'goto',targetPosition:{x:9,y:64,z:10}});
+  assert.equal(call('goto',{targetPosition:{x:Infinity,y:64,z:10}}).reason,'valid_target_position_required');
+  assert.equal(call('mineBlock',{position:{x:8,y:63,z:10}}).status,'accepted');
+  assert.deepEqual(breaks.at(-1),{position:{x:8,y:63,z:10},confirmed:true});
+  assert.equal(call('craftItem').reason,'primitive_executor_unavailable');
+  bridge.stop();
+});
