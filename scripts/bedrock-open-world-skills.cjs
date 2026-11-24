@@ -319,12 +319,17 @@ class BedrockOpenWorldLearningEngine {
 
   start(world, manifest, taskId, options = {}) {
     if (options.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+    if (!COMPOSITE_SKILLS.some(item => item.id === taskId))
+      return { status: 'rejected', reason: 'learning_task_not_builtin' };
     if (this.activeRun) return { status: 'rejected', reason: 'learning_task_already_active' };
     if (world?.gameplayAgent?.snapshot?.()?.active) return { status: 'rejected', reason: 'gameplay_agent_busy' };
     const plan = this.buildPlan(world, manifest, taskId);
     if (plan.status !== 'ready') return plan;
+    // Preserve the previous run's verified steps before the gameplay agent resets its counter.
+    this.updateCounters(world);
     const started = world.gameplayAgent.start(world, { confirmed: true, goal: plan.goal });
     if (started?.status !== 'accepted') return started ?? { status: 'rejected', reason: 'gameplay_agent_start_failed' };
+    this.lastCounters.gameplayAgent = 0; // GameplayAgent.start resets its verified-step counter.
     if (this.autopilotEnabled) this.sessionAttempted.add(plan.taskId);
     this.activeRun = {
       taskId: plan.taskId,
@@ -334,6 +339,7 @@ class BedrockOpenWorldLearningEngine {
       startedAt: this.clock(),
       sessionId: this.sessionId,
       requestedStop: false,
+      owner: options.owner === 'autopilot' ? 'autopilot' : 'manual',
       seenActive: true
     };
     if (this.proposals.has(taskId)) {
@@ -358,7 +364,7 @@ class BedrockOpenWorldLearningEngine {
       this.autopilotReason = 'no_eligible_local_task';
       return { status: 'rejected', reason: 'no_eligible_local_task' };
     }
-    const started = this.start(world, manifest, next.id, { confirmed: true });
+    const started = this.start(world, manifest, next.id, { confirmed: true, owner: 'autopilot' });
     if (started?.status !== 'accepted') {
       this.autopilotEnabled = false;
       this.autopilotReason = started?.reason ?? 'local_task_start_failed';
@@ -371,7 +377,7 @@ class BedrockOpenWorldLearningEngine {
   disableAutopilot(world, reason = 'user_disabled_autopilot') {
     this.autopilotEnabled = false;
     this.autopilotReason = reason;
-    if (this.activeRun) {
+    if (this.activeRun?.owner === 'autopilot') {
       this.activeRun.requestedStop = true;
       world?.gameplayAgent?.stop?.(reason);
       this.observe(world, null);
@@ -434,7 +440,8 @@ class BedrockOpenWorldLearningEngine {
       reason === 'gameplay_run_budget_exhausted' && verified >= task.minimumVerifiedSteps;
     if (activeRun.requestedStop || ['learning_user_stopped', 'user_stopped', 'user_stop', 'session_closed'].includes(reason))
       return { outcome: 'interrupted', reason, verified, improvementHint: 'Resume only after reviewing the current world and safety state.' };
-    if (terminalSuccess || progressSuccess)
+    const success = ['explore', 'survive'].includes(task.goal) ? progressSuccess : terminalSuccess;
+    if (success)
       return { outcome: 'verified', reason, verified, improvementHint: 'Success was established by Bedrock server observations.' };
     return { outcome: 'failed', reason, verified, improvementHint: improvementHint(reason) };
   }
