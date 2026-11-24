@@ -43,6 +43,9 @@ public final class DashboardActivity extends Activity {
     private Button verifiedStep;
     private Button autoFollow;
     private Button autoStop;
+    private Button gameplayAgentStart;
+    private Button gameplayAgentStop;
+    private TextView gameplayAgentState;
     private Button experimentalBreak;
     private Button stopMovement;
     private Button inspectWorld;
@@ -522,6 +525,9 @@ public final class DashboardActivity extends Activity {
         brainStatus = text("Waiting for the bot's first world observations", 13, MUTED, false);
         brainStatus.setPadding(0, dp(9), 0, dp(4));
         intelligencePanel.addView(brainStatus);
+        gameplayAgentState = text("Gameplay agent inactive", 12, MUTED, false);
+        gameplayAgentState.setPadding(0, dp(7), 0, dp(1));
+        intelligencePanel.addView(gameplayAgentState);
         body.addView(intelligencePanel, panelLayout(10));
 
         LinearLayout gameplay = card();
@@ -599,6 +605,14 @@ public final class DashboardActivity extends Activity {
                 () -> requestGameplay("autonomy_stop", false));
         autoStop.setVisibility(View.GONE);
         body.addView(autoStop, panelLayout(8));
+        gameplayAgentStart = actionButton("Start Intelligent Gameplay (experimental)", true,
+                this::chooseIntelligentGameplayGoal);
+        gameplayAgentStart.setVisibility(View.GONE);
+        body.addView(gameplayAgentStart, panelLayout(8));
+        gameplayAgentStop = actionButton("Stop Intelligent Gameplay", false,
+                () -> requestGameplay("agent_stop", false));
+        gameplayAgentStop.setVisibility(View.GONE);
+        body.addView(gameplayAgentStop, panelLayout(8));
         experimentalBreak = actionButton("Experimental break one observed block", false,
                 this::showBlockBreakDialog);
         experimentalBreak.setVisibility(View.GONE);
@@ -719,6 +733,17 @@ public final class DashboardActivity extends Activity {
         worldHunger.setText(current.getString("hunger", "—"));
         if (lifeAnalytics != null) lifeAnalytics.update(current);
         if (firstPersonView != null) firstPersonView.update(current);
+        if (gameplayAgentState != null) {
+            boolean active = playing && current.getBoolean("agent_active", false);
+            String phaseName=current.getString("agent_phase", "idle").replace('_',' ');
+            gameplayAgentState.setText(active ? "GAMEPLAY ENGINE ACTIVE  ·  " + phaseName
+                + "\nGoal: " + current.getString("agent_goal", "unknown").replace('_',' ')
+                + "\nAttempted: " + current.getInt("agent_attempted")
+                + " · Server-verified: " + current.getInt("agent_verified")
+                + " · Failures: " + current.getInt("agent_failures")
+                + "\nStatus: " + current.getString("agent_reason", "waiting").replace('_',' ')
+                : "Gameplay agent inactive · " + current.getString("agent_reason", "ready").replace('_',' '));
+        }
         if (brainStatus != null) {
             if (!playing || !current.getBoolean("brain_available", false)) {
                 brainStatus.setText("Awaiting authenticated world telemetry");
@@ -776,6 +801,7 @@ public final class DashboardActivity extends Activity {
         String terrainStatus = current.getString("terrain_route_status", "");
         String terrainReason = current.getString("terrain_route_reason", "");
         boolean autonomyActive = current.getBoolean("autonomy_active", false);
+        boolean gameplayAgentActive = current.getBoolean("agent_active",false);
         String addonNavState = current.getString("addon_nav_state", "idle");
         String addonNavReason = current.getString("addon_nav_reason", "");
         String advisorModeText = current.getString("advisor_mode", "off");
@@ -912,11 +938,15 @@ public final class DashboardActivity extends Activity {
         probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
         verifiedStep.setVisibility(playing && "experimental".equals(movement) && !autonomyActive
                 ? View.VISIBLE : View.GONE);
-        autoFollow.setVisibility(playing && "experimental".equals(movement) && !autonomyActive
+        autoFollow.setVisibility(playing && "experimental".equals(movement) && !autonomyActive && !gameplayAgentActive
                 ? View.VISIBLE : View.GONE);
         autoStop.setVisibility(playing && autonomyActive ? View.VISIBLE : View.GONE);
+        gameplayAgentStart.setVisibility(playing && "experimental".equals(movement) &&
+                current.getBoolean("terrain_registry_ready",false) &&
+                !autonomyActive && !gameplayAgentActive ? View.VISIBLE : View.GONE);
+        gameplayAgentStop.setVisibility(playing && gameplayAgentActive ? View.VISIBLE : View.GONE);
         experimentalBreak.setVisibility(playing && "experimental".equals(movement) &&
-                current.getBoolean("terrain_registry_ready", false) && !autonomyActive
+                current.getBoolean("terrain_registry_ready", false) && !autonomyActive && !gameplayAgentActive
                 ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
         stopWorld.setEnabled(canStop);
@@ -1032,6 +1062,60 @@ public final class DashboardActivity extends Activity {
                 .setPositiveButton("Attempt step", (dialog, which) ->
                         requestGameplay("verified_step", true))
                 .show();
+    }
+
+    private void chooseIntelligentGameplayGoal() {
+        final String[] goals = {"Explore verified terrain", "Follow a player",
+                "Return to marked home", "Collect an observed item drop"};
+        final String[] ids = {"explore","follow","return_home","gather"};
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Gameplay Intelligence")
+                .setMessage("Choose one goal. Movement is experimental and limited to verified terrain and short server-confirmed steps. Danger may stop the bot. No automatic combat, eating or mining.")
+                .setItems(goals, (dialog, which) -> {
+                    String goal=ids[which];
+                    if ("follow".equals(goal)) {
+                        EditText target = new EditText(this);
+                        target.setSingleLine(true);
+                        target.setHint("Exact observed player gamertag");
+                        target.setTextColor(INK);
+                        target.setHintTextColor(MUTED);
+                        new android.app.AlertDialog.Builder(this)
+                            .setTitle("Intelligent Follow")
+                            .setMessage("Follow will only use a player you explicitly select. The bot stops if movement cannot be confirmed.")
+                            .setView(target)
+                            .setNegativeButton("Cancel",null)
+                            .setPositiveButton("Start", (d,b)->requestGameplayAgent(goal,
+                                    target.getText().toString().trim()))
+                            .show();
+                    } else {
+                        new android.app.AlertDialog.Builder(this)
+                            .setTitle("Start " + goals[which])
+                            .setMessage("Runs a bounded local action loop with actual Bedrock movement. If terrain or server confirmation is unavailable, it will not guess.")
+                            .setNegativeButton("Cancel",null)
+                            .setPositiveButton("Start", (d,b)->requestGameplayAgent(goal,null))
+                            .show();
+                    }
+                }).show();
+    }
+
+    private void requestGameplayAgent(String goal,String playerName) {
+        String session=worldSessionId;
+        if(session.isEmpty())return;
+        Bundle extras=new Bundle();
+        extras.putString("action","agent_start");
+        extras.putBoolean("confirmed",true);
+        extras.putString("agent_goal",goal);
+        if(playerName!=null)extras.putString("player_name",playerName);
+        int generation=worldViewGeneration;
+        worldReader.execute(()->{
+            Bundle receipt=worldRequest("gameplay",session,extras);
+            runOnUiThread(()->{
+                if(generation!=worldViewGeneration||!dashboardVisible)return;
+                showStatus(receipt!=null&&receipt.getBoolean("accepted")
+                        ?"Gameplay start queued. Check AI Brain for actual acceptance."
+                        :"Gameplay agent could not be queued. Check the current world session.");
+            });
+        });
     }
 
     private void showAutonomyConfirmation() {
