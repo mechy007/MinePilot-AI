@@ -213,6 +213,7 @@ cp "$root/scripts/bedrock-life-senses.cjs" "$temp/bedrock-life-senses.cjs"
 cp "$root/scripts/bedrock-intelligence-core.cjs" "$temp/bedrock-intelligence-core.cjs"
 cp "$root/scripts/bedrock-gameplay-agent.cjs" "$temp/bedrock-gameplay-agent.cjs"
 cp "$root/scripts/bedrock-skill-manifest.cjs" "$temp/bedrock-skill-manifest.cjs"
+cp "$root/scripts/bedrock-open-world-skills.cjs" "$temp/bedrock-open-world-skills.cjs"
 cp "$root/scripts/bedrock-first-person-scene.cjs" "$temp/bedrock-first-person-scene.cjs"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
@@ -249,7 +250,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
-        "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-skill-manifest.cjs", "bedrock-first-person-scene.cjs",
+        "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-skill-manifest.cjs", "bedrock-open-world-skills.cjs", "bedrock-first-person-scene.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
