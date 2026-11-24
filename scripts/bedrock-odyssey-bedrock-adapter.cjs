@@ -46,8 +46,8 @@ function evaluatePrimitive(name, capabilities = {}) {
   const status = !available ? 'blocked'
     : mode === 'unsupported' ? 'blocked'
     : mode === 'manual_experimental' || capabilityState === 'manual_experimental' ? 'manual'
-    : mode === 'bounded' || capabilityState === 'experimental' ? 'experimental'
-    : capabilityState === 'partial' ? 'partial' : 'ready';
+    : capabilityState === 'partial' ? 'partial'
+    : mode === 'bounded' || capabilityState === 'experimental' ? 'experimental' : 'ready';
   return {
     name, action: definition.action, capability: definition.capability,
     capabilityState, status, reason: available ? reasonOf(capabilities, definition.capability)
@@ -62,13 +62,15 @@ function buildBedrockPrimitivePlan(skill, capabilities = {}) {
   const actions = [...new Set(skill.primitiveCalls)].map(name => evaluatePrimitive(name, capabilities));
   const blocked = actions.filter(action => action.status === 'blocked');
   const manual = actions.filter(action => action.status === 'manual');
+  const partial = actions.filter(action => action.status === 'partial');
   const experimental = actions.filter(action => action.status === 'experimental');
   const status = blocked.length ? 'blocked' : manual.length ? 'manual'
-    : experimental.length ? 'experimental' : 'ready';
+    : partial.length ? 'partial' : experimental.length ? 'experimental' : 'ready';
   return {
     status, skillId: skill.id, upstreamName: skill.upstreamName,
     actions, blockedActions: blocked.map(action => action.name),
     manualActions: manual.map(action => action.name),
+    partialActions: partial.map(action => action.name),
     experimentalActions: experimental.map(action => action.name),
     // A plan is not an execution receipt. Runtime dispatch remains disabled
     // until every action has a concrete Bedrock executor and server verifier.
