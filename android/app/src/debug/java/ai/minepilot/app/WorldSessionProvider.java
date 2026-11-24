@@ -589,13 +589,13 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"experimental_break".equals(action) && !"learning_start".equals(action) &&
                 !"learning_stop".equals(action) && !"learning_propose".equals(action) &&
                 !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action) &&
-                !"odyssey_observe".equals(action)) return;
+                !"odyssey_observe".equals(action) && !"odyssey_execute".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
                 "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
                 "agent_start".equals(action) || "learning_start".equals(action) ||
                 "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
-                "odyssey_observe".equals(action) || "experimental_break".equals(action)) && !confirmed) return;
+                "odyssey_observe".equals(action) || "odyssey_execute".equals(action) || "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
         Path temporary = directory.resolve("gameplay-command-" + requestId + ".tmp");
@@ -636,6 +636,40 @@ public final class WorldSessionProvider extends ContentProvider {
                     args.put("position", new JSONObject().put("x", bx).put("y", by).put("z", bz));
                 } else if ("checkBlockAbove".equals(primitive)) {
                     return; // This primitive needs an explicit block coordinate.
+                }
+                command.put("primitive", primitive).put("args", args).put("confirmed", true);
+            }
+            if ("odyssey_execute".equals(action)) {
+                String primitive = extras.getString("primitive", "");
+                JSONObject args = new JSONObject();
+                if ("goto".equals(primitive)) {
+                    String source = extras.getString("target_position", "").trim();
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    double x, y, z;
+                    try {
+                        x = Double.parseDouble(coordinates[0].trim());
+                        y = Double.parseDouble(coordinates[1].trim());
+                        z = Double.parseDouble(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z) ||
+                            Math.abs(x) > 30000000 || Math.abs(z) > 30000000 || y < -256 || y > 512) return;
+                    args.put("targetPosition", new JSONObject().put("x", x).put("y", y).put("z", z));
+                } else if ("mineBlock".equals(primitive)) {
+                    String source = extras.getString("block_position", "").trim();
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    int x, y, z;
+                    try {
+                        x = Integer.parseInt(coordinates[0].trim());
+                        y = Integer.parseInt(coordinates[1].trim());
+                        z = Integer.parseInt(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
+                            y < -256 || y > 512) return;
+                    args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
+                } else if (!"exploreUntil".equals(primitive)) {
+                    return;
                 }
                 command.put("primitive", primitive).put("args", args).put("confirmed", true);
             }
