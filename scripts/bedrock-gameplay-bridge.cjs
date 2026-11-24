@@ -1099,6 +1099,10 @@ class BedrockGameplayBridge {
         ? command.requestId : '',
       status: result.status,
       reason: result.reason,
+      ...(command?.action === 'odyssey_execute' && ['equipAxe','equipHoe','equipPickaxe','equipSword'].includes(result.primitive) ? {
+        primitive: result.primitive, itemName: result.itemName ?? '', selectedSlot: result.selectedSlot ?? -1,
+        awaitingServerConfirmation: result.awaitingServerConfirmation === true
+      } : {}),
       ...(command?.action === 'odyssey_observe' && result.status === 'ok' ? {
         primitive: result.primitive, result: result.result, observedAt: result.observedAt,
         verifiedBy: result.verifiedBy, readOnly: true, executed: false
