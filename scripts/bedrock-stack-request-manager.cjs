@@ -47,10 +47,12 @@ function normalizeAction(action) {
       typeof action.type_id !== 'string' || !EXECUTABLE_ACTION_TYPES.has(action.type_id))
     throw new TypeError('stack request: unsupported action type');
   const legacy = LEGACY_ACTION_IDS_1_26_60[action.type_id];
-  const out = { ...action, legacy_type_id: legacy };
-  if (COUNTED.has(action.type_id) &&
-      (!Number.isInteger(action.count) || action.count < 1 || action.count > 255))
-    throw new TypeError(`stack request: invalid ${action.type_id} count`);
+  const out = { type_id: action.type_id, legacy_type_id: legacy };
+  if (COUNTED.has(action.type_id)) {
+    if (!Number.isInteger(action.count) || action.count < 1 || action.count > 255)
+      throw new TypeError(`stack request: invalid ${action.type_id} count`);
+    out.count = action.count;
+  }
   if (WITH_SOURCE.has(action.type_id))
     out.source = normalizeSlotInfo(action.source, `${action.type_id} source`);
   if (WITH_DESTINATION.has(action.type_id))
@@ -63,6 +65,7 @@ function normalizeAction(action) {
     const times = action.times_crafted ?? 1;
     if (!Number.isInteger(times) || times < 1 || times > 64)
       throw new TypeError('stack request: invalid craft count');
+    out.recipe_network_id = action.recipe_network_id;
     out.times_crafted = times;
   }
   return out;
