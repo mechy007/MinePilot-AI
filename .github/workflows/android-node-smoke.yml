@@ -73,7 +73,8 @@ jobs:
                   assert apk.getinfo(f"assets/{name}").file_size > 0, name
               with ZipFile(BytesIO(apk.read("assets/bedrock-sdk.zip"))) as sdk:
                   for entry in ("node-smoke.cjs", "xbox-auth-probe.cjs",
-                                "friend-world-session.cjs", "prismarine-world-client.mjs"):
+                                "friend-world-session.cjs", "bedrock-inventory-ledger.cjs",
+                                "prismarine-world-client.mjs"):
                       assert sdk.getinfo(entry).file_size > 0, entry
           PY
       - uses: actions/upload-artifact@v4
