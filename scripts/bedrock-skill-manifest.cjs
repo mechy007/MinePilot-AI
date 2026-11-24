@@ -84,8 +84,8 @@ function odysseyCapabilityStates(world, manifest) {
   return {
     world_observation: state(manifest?.worldReady ? 'ready' : 'blocked',
       manifest?.worldReady ? 'authenticated_bedrock_world' : 'world_not_ready'),
-    spatial_observation: state(manifest?.worldReady && terrain.decodedSections > 0 ? 'ready' : 'blocked',
-      manifest?.worldReady && terrain.decodedSections > 0 ? 'decoded_bedrock_terrain' : 'decoded_terrain_unavailable'),
+    spatial_observation: state(manifest?.worldReady && terrain.decodedSections > 0 && terrain.collisionClassificationReady === true ? 'ready' : 'blocked',
+      manifest?.worldReady && terrain.decodedSections > 0 && terrain.collisionClassificationReady === true ? 'decoded_bedrock_terrain' : 'decoded_terrain_unavailable'),
     inventory_read: state(resources.inventoryKnown === true ? 'ready' : 'blocked',
       resources.inventoryKnown === true ? 'server_inventory_snapshot' : 'inventory_not_known'),
     navigation: state(manifest?.localNavigationReady ? 'experimental' : 'blocked',
