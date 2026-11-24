@@ -187,6 +187,12 @@ class BedrockGameplayAgent {
     targets.sort((a,b)=>b.score-a.score);
     return targets[0]?.plan?.waypoint??null;
   }
+  ignoreDrop(name) {
+    this.ignoredDrops.delete(name);
+    this.ignoredDrops.set(name,this.clock()+30000);
+    while(this.ignoredDrops.size>32)
+      this.ignoredDrops.delete(this.ignoredDrops.keys().next().value);
+  }
   opportunisticDrop(world,foodOnly=false) {
     if(!world.layerThree?.snapshot || !world.layerThree?.planCollect)return false;
     const data=world.layerThree.snapshot(world.gameplayWorld());
@@ -217,13 +223,13 @@ class BedrockGameplayAgent {
       if(progress?.status==='observed_inventory_increase') {
         this.collected++;
         world.layerThree?.cancel?.();
-        this.ignoredDrops.set(this.subgoal.item,now+30000);
+        this.ignoreDrop(this.subgoal.item);
         this.subgoal=null;
         this.nextActionAt=now+500;
       }else if(now-this.subgoal.startedAt>10000) {
         // A disappearing drop without an inventory delta is not a confirmed
         // pickup. Don't loop forever attempting to collect it.
-        this.ignoredDrops.set(this.subgoal.item,now+30000);
+        this.ignoreDrop(this.subgoal.item);
         world.layerThree?.cancel?.();
         this.subgoal=null;
       }else if(progress?.status==='route_unverified' && finite(progress.nextPoint)) {
@@ -323,6 +329,35 @@ class BedrockGameplayAgent {
     const critical=life.health<=6 || (life.air!==null&&life.air<=4);
     const hunger=life.hunger!==null&&life.hunger<=6;
     const movement=world.movement;
+    // Inventory delta plus server pickup receipt is stronger evidence of
+    // collecting an item than any movement acknowledgement. Treat it as an
+    // independent completion, even if walking was still in progress.
+    if(this.goal==='survive'&&this.subgoal &&
+       world.layerThree?.preview?.(world.gameplayWorld())?.status===
+         'observed_inventory_increase') {
+      if(movement.snapshot?.()?.active)
+        movement.stop?.('inventory_pickup_confirmed');
+      this.collected++;
+      this.ignoreDrop(this.subgoal.item);
+      world.layerThree?.cancel?.();
+      this.subgoal=null;
+      this.awaiting=null;
+      this.phase='verified';
+      this.reason='server_confirmed_drop_pickup';
+      this.nextActionAt=now+500;
+      return;
+    }
+    // A newly recognized hostile takes priority over a pending walking
+    // request. Stop that request; do NOT count it as confirmed or failed.
+    // The next pulse may select a collision-checked retreat instead.
+    if(enemy && this.awaiting && this.awaiting.kind!=='retreat') {
+      movement.stop?.('threat_preempted_movement');
+      this.awaiting=null;
+      this.phase='evading';
+      this.reason='hostile_preempted_navigation';
+      this.nextActionAt=now+250;
+      return;
+    }
     if(this.awaiting) {
       const a=this.awaiting;
       if(movement.snapshot?.()?.active) {
@@ -401,7 +436,8 @@ class BedrockGameplayAgent {
     this.reason=planReason+'_awaiting_server';
     this.lastPlan={target:copy(path.waypoint),kind:enemy?'retreat':this.goal};
     this.awaiting={from,target:copy(path.waypoint),observedAt:world.lastServerPositionAt,
-      corrections:world.corrections??0,startedAt:now};
+      corrections:world.corrections??0,startedAt:now,
+      kind:enemy?'retreat':this.goal};
   }
   snapshot() {
     return {active:this.active,goal:this.goal,phase:this.phase,reason:this.reason,
