@@ -50,7 +50,7 @@ function executeBedrockObservation(bridge, primitive, args = {}) {
     const name = terrain.blockName(bridge.dimension, p.x, p.y, p.z);
     if (id == null || !name) return { status: 'rejected', reason: 'block_not_observed', executable: false };
     return result({ position: p, runtimeId: id, name, kind: terrain.kind(bridge.dimension, p.x, p.y, p.z) },
-      bridge.lastWorldAt, 'decoded_bedrock_subchunk_or_server_block_update');
+      null, 'decoded_bedrock_terrain_cache');
   }
 
   if (primitive === 'checkBlocksAround' || primitive === 'findSuitablePosition') {
@@ -88,7 +88,7 @@ function executeBedrockObservation(bridge, primitive, args = {}) {
       Math.hypot(a.x - bridge.position.x, a.z - bridge.position.z) -
       Math.hypot(b.x - bridge.position.x, b.z - bridge.position.z));
     return result({ position: candidates[0] ?? null, candidates: candidates.length,
-      unknownCellsTreatedAsUnsafe: true }, bridge.lastWorldAt, 'verified_terrain_collision_registry');
+      unknownCellsTreatedAsUnsafe: true }, null, 'decoded_terrain_collision_registry');
   }
 
   return { status: 'rejected', reason: 'primitive_not_supported_by_observation_executor', executable: false };
