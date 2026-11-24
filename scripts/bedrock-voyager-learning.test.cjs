@@ -14,7 +14,7 @@ function worldFixture(){
     movementAuthority:1,
     terrain:{snapshot:()=>({collisionClassificationReady:true})},
     movement:{capability:()=> 'experimental'},
-    layerTwo:{snapshot:()=>({goal:'follow',homeKnown:true})},
+    layerTwo:{snapshot:()=>({preview:{goal:'follow'},homeKnown:true})},
     layerThree:{snapshot:()=>({inventoryKnown:true,nearbyItemNames:['minecraft:apple']})},
     lifeSenses:{},
     intelligence:{snapshot:()=>({goal:'standby'})},
