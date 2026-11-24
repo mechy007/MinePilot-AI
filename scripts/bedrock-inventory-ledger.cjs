@@ -54,9 +54,7 @@ function normalizeItem(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       !Number.isInteger(value.network_id) || value.network_id < 0 || value.network_id > MAX_ITEM_ID)
     return null;
-  if (value.network_id === 0) return { empty: true, networkId: 0, count: 0, metadata: 0,
-    stackId: null, hasStackId: false, blockRuntimeId: 0 };
-  if (!Number.isInteger(value.count) || value.count < 1 || value.count > MAX_COUNT ||
+  if (!Number.isInteger(value.count) || value.count < 0 || value.count > MAX_COUNT ||
       !Number.isInteger(value.metadata) || value.metadata < 0 || value.metadata > 0x7fffffff ||
       typeof value.has_stack_id !== 'boolean') return null;
   if (value.has_stack_id &&
@@ -66,6 +64,13 @@ function normalizeItem(value) {
   if (value.block_runtime_id !== undefined &&
       (!Number.isInteger(value.block_runtime_id) || value.block_runtime_id < 0 || value.block_runtime_id > 0x7fffffff))
     return null;
+  if (value.network_id === 0) {
+    if (value.count !== 0) return null;
+    return { empty: true, networkId: 0, count: 0, metadata: value.metadata,
+      stackId: value.has_stack_id ? value.stack_id : null,
+      hasStackId: value.has_stack_id, blockRuntimeId: value.block_runtime_id ?? 0 };
+  }
+  if (value.count < 1) return null;
   return {
     empty: false, networkId: value.network_id, count: value.count, metadata: value.metadata,
     hasStackId: value.has_stack_id, stackId: value.has_stack_id ? value.stack_id : null,
