@@ -1291,6 +1291,7 @@ test('world snapshots do not run intelligence decisions or update navigation int
     noteOutcome() {}
   };
   const addonNavigation = {
+    reset() {},
     snapshot: () => ({ state: 'idle', reason: 'no_live_intent', executed: false }),
     request() { return { accepted: true }; },
     release() {},
