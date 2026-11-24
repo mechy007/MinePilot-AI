@@ -110,6 +110,9 @@ class BedrockGameplayBridge {
       actionRequests: 0, recovered: 0, error: null };
     this.watch = null;
     this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
+    this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
+    this.lastIntelligenceDecision = null;
+    this.lastAddonNavigationSnapshot = null;
     this.listeners = [];
   }
   bind(event, callback) {
@@ -190,6 +193,8 @@ class BedrockGameplayBridge {
     this.terrain?.reset(this.dimension);
     this.intelligence?.reset(this.dimension);
     this.navigationRoute = null;
+    this.lastIntelligenceDecision = null;
+    this.lastAddonNavigationSnapshot = null;
     if (this.registryResolver && this.terrain) {
       try {
         const mapped = this.registryResolver(packet);
@@ -668,7 +673,7 @@ class BedrockGameplayBridge {
       this.addonNavigation.release('follow');
     }
     this.navigationRoute=route;
-    return this.addonNavigation.update({
+    this.lastAddonNavigationSnapshot = this.addonNavigation.update({
       position: this.position,
       dimension: this.dimension,
       observedAt: this.lastServerPositionAt ?? -1,
@@ -676,6 +681,7 @@ class BedrockGameplayBridge {
       safetyHold: this.layerFour?.critical === true ||
         this.layerOne?.snapshot()?.safetyHold === true
     });
+    return this.lastAddonNavigationSnapshot;
   }
   intelligenceTick() {
     if (!this.intelligence) return null;
@@ -706,7 +712,20 @@ class BedrockGameplayBridge {
       if(this.autonomy?.snapshot?.()?.active) this.autonomy.stop('intelligence_safety_stop');
       this.movement?.stop?.('intelligence_safety_stop',{silent:true});
     }
+    this.lastIntelligenceDecision = result;
     return result;
+  }
+  tickControlPlane() {
+    if (this.closed) return;
+    try {
+      // The gameplay agent owns its own cadence while active; otherwise keep
+      // safety observations fresh from the bridge's 100 ms control loop.
+      if (!this.gameplayAgent?.snapshot?.()?.active) this.intelligenceTick();
+      if (this.addonNavigation) this.updateAddonNavigation();
+      this.controlTickStatus = { state: 'healthy', reason: 'control_tick_ok' };
+    } catch {
+      this.controlTickStatus = { state: 'error', reason: 'control_tick_failed' };
+    }
   }
   snapshot() {
     const now = this.clock();
@@ -726,9 +745,10 @@ class BedrockGameplayBridge {
       ...(this.gameplayAgent ? { gameplayAgent: this.gameplayAgent.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
       firstPerson: buildFirstPersonScene(this),
+      controlRuntime: { ...this.controlTickStatus },
       learningRuntime: { ...this.learningTickStatus },
       gameplaySkills: gameplaySkillManifest(this),
-      ...(this.intelligence ? { intelligence: this.intelligenceTick() } : {}),
+      ...(this.intelligence ? { intelligence: this.lastIntelligenceDecision ?? this.intelligence.snapshot() } : {}),
       ...(this.lifeSenses ? { life: this.lifeSenses.snapshot({
         position:this.position,dimension:this.dimension,spawned:this.spawned,
         closed:this.closed,respawnState:this.respawnRecovery.state,
@@ -759,7 +779,7 @@ class BedrockGameplayBridge {
       ...(this.layerSix ? { layerSix: this.layerSix.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerSeven ? { layerSeven: this.layerSeven.snapshot(this.advisorWorld()) } : {}),
       ...(this.layerEight ? { layerEight: this.layerEight.assess(this.readinessInput()) } : {}),
-      ...(this.addonNavigation ? { addonNavigation: this.updateAddonNavigation() } : {}),
+      ...(this.addonNavigation ? { addonNavigation: this.lastAddonNavigationSnapshot ?? this.addonNavigation.snapshot?.() ?? null } : {}),
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -1103,6 +1123,7 @@ class BedrockGameplayBridge {
   }
   poll() {
     if (this.closed || !this.commandPath || !this.receiptPath) return;
+    this.tickControlPlane();
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
