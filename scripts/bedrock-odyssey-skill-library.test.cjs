@@ -6,7 +6,7 @@ const allReady={
 world_observation:'ready',spatial_observation:'ready',inventory_read:'ready',navigation:'ready',mine:'ready',
 eat_food:'ready',combat:'ready',craft:'ready',block_placement:'ready',equip_items:'ready',
 collect_resources:'ready',breed_animals:'ready',fishing:'ready',cook:'ready',smelt:'ready',
-farming:'ready',shear_animals:'ready',container_transfer:'ready',vehicle_control:'ready',item_use:'ready',bucket_use:'ready'
+farming:'ready',shear_animals:'ready',container_transfer:'ready',vehicle_control:'ready',item_use:'ready',bucket_use:'ready',hotbar_selection:'experimental'
 };
 test('imports all 183 upstream compositions as metadata only',()=>{
  assert.equal(validateOdysseyCatalog(),true);assert.equal(CATALOG.compositions.length,183);
