@@ -45,8 +45,9 @@ function evaluatePrimitive(name, capabilities = {}) {
   const mode = definition.mode;
   const status = !available ? 'blocked'
     : mode === 'unsupported' ? 'blocked'
-    : mode === 'manual_experimental' ? 'manual'
-    : mode === 'bounded' ? 'experimental' : 'ready';
+    : mode === 'manual_experimental' || capabilityState === 'manual_experimental' ? 'manual'
+    : mode === 'bounded' || capabilityState === 'experimental' ? 'experimental'
+    : capabilityState === 'partial' ? 'partial' : 'ready';
   return {
     name, action: definition.action, capability: definition.capability,
     capabilityState, status, reason: available ? reasonOf(capabilities, definition.capability)
