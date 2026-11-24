@@ -1079,6 +1079,7 @@ test('general gameplay start reconciles learning results and generic stop cannot
   };
   const bridge = new BedrockGameplayBridge(client, { gameplayAgent }).start();
   initialized(client, bridge);
+  agent = { active: false, goal: 'none', reason: 'gameplay_run_budget_exhausted', serverVerifiedSteps: 3 };
   const engine = learningEngineFor(bridge);
   engine.activeRun = {
     taskId: 'safe_exploration', goal: 'explore', title: 'Safe exploration',
