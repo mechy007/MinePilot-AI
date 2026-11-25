@@ -62,11 +62,12 @@ Initial capabilities represented:
 - return to marked home;
 - retrieve an observed item drop;
 - experimental hotbar tool selection;
-- experimental single-block mining.
+- experimental single-block mining;
+- experimental single-block placement for operator-enabled Bedrock worlds.
 
 The current task executor can start only the existing MinePilot Bedrock learning compositions. Experimental one-off actions remain on their dedicated guarded action paths and are not silently routed through composite tasks.
 
-Crafting, eating, combat, block placement/building, farming, cooking/smelting, animal interaction, fishing and redstone remain roadmap entries until their Bedrock action transactions and server-confirmed outcome checks exist.
+Multi-block building, crafting, eating, combat, farming, cooking/smelting, animal interaction, fishing and redstone remain roadmap entries until their Bedrock action transactions and server-confirmed outcome checks exist. The first building increment is deliberately narrower: `place_single_block` emits only a validated Bedrock `command_request` for `setblock ... keep`, requires `enable_commands` plus operator permission, only targets a recently observed air cell within six blocks, and completes only after a positive `command_output` acknowledgement and a matching server `update_block`. It is experimental, one block per request, and unavailable on worlds where the connected player lacks operator commands.
 
 ## Source alignment
 
@@ -79,3 +80,8 @@ The supplied reference names `AIKUSAN/minecraft-agent-skills-bundle` and `MCBE-U
 - No arbitrary code execution from AI-generated skill proposals.
 - No completed state without fresh Bedrock server evidence.
 - No dependency on a behavior pack for ordinary protocol-based play.
+
+
+## Adopted Bedrock QA skill
+
+`.agents/skills/minecraft-bedrock-qa/SKILL.md` is an original MinePilot-oriented adaptation of the MIT-licensed AIKUSAN Bedrock bot QA skill. It supplies protocol-version checks, deterministic contract and mock-session tests, live-world evidence requirements, Android runtime packaging checks, and safeguards against treating metadata or model review as proof of gameplay execution.
