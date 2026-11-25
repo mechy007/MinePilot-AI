@@ -56,8 +56,8 @@ class MinePilotIntelligence {
     const life=observation.life??{};
     const position=observation.position;
     const freshness=observation.positionAgeMs;
-    const recentPosition=Number.isFinite(freshness) &&
-      freshness>=0 && freshness<=FRESH_POSITION_MS;
+    const recentPosition=observation.positionUsable !== false &&
+      Number.isFinite(freshness) && freshness>=0 && freshness<=FRESH_POSITION_MS;
     const idleAnchor=observation.positionUsable===true &&
       observation.idlePositionAnchor===true;
     const worldReady=observation.spawned===true &&
