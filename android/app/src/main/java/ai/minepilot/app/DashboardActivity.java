@@ -761,7 +761,7 @@ public final class DashboardActivity extends Activity {
     private void addManualControlPanel() {
         LinearLayout panel = card();
         panel.addView(text("MANUAL BOT CONTROLS", 11, GRASS, true));
-        TextView hint = text("Hold a direction to move. Release to brake. Look buttons rotate the bot without walking.", 12, MUTED, false);
+        TextView hint = text("Hold a direction to move. Release to brake. Look buttons rotate the bot. Position echoes only appear when Bedrock sends a correction; zero echoes alone does not mean a move was rejected.", 12, MUTED, false);
         hint.setPadding(0, dp(7), 0, dp(10));
         panel.addView(hint);
 
@@ -1083,8 +1083,8 @@ public final class DashboardActivity extends Activity {
                         + " · Heartbeat frames: " + current.getInt("presence_frames")
                         + (current.getString("presence_error", "").isEmpty() ? "" : " · Error: " + current.getString("presence_error"))
                         + "\nInput frames sent: " + current.getInt("motion_frames")
-                        + " · Server updates: " + current.getInt("motion_server_updates")
-                        + " · Corrections: " + current.getInt("motion_corrections")
+                        + " · Position echoes: " + current.getInt("motion_server_updates")
+                        + " · Prediction corrections: " + current.getInt("motion_corrections")
                         + "\nAuth input v2225 · Model: " + current.getString("motion_model","unknown")
                         + " · Tick: " + current.getString("input_last_tick","—")
                         + " · Skipped timer ticks: " + current.getInt("input_skipped_ticks")
