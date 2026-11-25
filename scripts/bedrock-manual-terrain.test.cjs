@@ -158,6 +158,19 @@ test('manual hold preserves one predicted position across direction changes and 
   assert.deepEqual(client.sent.at(-1).value.position, predictedBeforeRelease,
     'neutral release must not rewind to a stale spawn anchor');
 
+  const resumed = move('manual-hold-back', 'backward');
+  assert.equal(resumed.status, 'accepted');
+  pulse();
+  const resumedFrame = client.sent.at(-1).value;
+  assert.deepEqual(resumedFrame.move_vector, { x: 0, z: -1 });
+  assert.equal(resumedFrame.position.x, predictedBeforeRelease.x,
+    'a new hold in the same session should resume from the saved manual anchor');
+  assert.notEqual(resumedFrame.position.x, start.player_position.x);
+
+  bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'manual-hold-stop-again',
+    action: 'manual_stop'
+  });
   initialize(client, bridge);
   const watchdog = move('manual-watchdog', 'forward');
   assert.equal(watchdog.status, 'accepted');
