@@ -1495,7 +1495,7 @@ test('manual look controls rotate camera without translating the bot', () => {
   bridge.stop();
 });
 
-test('vanilla runtime registry refuses hashed IDs and server custom block definitions', () => {
+test('vanilla runtime registry refuses hashed IDs but retains known states beside custom definitions', () => {
   const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
   clearRuntimeRegistryCache();
@@ -1503,14 +1503,16 @@ test('vanilla runtime registry refuses hashed IDs and server custom block defini
     { minStateId: 0, maxStateId: 1000, name: 'air', boundingBox: 'empty' }
   ] });
   assert.equal(createVanillaRuntimeRegistry({
-    engine: '1.26.60', block_network_ids_are_hashes: true
+    server_version: '1.26.60', block_network_ids_are_hashes: true
   }, load), null);
-  assert.equal(createVanillaRuntimeRegistry({
-    engine: '1.26.60', block_properties: [{ name: 'custom:example', states: {} }]
-  }, load), null);
-  const registry = createVanillaRuntimeRegistry({ engine: '1.26.60' }, load);
-  assert.equal(registry.size, 1001);
-  assert.equal(registry.get(0).name, 'minecraft:air');
+  const customRegistry = createVanillaRuntimeRegistry({
+    server_version: '1.26.60',
+    block_properties: [{ name: 'custom:example', states: {} }]
+  }, load);
+  assert.equal(customRegistry.size, 1001);
+  assert.equal(customRegistry.get(0).name, 'minecraft:air');
+  assert.equal(customRegistry.get(1001), undefined,
+    'custom states without a verified numeric mapping remain unknown');
   clearRuntimeRegistryCache();
 });
 
