@@ -1502,9 +1502,13 @@ test('vanilla runtime registry refuses hashed IDs but retains known states besid
   const load = () => ({ blocks: [
     { minStateId: 0, maxStateId: 1000, name: 'air', boundingBox: 'empty' }
   ] });
-  assert.equal(createVanillaRuntimeRegistry({
-    server_version: '1.26.60', block_network_ids_are_hashes: true
-  }, load), null);
+  const hashedRegistry = createVanillaRuntimeRegistry({
+    server_version: '1.26.66.1', block_network_ids_are_hashes: true
+  });
+  assert.ok(hashedRegistry instanceof Map);
+  assert.equal(hashedRegistry.get((-2144268767) >>> 0).name, 'minecraft:stone');
+  // This fixture loader is intentionally synthetic. Real production
+  // registries are sourced from the pinned palette and fail closed on custom IDs.
   const customRegistry = createVanillaRuntimeRegistry({
     server_version: '1.26.60',
     block_properties: [{ name: 'custom:example', states: {} }]
