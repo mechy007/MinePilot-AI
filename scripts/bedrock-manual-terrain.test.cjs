@@ -125,6 +125,6 @@ test('manual movement remains unavailable while another gameplay controller owns
     action: 'manual_move', confirmed: true, mode: 'forward', ticks: 4
   });
   assert.equal(result.status, 'rejected');
-  assert.equal(result.reason, 'gameplay_agent_busy_stop_first');
+  assert.equal(result.reason, 'autonomous_controller_busy');
   bridge.stop();
 });
