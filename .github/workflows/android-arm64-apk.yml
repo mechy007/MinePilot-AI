@@ -35,7 +35,7 @@ jobs:
       - name: Install engine build dependencies
         run: npm install --ignore-scripts --omit=optional
       - name: Test Bedrock terrain decoding and Android manual controls
-        run: node --test scripts/bedrock-gameplay-bridge.test.cjs
+        run: node --test scripts/bedrock-manual-terrain.test.cjs
       - name: Stage and test the Bedrock SDK bundle
         run: bash scripts/stage-android-bedrock-sdk.sh
       - name: Build ARM64 debug APK with Node and the Bedrock SDK
