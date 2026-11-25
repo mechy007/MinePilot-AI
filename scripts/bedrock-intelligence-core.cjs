@@ -80,6 +80,9 @@ class MinePilotIntelligence {
       if(Number.isFinite(health) && health<=6) {
         candidates.push(candidate('seek_safety',95,'critical_health',1,false,['self_health']));
       }
+      if(Number.isFinite(life.air) && life.air<=4) {
+        candidates.push(candidate('seek_safety',94,'critical_air_supply',1,false,['self_air']));
+      }
       if(threat) {
         candidates.push(candidate('avoid_threat',85,'hostile_nearby',0.95,false,
           ['observed_hostile_distance']));
@@ -96,7 +99,8 @@ class MinePilotIntelligence {
           this.goal==='survive'?'survive_world':
           this.goal==='follow'?'follow_player':
           this.goal==='return_home'?'return_home':
-          this.goal==='explore'?'explore':'gather_resources',
+          this.goal==='explore'?'explore':
+          this.goal==='goto'?'go_to_position':'gather_resources',
           40,safe?'goal_can_be_planned':'terrain_or_safety_unverified',
           safe?0.8:0.35,false,
           ['selected_goal',safe?'known_local_terrain':'unknown_local_terrain']));
