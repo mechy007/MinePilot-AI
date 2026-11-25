@@ -73,6 +73,8 @@ class BedrockGameplayBridge {
     this.subchunkRequestKeys = new Map();
     this.subchunkRequestsSent = 0;
     this.subchunkRequestErrors = 0;
+    this.blockNetworkIdsAreHashes = false;
+    this.serverCustomBlockPropertiesCount = 0;
     this.autonomy = options.autonomy ?? null;
     this.blockBreaker = options.blockBreaker ?? null;
     this.lifeSenses = options.lifeSenses ?? null;
@@ -201,6 +203,9 @@ class BedrockGameplayBridge {
       Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
+    this.blockNetworkIdsAreHashes = packet.block_network_ids_are_hashes === true;
+    this.serverCustomBlockPropertiesCount = Array.isArray(packet.block_properties)
+      ? Math.min(1024, packet.block_properties.length) : 0;
     this.itemStackNetManager = typeof packet.enable_item_stack_net_manager === 'boolean'
       ? packet.enable_item_stack_net_manager : null;
     this.inventoryLedger?.reset();
@@ -797,6 +802,8 @@ class BedrockGameplayBridge {
       loadedChunkHeaders: this.receivedChunks.size,
       subchunkRequestsSent: this.subchunkRequestsSent,
       subchunkRequestErrors: this.subchunkRequestErrors,
+      blockNetworkIdsAreHashes: this.blockNetworkIdsAreHashes,
+      serverCustomBlockPropertiesCount: this.serverCustomBlockPropertiesCount,
       // A chunk header does NOT prove decoded, navigable block/voxel data.
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
