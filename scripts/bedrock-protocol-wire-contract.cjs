@@ -9,7 +9,7 @@ const { createSerializer } = require(path.join(packageRoot, 'src/transforms/seri
 const serializer = createSerializer('1.26.60');
 
 const subchunkRequest = serializer.createPacketBuffer({
-  name: 'sub_chunk_request',
+  name: 'subchunk_request',
   params: {
     dimension: 0,
     requests: [
