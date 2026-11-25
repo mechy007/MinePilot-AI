@@ -597,20 +597,26 @@ class BedrockGameplayBridge {
     // Bedrock 1.26.x skeleton LevelChunks use UINT32_MAX as their subchunk
     // count. They carry no voxel payload: clients must request subchunks.
     // Request only five vertical sections of this chunk column around the bot.
+    // Protocol 2225 requires the player's absolute SubChunk position as
+    // the request center. LevelChunk x/z are chunk coordinates, so express
+    // the target chunk column as a bounded relative offset from that center.
     const center = {
-      x: packet.x,
+      x: Math.floor(position.x / 16),
       y: Math.floor(position.y / 16),
-      z: packet.z
+      z: Math.floor(position.z / 16)
     };
-    if (![center.x, center.y, center.z].every(Number.isInteger) ||
+    const dx = packet.x - center.x;
+    const dz = packet.z - center.z;
+    if (![center.x, center.y, center.z, dx, dz].every(Number.isInteger) ||
         Math.abs(center.x) > 1875000 || Math.abs(center.z) > 1875000 ||
+        Math.abs(dx) > 127 || Math.abs(dz) > 127 ||
         center.y < -16 || center.y > 32) return false;
-    const key = [dimension, center.x, center.y, center.z].join(':');
+    const key = [dimension, packet.x, center.y, packet.z].join(':');
     const now = this.clock();
     const previous = this.subchunkRequestKeys.get(key);
     if (Number.isFinite(previous) && now - previous >= 0 && now - previous < 15000)
       return false;
-    const requests = [-2, -1, 0, 1, 2].map(y => ({ x: 0, y, z: 0 }));
+    const requests = [-2, -1, 0, 1, 2].map(y => ({ x: dx, y, z: dz }));
     try {
       this.client.queue('subchunk_request', { dimension, requests, origin: center });
       this.subchunkRequestKeys.set(key, now);
