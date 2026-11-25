@@ -142,10 +142,10 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
   });
   assert.ok(hashed instanceof Map);
   assert.equal(hashed.size, 23948);
-  assert.deepEqual(hashed.get(-2144268767), {
+  assert.deepEqual(hashed.get((-2144268767) >>> 0), {
     name: 'minecraft:stone', boundingBox: 'block'
   });
-  assert.deepEqual(hashed.get(-604749536), {
+  assert.deepEqual(hashed.get((-604749536) >>> 0), {
     name: 'minecraft:air', boundingBox: 'empty'
   });
   assert.equal(hashed.get(203547508).name, 'minecraft:brown_mushroom_block');
