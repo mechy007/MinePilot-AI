@@ -7,7 +7,7 @@ const {BedrockGameplayBridge}=require('./bedrock-gameplay-bridge.cjs');
 const {EventEmitter}=require('node:events');
 
 function fixture() {
-  let now=1000,enabled=true,active=false,muted=false;
+  let now=1000,enabled=true,active=false,unconfirmed=false,muted=false;
   let ticks=0,stopCount=0,foodPlans=0;
   let callback;
   const sent=[];
@@ -21,13 +21,13 @@ function fixture() {
   const intelligence=new MinePilotIntelligence({clock});
   const movement={
     capability(){return enabled?'experimental':'unavailable';},
-    snapshot(){return {active};},
+    snapshot(){return {active,unconfirmedMovement:unconfirmed};},
     runVerifiedStep(world,point,ticks){
       assert.ok(Math.hypot(point.x-world.position.x,point.z-world.position.z)<=2.1);
-      sent.push({point:{...point},ticks});active=true;
+      sent.push({point:{...point},ticks});active=true;unconfirmed=true;
       return {status:'accepted',reason:'queued_not_verified'};
     },
-    stop(reason){stopCount++;active=false;},
+    stop(reason){stopCount++;active=false;unconfirmed=false;},
   };
   const layerTwo={
     chosen:null,
@@ -75,6 +75,7 @@ function fixture() {
     autonomy:{snapshot(){return {active:false};}},
     lifeSenses:{snapshot(){return life;}},
     intelligence,
+    positionUsable(){return !unconfirmed && now-world.lastServerPositionAt<=7000;},
     gameplayWorld(){return {spawned:true,position:this.position,dimension:0,
       chunks:1,safetyHold:false};}
   };
@@ -96,7 +97,7 @@ function fixture() {
     movementEnds(){active=false;},
     advance(ms){now+=ms;},
     updatePosition(point){
-      world.position={...point};world.lastServerPositionAt=now;
+      world.position={...point};world.lastServerPositionAt=now;unconfirmed=false;
     },
     get callbacks(){return callback;},
     get stopCount(){return stopCount;},
@@ -123,6 +124,29 @@ test('agent is opt-in and cannot run without experimental movement, live world, 
   assert.equal(f.agent.snapshot().active,false);
   assert.equal(f.intelligence.snapshot().goal,'standby');
 });
+test('in-flight movement waits for server confirmation without stale-position self-abort',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'explore'});
+  f.tick();
+  assert.equal(f.sent.length,1);
+  assert.equal(f.agent.snapshot().active,true);
+  assert.equal(f.world.positionUsable(),false);
+  f.movementEnds();
+  f.advance(300);
+  f.tick();
+  assert.equal(f.agent.snapshot().active,true,
+    'the agent must keep waiting for its own bounded movement acknowledgement');
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,0);
+  assert.equal(f.agent.awaiting!==null,true);
+  const from=f.agent.awaiting.from, target=f.agent.awaiting.target;
+  f.updatePosition({x:from.x+(target.x-from.x)*0.6,y:from.y,
+    z:from.z+(target.z-from.z)*0.6});
+  f.tick();
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,1);
+  assert.equal(f.agent.snapshot().active,true);
+  f.agent.stop();
+});
+
 test('observe-plan-move-verify: queued movement is never claimed as server-confirmed',()=>{
   const f=fixture();
   f.agent.start(f.world,{confirmed:true,goal:'explore'});
