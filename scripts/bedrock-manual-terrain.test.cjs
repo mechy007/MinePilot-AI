@@ -52,7 +52,7 @@ test('skeleton LevelChunk requests five nearby server subchunks and rate-limits 
   initialize(client, bridge);
   const header = { x: 2, z: -2, dimension: 0, sub_chunk_count: 0xffffffff };
   client.emit('level_chunk', header);
-  const sent = client.sent.filter(item => item.packet === 'sub_chunk_request');
+  const sent = client.sent.filter(item => item.packet === 'subchunk_request');
   assert.equal(sent.length, 1);
   assert.equal(sent[0].value.dimension, 0);
   assert.deepEqual(sent[0].value.origin, { x: 2, y: 4, z: -2 });
@@ -64,10 +64,10 @@ test('skeleton LevelChunk requests five nearby server subchunks and rate-limits 
     { x: 0, y: 2, z: 0 }
   ]);
   client.emit('level_chunk', header);
-  assert.equal(client.sent.filter(item => item.packet === 'sub_chunk_request').length, 1);
+  assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 1);
   now += 15001;
   client.emit('level_chunk', header);
-  assert.equal(client.sent.filter(item => item.packet === 'sub_chunk_request').length, 2);
+  assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 2);
   assert.equal(bridge.snapshot().subchunkRequestsSent, 2);
   bridge.stop();
 });
