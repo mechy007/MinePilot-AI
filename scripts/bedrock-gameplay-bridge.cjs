@@ -441,6 +441,30 @@ class BedrockGameplayBridge {
     const survival = this.layerFour?.observeVitals(values);
     if (firstWarning || survival?.becameCritical || this.layerFour?.critical) this.movement?.stop();
   }
+  positionStatus() {
+    const age = this.lastServerPositionAt == null
+      ? null : this.clock() - this.lastServerPositionAt;
+    const motion = this.movement?.snapshot?.() ?? {};
+    const sessionReady = !this.closed && this.spawned && this.self != null &&
+      this.position != null && Number.isInteger(this.dimension) &&
+      [1, 2].includes(this.movementAuthority) &&
+      typeof this.serverTick === 'bigint' && this.receivedChunks.size > 0;
+    if (!sessionReady || age == null || !Number.isFinite(age) || age < 0)
+      return { usable: false, mode: 'position_unknown', ageMs: age };
+    if (motion.unconfirmedMovement === true)
+      return { usable: false, mode: 'awaiting_server_position', ageMs: age };
+    if (age <= 7000)
+      return { usable: true, mode: 'server_fresh', ageMs: age };
+    // Bedrock may stay silent when the predicted input needs no correction.
+    // Preserve the existing spawn/server anchor only while neutral presence
+    // proves this same connection is still alive and no movement was sent.
+    if (age <= 30000 && motion.presenceActive === true &&
+        Number.isInteger(motion.presenceFrames) && motion.presenceFrames > 0)
+      return { usable: true, mode: 'idle_spawn_anchor', ageMs: age };
+    return { usable: false, mode: 'server_position_stale', ageMs: age };
+  }
+  positionUsable() { return this.positionStatus().usable; }
+  isIdlePositionAnchor() { return this.positionStatus().mode === 'idle_spawn_anchor'; }
   gameplayWorld() {
     return { position: this.position, dimension: this.dimension, spawned: this.spawned,
       chunks: this.receivedChunks.size,
@@ -452,6 +476,8 @@ class BedrockGameplayBridge {
     return {
       spawned: this.spawned, hasSelfEntity: this.self != null,
       hasPosition: this.position !== null, positionAgeMs: age,
+      positionUsable: this.positionUsable(),
+      idlePositionAnchor: this.isIdlePositionAnchor(),
       receivedChunkHeaders: this.receivedChunks.size,
       movementAuthority: this.movementAuthority,
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
@@ -772,6 +798,8 @@ class BedrockGameplayBridge {
     const result=this.intelligence.decide({
       life,position:this.position,dimension:this.dimension,spawned:this.spawned,
       respawnState:this.respawnRecovery.state,positionAgeMs:age,
+      positionUsable:this.positionUsable(),
+      idlePositionAnchor:this.isIdlePositionAnchor(),
       terrainReady:(this.terrain?.snapshot()?.decodedSections??0)>0,
       safetyHold:this.gameplayWorld().safetyHold
     });
