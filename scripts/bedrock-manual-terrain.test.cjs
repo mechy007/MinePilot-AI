@@ -311,10 +311,12 @@ test('numeric palette is exact-version only and fails closed on custom block reg
   }, loader), null);
   console.error('[manual-terrain-test:7b] initial rejects done');
 
+  console.error('[manual-terrain-test:7c] before custom registry');
   const customWorld = createVanillaRuntimeRegistry({
     server_version: '1.26.60.6',
     block_properties: [{ name: 'addon:custom', states: {} }]
   });
+  console.error('[manual-terrain-test:7d] after custom registry');
   assert.equal(customWorld, null,
     'production custom blocks may renumber a non-hashed runtime palette');
 
