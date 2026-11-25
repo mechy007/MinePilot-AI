@@ -4,6 +4,7 @@ const { BedrockOpenWorldLearningEngine } = require('./bedrock-open-world-skills.
 const {
   evaluateOdysseySkill, listOdysseySkills, planOdysseySkill, summarizeOdysseyLibrary
 } = require('./bedrock-odyssey-skill-library.cjs');
+const { bedrockNativeSkillCatalog, startBedrockNativeSkill } = require('./bedrock-native-skill-system.cjs');
 
 /**
  * Capability catalog for MinePilot's Bedrock runtime. A capability advertised
@@ -155,6 +156,7 @@ function gameplaySkillManifest(world) {
   const odysseyCapabilities = odysseyCapabilityStates(world, manifest);
   return {
     ...manifest,
+    nativeSkillLibrary: bedrockNativeSkillCatalog(world, manifest),
     odysseyLibrary: summarizeOdysseyLibrary(odysseyCapabilities),
     // Reading a manifest is observational only. Curriculum state changes happen
     // exclusively on the bridge's explicit runtime tick.
@@ -215,5 +217,6 @@ module.exports = {
   odysseyCapabilityStates,
   evaluateOdysseySkill,
   listOdysseySkills,
-  planOdysseySkill
+  planOdysseySkill,
+  startBedrockNativeSkill
 };
