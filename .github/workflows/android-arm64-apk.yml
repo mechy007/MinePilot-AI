@@ -48,7 +48,7 @@ jobs:
           with ZipFile(sys.argv[1]) as apk:
               for name in ("libnode.so", "libminepilot_node_smoke.so", "libc++_shared.so"):
                   data = apk.read(f"lib/arm64-v8a/{name}")
-                  assert data[:6] == b"\\x7fELF\\x02\\x01", name
+                  assert data[:6] == bytes((0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01)), name
                   assert int.from_bytes(data[18:20], "little") == 183, name
               for name in ("bedrock-sdk.zip", "Node.js-LICENSE.txt", "Node.js-Mobile-LICENSE.txt"):
                   assert apk.getinfo(f"assets/{name}").file_size > 0, name
