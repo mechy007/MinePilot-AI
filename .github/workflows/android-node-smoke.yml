@@ -18,6 +18,8 @@ on:
       - scripts/bedrock-stack-request-manager.test.cjs
       - scripts/bedrock-recipe-catalog.cjs
       - scripts/bedrock-recipe-catalog.test.cjs
+      - scripts/bedrock-intelligence-core.test.cjs
+      - scripts/bedrock-manual-terrain.test.cjs
       - scripts/bedrock-inventory-ledger.cjs
       - scripts/bedrock-inventory-ledger.test.cjs
       - scripts/bedrock-odyssey-observation-executor.cjs
