@@ -833,7 +833,10 @@ public final class DashboardActivity extends Activity {
         }
         String next = "joystick:" + mode;
         if (next.equals(activeManualMode)) return;
-        stopManualControl();
+        // Direction changes update the same running input stream. Do not send
+        // STOP/restart between joystick quadrants or prediction rewinds to
+        // the last server correction (which may be several seconds old).
+        if (!activeManualMode.startsWith("joystick:")) stopManualControl();
         activeManualMode = next;
         sendManualMotionPulse(mode);
         manualControlHandler.removeCallbacks(repeatManualControl);
@@ -879,7 +882,7 @@ public final class DashboardActivity extends Activity {
         extras.putString("action", "manual_move");
         extras.putBoolean("confirmed", true);
         extras.putString("motion_mode", mode);
-        extras.putInt("motion_ticks", 6);
+        extras.putInt("motion_ticks", 8);
         worldReader.execute(() -> {
             Bundle receipt = worldRequest("gameplay", session, extras);
             if (receipt == null || !receipt.getBoolean("accepted")) {
