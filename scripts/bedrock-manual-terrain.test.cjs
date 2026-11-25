@@ -46,6 +46,7 @@ test('1.26.60 subchunk batches decode center-relative offsets and all-air entrie
   assert.equal(decoded, 2);
   assert.equal(terrain.snapshot().decodedSections, 2);
   assert.equal(terrain.blockName(0, 64, 80, 48), 'minecraft:air');
+  console.error('[manual-terrain-test:1] done');
 });
 
 test('skeleton LevelChunk requests five nearby server subchunks and rate-limits repeats', () => {
@@ -74,6 +75,7 @@ test('skeleton LevelChunk requests five nearby server subchunks and rate-limits 
   assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 2);
   assert.equal(bridge.snapshot().subchunkRequestsSent, 2);
   bridge.stop();
+  console.error('[manual-terrain-test:2] done');
 });
 
 test('manual directional controls send bounded camera-relative vectors and stop cleanly', () => {
@@ -116,6 +118,7 @@ test('manual directional controls send bounded camera-relative vectors and stop 
     initialize(client, bridge);
   }
   bridge.stop();
+  console.error('[manual-terrain-test:3] done');
 });
 
 test('manual hold preserves one predicted position across direction changes and stops on watchdog expiry', () => {
@@ -186,6 +189,7 @@ test('manual hold preserves one predicted position across direction changes and 
   assert.equal(movement.snapshot().active, false);
   assert.equal(movement.snapshot().stoppedReason, 'manual_input_timeout');
   bridge.stop();
+  console.error('[manual-terrain-test:4] done');
 });
 
 test('manual movement remains unavailable while another gameplay controller owns the bot', () => {
@@ -204,6 +208,7 @@ test('manual movement remains unavailable while another gameplay controller owns
   assert.equal(result.status, 'rejected');
   assert.equal(result.reason, 'autonomous_controller_busy');
   bridge.stop();
+  console.error('[manual-terrain-test:5] done');
 });
 
 
@@ -285,6 +290,7 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
     server_version: '1.26.51.0', block_network_ids_are_hashes: true
   }), null, 'unsupported protocol families cannot select the 2225 palette');
   clearRuntimeRegistryCache();
+  console.error('[manual-terrain-test:6] done');
 });
 
 test('numeric palette is exact-version only and fails closed on custom block registration', () => {
@@ -314,4 +320,5 @@ test('numeric palette is exact-version only and fails closed on custom block reg
   assert.ok(map instanceof Map);
   assert.equal(map.get(0).name, 'minecraft:air');
   clearRuntimeRegistryCache();
+  console.error('[manual-terrain-test:7] done');
 });
