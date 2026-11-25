@@ -1423,6 +1423,7 @@ test('manual D-pad directions serialize independent forward, backward and strafe
     ['strafe_right', { x: 1, z: 0 }, 13]
   ];
   for (const [mode, vector, flag] of expected) {
+    initialized(client, bridge);
     const result = bridge.execute({
       version: 'minepilot.gameplay.v1', requestId: mode,
       action: 'manual_move', confirmed: true, mode, ticks: 2
