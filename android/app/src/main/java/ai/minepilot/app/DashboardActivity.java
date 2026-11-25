@@ -43,6 +43,7 @@ public final class DashboardActivity extends Activity {
     private final android.os.Handler manualControlHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private String activeManualMode = "";
+    private int manualControlGeneration;
     private boolean manualControlsEnabled;
     private ManualJoystickView manualJoystick;
     private final Runnable repeatManualControl = new Runnable() {
@@ -774,7 +775,7 @@ public final class DashboardActivity extends Activity {
 
         manualJoystick = new ManualJoystickView(this);
         manualJoystick.setListener(this::onManualJoystickDirection);
-        LinearLayout.LayoutParams stickParams = new LinearLayout.LayoutParams(dp(176), dp(176));
+        LinearLayout.LayoutParams stickParams = new LinearLayout.LayoutParams(dp(148), dp(148));
         stickParams.setMargins(0, 0, dp(12), 0);
         controls.addView(manualJoystick, stickParams);
 
@@ -869,6 +870,7 @@ public final class DashboardActivity extends Activity {
     private void sendManualMotionPulse(String mode) {
         String session = worldSessionId;
         if (session.isEmpty() || !manualControlsEnabled) return;
+        int generation = manualControlGeneration;
         Bundle extras = new Bundle();
         extras.putString("action", "manual_move");
         extras.putBoolean("confirmed", true);
@@ -878,7 +880,7 @@ public final class DashboardActivity extends Activity {
             Bundle receipt = worldRequest("gameplay", session, extras);
             if (receipt == null || !receipt.getBoolean("accepted")) {
                 runOnUiThread(() -> {
-                    if (mode.equals(activeManualMode)) {
+                    if (generation == manualControlGeneration && !activeManualMode.isEmpty()) {
                         stopManualControl();
                         showStatus("Manual movement was rejected. Check world and movement readiness.");
                     }
@@ -896,6 +898,7 @@ public final class DashboardActivity extends Activity {
     }
 
     private void stopManualControl() {
+        manualControlGeneration++;
         manualControlHandler.removeCallbacks(repeatManualControl);
         boolean wasMoving = !activeManualMode.isEmpty();
         activeManualMode = "";
