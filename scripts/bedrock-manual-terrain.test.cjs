@@ -144,9 +144,15 @@ test('numeric vanilla registry requires the exact server_version and refuses has
   assert.equal(createVanillaRuntimeRegistry({
     server_version: '1.26.60.6', block_network_ids_are_hashes: true
   }, loader), null);
-  assert.equal(createVanillaRuntimeRegistry({
-    server_version: '1.26.60.6', block_properties: [{ name: 'addon:custom', states: {} }]
-  }, loader), null);
+  const customWorldMap = createVanillaRuntimeRegistry({
+    server_version: '1.26.60.6',
+    block_properties: [{ name: 'addon:custom', states: {} }]
+  }, loader);
+  assert.ok(customWorldMap instanceof Map,
+    'known vanilla numeric states remain available on a custom-block world');
+  assert.equal(customWorldMap.get(0).name, 'minecraft:air');
+  assert.equal(customWorldMap.get(1201), undefined,
+    'unmapped custom IDs remain unknown rather than being guessed');
   const map = createVanillaRuntimeRegistry({ server_version: '1.26.60.6' }, loader);
   assert.ok(map instanceof Map);
   assert.equal(map.get(0).name, 'minecraft:air');
