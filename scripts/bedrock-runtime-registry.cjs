@@ -10,6 +10,9 @@ function createVanillaRuntimeRegistry(startGame, loadMinecraftData = null) {
   const engine = startGame?.engine;
   if (typeof engine === 'string' && engine.length &&
       !/^1\.26\.60(?:\.|$)/.test(engine)) return null;
+  // Hashed block network IDs cannot be resolved by the pinned vanilla
+  // numeric-state table; never apply static IDs to those worlds.
+  if (startGame?.block_network_ids_are_hashes === true) return null;
   const custom = startGame?.block_properties;
   if (Array.isArray(custom) && custom.length) return null;
   if (cached) return cached;
