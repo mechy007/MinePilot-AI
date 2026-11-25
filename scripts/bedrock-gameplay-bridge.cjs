@@ -16,7 +16,7 @@ const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearni
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -1058,6 +1058,32 @@ class BedrockGameplayBridge {
       this.blockBreaker?.abort('user_stop');
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
+    }
+    if (raw.action === 'manual_stop') {
+      this.movement?.stop?.('manual_control_released');
+      return { status: 'ok', reason: 'manual_control_released' };
+    }
+    if (raw.action === 'manual_move') {
+      if (raw.confirmed !== true)
+        return { status: 'rejected', reason: 'confirmation_required' };
+      if (!['forward','backward','strafe_left','strafe_right','turn_left','turn_right'].includes(raw.mode) ||
+          !Number.isInteger(raw.ticks) || raw.ticks < 1 || raw.ticks > 8)
+        return { status: 'rejected', reason: 'unsupported_manual_input' };
+      if (this.blockBreaker?.snapshot()?.active)
+        return { status: 'rejected', reason: 'block_action_busy' };
+      if (this.layerOne?.snapshot()?.safetyHold)
+        return { status: 'rejected', reason: 'critical_health' };
+      if (this.layerFour?.critical)
+        return { status: 'rejected', reason: 'survival_hold' };
+      if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
+        return { status: 'rejected', reason: 'autonomous_controller_busy' };
+      if (!this.movement || this.movement.capability(this) !== 'experimental' ||
+          typeof this.movement.runDiagnostic !== 'function')
+        return { status: 'rejected', reason: 'movement_unavailable' };
+      // Manual input intentionally bypasses only the long-idle planning-age
+      // gate. The movement capability still requires a live authenticated
+      // session, Bedrock authority, valid tick clock and neutral input presence.
+      return this.movement.runDiagnostic(this, { mode: raw.mode, ticks: raw.ticks });
     }
     if (raw.action === 'motion_diagnostic') {
       if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
