@@ -66,6 +66,30 @@ test('movement input invalidates even a numerically recent server position times
   assert.equal(snapshot.reason,'world_state_stale');
 });
 
+test('emergency life signals outrank stale-position observation while movement awaits server confirmation',()=>{
+  const brain=new MinePilotIntelligence({clock:()=>100});
+  brain.reset(0);
+  const threat=brain.decide(obs({
+    positionUsable:false,
+    positionAgeMs:100,
+    life:{health:20,hunger:20,air:20,
+      nearbyEntities:[{hostile:true,distance:4}],
+      localTerrain:{status:'partial',unknown:25,hazard:0}}
+  }));
+  assert.equal(threat.action,'avoid_threat');
+  const lowAir=brain.decide(obs({
+    positionUsable:false,
+    positionAgeMs:100,
+    life:{health:20,hunger:20,air:3,nearbyEntities:[],
+      localTerrain:{status:'partial',unknown:25,hazard:0}}
+  }));
+  assert.equal(lowAir.action,'seek_safety');
+  assert.equal(lowAir.reason,'critical_air_supply');
+  assert.equal(brain.decide(obs({
+    positionUsable:false,positionAgeMs:100
+  })).reason,'world_state_stale');
+});
+
 test('memory, history, and decisions remain bounded and reset across dimensions',()=>{
   let t=100;
   const brain=new MinePilotIntelligence({clock:()=>t++});
