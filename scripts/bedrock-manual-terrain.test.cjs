@@ -131,7 +131,42 @@ test('manual movement remains unavailable while another gameplay controller owns
 });
 
 
-test('numeric vanilla registry requires the exact server_version and refuses hashed or custom palettes', () => {
+test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes', () => {
+  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
+    require('./bedrock-runtime-registry.cjs');
+  clearRuntimeRegistryCache();
+  const hashed = createVanillaRuntimeRegistry({
+    server_version: '1.26.66.1',
+    block_network_ids_are_hashes: true,
+    block_properties: [{ name: 'addon:custom_block', states: {} }]
+  });
+  assert.ok(hashed instanceof Map);
+  assert.equal(hashed.size, 23948);
+  assert.deepEqual(hashed.get(-2144268767), {
+    name: 'minecraft:stone', boundingBox: 'block'
+  });
+  assert.deepEqual(hashed.get(-604749536), {
+    name: 'minecraft:air', boundingBox: 'empty'
+  });
+  assert.equal(hashed.get(203547508).name, 'minecraft:brown_mushroom_block');
+  assert.equal(hashed.get(1659726445).name, 'minecraft:pointed_dripstone');
+  assert.equal(hashed.get(123456789), undefined,
+    'unknown add-on hashes never receive an invented block identity');
+
+  const partialTerrain = new BedrockTerrainCache();
+  partialTerrain.reset(0);
+  partialTerrain.setRegistry(hashed);
+  partialTerrain.store(0, 0, 0, 4, new Uint32Array(4096).fill(123456789));
+  assert.equal(partialTerrain.tile(0, 0, 64, 0), 'unknown',
+    'unmapped custom block hashes remain collision-unknown');
+
+  assert.equal(createVanillaRuntimeRegistry({
+    server_version: '1.26.51.0', block_network_ids_are_hashes: true
+  }), null, 'unsupported protocol families cannot select the 2225 palette');
+  clearRuntimeRegistryCache();
+});
+
+test('numeric palette is exact-version only and fails closed on custom block registration', () => {
   const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
   clearRuntimeRegistryCache();
@@ -140,25 +175,19 @@ test('numeric vanilla registry requires the exact server_version and refuses has
   });
   assert.equal(createVanillaRuntimeRegistry({}, loader), null,
     'missing server version cannot safely select a protocol palette');
-  assert.equal(createVanillaRuntimeRegistry({ server_version: '1.26.51' }, loader), null);
+  assert.equal(createVanillaRuntimeRegistry({ server_version: '1.26.66.1' }, loader), null,
+    'captured numeric IDs cannot be reused on another release');
   assert.equal(createVanillaRuntimeRegistry({
     server_version: '1.26.60.6', block_network_ids_are_hashes: true
   }, loader), null);
-  const customWorldMap = createVanillaRuntimeRegistry({
+
+  const customWorld = createVanillaRuntimeRegistry({
     server_version: '1.26.60.6',
     block_properties: [{ name: 'addon:custom', states: {} }]
   }, loader);
-  assert.ok(customWorldMap instanceof Map,
-    'known vanilla numeric states remain available on a custom-block world');
-  assert.equal(customWorldMap.get(0).name, 'minecraft:air');
-  assert.equal(customWorldMap.get(1201), undefined,
-    'unmapped custom IDs remain unknown rather than being guessed');
-  const partialTerrain = new BedrockTerrainCache();
-  partialTerrain.reset(0);
-  partialTerrain.setRegistry(customWorldMap);
-  partialTerrain.store(0, 0, 0, 4, new Uint32Array(4096).fill(1201));
-  assert.equal(partialTerrain.tile(0, 0, 64, 0), 'unknown',
-    'unmapped custom blocks cannot be classified as air or safe terrain');
+  assert.equal(customWorld, null,
+    'custom blocks may renumber a non-hashed runtime palette');
+
   const map = createVanillaRuntimeRegistry({ server_version: '1.26.60.6' }, loader);
   assert.ok(map instanceof Map);
   assert.equal(map.get(0).name, 'minecraft:air');
