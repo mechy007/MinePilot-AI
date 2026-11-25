@@ -33,7 +33,7 @@ on:
 
 jobs:
   sdk:
-    name: Validate and package Bedrock SDK
+    name: Stage Android Bedrock SDK bundle
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -49,7 +49,9 @@ jobs:
         run: node --test scripts/android-xbox-auth-probe.test.cjs
       - name: Test Bedrock inventory, bridge and stack transaction contracts
         run: node --test scripts/bedrock-inventory-ledger.test.cjs scripts/bedrock-stack-request-manager.test.cjs scripts/bedrock-recipe-catalog.test.cjs scripts/bedrock-odyssey-observation-executor.test.cjs scripts/bedrock-native-skill-system.test.cjs scripts/bedrock-block-placement.test.cjs
-      - name: Stage and test the Bedrock SDK bundle
+      - name: Stage SDK and run runtime smoke checks
+        env:
+          MINEPILOT_SKIP_SDK_CONTRACT_TESTS: '1'
         run: bash scripts/stage-android-bedrock-sdk.sh
       - uses: actions/upload-artifact@v4
         with:
@@ -57,6 +59,22 @@ jobs:
           path: android/app/build/node-smoke/sdk/bedrock-sdk.zip
           if-no-files-found: error
           retention-days: 1
+
+  sdk-contracts:
+    name: Run full Bedrock SDK contract suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install engine build dependencies
+        run: npm install --ignore-scripts --omit=optional
+      - name: Run full staged Bedrock SDK contract suite
+        run: bash scripts/stage-android-bedrock-sdk.sh
 
   package:
     name: Build and verify ARM64 APK
