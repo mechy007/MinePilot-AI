@@ -1101,6 +1101,12 @@ public final class DashboardActivity extends Activity {
                         + "\nDecoded sections: " + current.getInt("terrain_sections")
                         + " · Registry ready: " + current.getBoolean("terrain_registry_ready", false)
                         + " · Decode errors: " + current.getInt("terrain_decode_errors")
+                        + "\\nSubchunk requests: " + current.getInt("subchunk_requests_sent")
+                        + " · Request errors: " + current.getInt("subchunk_request_errors")
+                        + "\\nBlock ID mode: " + (current.getBoolean("block_network_ids_are_hashes", false)
+                            ? "hashed (hash resolver needed)"
+                            : current.getInt("server_custom_block_properties", 0) > 0
+                                ? "custom palette (not mapped)" : "vanilla numeric")
                         + (terrainStatus.isEmpty() ? "" : "\nVerified route: " + terrainStatus
                             + " · " + terrainReason + " · " + current.getInt("terrain_route_length") + " cells")
                         + "\nAutonomous Follow: " + (autonomyActive ? "active" : "stopped")
