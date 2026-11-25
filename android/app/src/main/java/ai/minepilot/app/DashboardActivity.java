@@ -1037,7 +1037,12 @@ public final class DashboardActivity extends Activity {
                     + "\nSelected goal: " + current.getString("brain_goal", "standby").replace('_', ' ')
                     + "\nVisited areas remembered: " + current.getInt("brain_memory_cells")
                     + " · Decisions: " + current.getInt("brain_decisions")
-                    + "\nWorld state fresh: " + (current.getBoolean("brain_world_verified", false) ? "yes" : "no")
+                    + "\nPosition: " + ("server_fresh".equals(current.getString("brain_position_mode", "stale"))
+                        ? "server-confirmed"
+                        : "idle_spawn_anchor".equals(current.getString("brain_position_mode", "stale"))
+                            ? "idle spawn anchor · no movement confirmed"
+                            : current.getBoolean("brain_position_usable", false)
+                                ? "usable" : "stale · waiting for server position")
                     + " · Verified movement steps: " + current.getInt("brain_verified_steps")
                     + "\nMode: suggestions + emergency movement stop; no automatic combat or mining");
             }
