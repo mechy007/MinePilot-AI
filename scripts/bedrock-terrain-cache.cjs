@@ -153,30 +153,42 @@ class BedrockTerrainCache {
   subChunk(packet) {
     const dim=packet?.dimension;
     if (!validDim(dim)||dim!==this.dimension) return 0;
-    const origin=packet?.origin;
-    if(!origin||!isInt(Number(origin.x))||!isInt(Number(origin.z))||
-      !Number.isInteger(Number(origin.y)))return 0;
-    const entries=packet.entries;
+    // Protocol 2225 (Bedrock 1.26.60) names this field center. Keep origin as
+    // a compatibility alias for older packet adapters and recorded fixtures.
+    const center=packet?.center ?? packet?.origin;
+    if(!center||!isInt(Number(center.x))||!isInt(Number(center.z))||
+      !Number.isInteger(Number(center.y)))return 0;
+    const entries=packet.entries ?? packet.sub_chunk_data;
     if(!Array.isArray(entries)||entries.length>48)return 0;
     let count=0;
     for(const e of entries){
-      if(!Number.isInteger(e.dx)||!Number.isInteger(e.dy)||!Number.isInteger(e.dz))continue;
-      const x=Number(origin.x)+e.dx,z=Number(origin.z)+e.dz,
-        y=Number(origin.y)+e.dy;
+      // SubChunkPacketData offsets are nested SubChunkPosOffset values
+      // (x/y/z); flat dx/dy/dz aliases are accepted only for older adapters.
+      const offset=e?.sub_chunk_pos_offset ?? e?.subChunkPosOffset ??
+        e?.offset ?? e;
+      const dx=offset?.x ?? offset?.dx;
+      const dy=offset?.y ?? offset?.dy;
+      const dz=offset?.z ?? offset?.dz;
+      if(![dx,dy,dz].every(Number.isInteger))continue;
+      const x=Number(center.x)+dx,z=Number(center.z)+dz,
+        y=Number(center.y)+dy;
       if(!isInt(x)||!isInt(z)||y<-16||y>32)continue;
-      const status=e.result;
+      const status=e.result ?? e.sub_chunk_request_result;
       if((status==='success_all_air'||status===6) && this.airRuntimeId != null){
         // Server-declared all-air; use the network palette's actual air state ID.
         const air=new Uint32Array(CELLS);air.fill(this.airRuntimeId);
         this.store(dim,x,z,y,air);
         count++;
-      }else if((status==='success'||status===1)&&Buffer.isBuffer(e.payload)){
-        try{
-          const sub=parseSubchunk(e.payload,0,y);
-          if(sub.sectionY!==y){this.decodeErrors++;continue;}
-          this.store(dim,x,z,y,sub.blocks,sub.waterlogged);
-          count++;
-        }catch{this.decodeErrors++;}
+      }else {
+        const payload=e.payload ?? e.serialized_sub_chunk ?? e.serializedSubChunk;
+        if((status==='success'||status===1)&&Buffer.isBuffer(payload)){
+          try{
+            const sub=parseSubchunk(payload,0,y);
+            if(sub.sectionY!==y){this.decodeErrors++;continue;}
+            this.store(dim,x,z,y,sub.blocks,sub.waterlogged);
+            count++;
+          }catch{this.decodeErrors++;}
+        }
       }
     }
     return count;
