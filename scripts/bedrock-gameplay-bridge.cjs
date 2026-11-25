@@ -966,6 +966,10 @@ class BedrockGameplayBridge {
     if (raw.action === 'learning_start') {
       return startLearningTask(this, raw.taskId, { confirmed: raw.confirmed });
     }
+    if (raw.action === 'native_skill_start') {
+      return startBedrockNativeSkill(this, evaluateCapabilities(this), learningEngineFor(this),
+        raw.skillId, { confirmed: raw.confirmed });
+    }
     if (raw.action === 'learning_stop') {
       return stopLearningTask(this, 'learning_user_stopped');
     }
