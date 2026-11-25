@@ -92,6 +92,22 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
     return hasOnlyKnownBlocks(startGame, knownNames) ? cachedNumeric : null;
   }
 
+  // Reject custom block registrations before loading and expanding the
+  // much larger legacy numeric palette. The captured hashed catalogue carries
+  // the complete vanilla block-name set for this protocol family.
+  if (loadMinecraftData == null && startGame?.block_properties != null) {
+    let knownNames;
+    try {
+      const catalogue = require('./bedrock-vanilla-12660-hashed-states.json');
+      if (catalogue?.protocolVersion !== 2225 || !Array.isArray(catalogue.blocks))
+        return null;
+      knownNames = new Set(catalogue.blocks.map(entry => entry?.[0]));
+    } catch {
+      return null;
+    }
+    if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
+  }
+
   let data;
   try {
     if (typeof loadMinecraftData === 'function') {
