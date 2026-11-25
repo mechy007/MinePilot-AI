@@ -50,18 +50,18 @@ test('skeleton LevelChunk requests five nearby server subchunks and rate-limits 
   const client = new FakeClient();
   const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
   initialize(client, bridge);
-  const header = { x: 2, z: -2, dimension: 0, sub_chunk_count: 0xffffffff };
+  const header = { x: 4, z: -1, dimension: 0, sub_chunk_count: 0xffffffff };
   client.emit('level_chunk', header);
   const sent = client.sent.filter(item => item.packet === 'subchunk_request');
   assert.equal(sent.length, 1);
   assert.equal(sent[0].value.dimension, 0);
   assert.deepEqual(sent[0].value.origin, { x: 2, y: 4, z: -2 });
   assert.deepEqual(sent[0].value.requests, [
-    { x: 0, y: -2, z: 0 },
-    { x: 0, y: -1, z: 0 },
-    { x: 0, y: 0, z: 0 },
-    { x: 0, y: 1, z: 0 },
-    { x: 0, y: 2, z: 0 }
+    { x: 2, y: -2, z: 1 },
+    { x: 2, y: -1, z: 1 },
+    { x: 2, y: 0, z: 1 },
+    { x: 2, y: 1, z: 1 },
+    { x: 2, y: 2, z: 1 }
   ]);
   client.emit('level_chunk', header);
   assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 1);
