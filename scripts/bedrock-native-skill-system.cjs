@@ -34,14 +34,17 @@ const DEFINITIONS = Object.freeze([
     mode: 'manual_experimental', taskId: null, requires: ['hotbar_selection'] },
   { id: 'mine_single_block', title: 'Mine one block', family: 'gathering',
     description: 'Experimental single-block break only; requires explicit user confirmation and server-side block-change evidence.',
-    mode: 'manual_experimental', taskId: null, requires: ['mine'] }
+    mode: 'manual_experimental', taskId: null, requires: ['mine'] },
+  { id: 'place_single_block', title: 'Place one block', family: 'building',
+    description: 'Experimental placement of one vanilla Bedrock block into an observed air cell within six blocks, using operator-only command execution and server block-update verification.',
+    mode: 'manual_experimental', taskId: null }
 ]);
 
 const ROADMAP = Object.freeze([
   { id: 'craft_items', family: 'crafting', status: 'unsupported', reason: 'Bedrock recipe and inventory transaction executor not implemented' },
   { id: 'eat_food', family: 'survival', status: 'unsupported', reason: 'Bedrock item-use transaction and host acknowledgement not implemented' },
   { id: 'combat', family: 'combat', status: 'unsupported', reason: 'Bedrock attack action and authoritative hit verification not implemented' },
-  { id: 'place_blocks', family: 'building', status: 'unsupported', reason: 'Bedrock block-placement transaction and world-change verification not implemented' },
+  { id: 'place_blocks', family: 'building', status: 'unsupported', reason: 'Only single-block operator command placement is experimental; multi-block building executor remains unavailable' },
   { id: 'farming', family: 'farming', status: 'unsupported', reason: 'Bedrock tilling, planting and crop-growth action chain not implemented' },
   { id: 'smelt_cook', family: 'crafting', status: 'unsupported', reason: 'Bedrock container and furnace transactions not implemented' },
   { id: 'animal_interaction', family: 'gathering', status: 'unsupported', reason: 'Bedrock entity interaction and inventory-result verification not implemented' },
@@ -64,6 +67,14 @@ function evaluateBedrockSkill(definition, world, manifest) {
   }
   if (definition.id === 'inspect_world') {
     return { status: 'ready', reason: 'authenticated_bedrock_world_snapshot_available', canStart: true };
+  }
+  if (definition.id === 'place_single_block') {
+    if (world.spawned !== true || !world.position || !world.positionUsable?.())
+      return { status: 'blocked', reason: 'fresh_server_position_required', canStart: false };
+    if (world.commandsEnabled !== true || world.permissionLevel !== 'operator')
+      return { status: 'blocked', reason: 'bedrock_operator_command_permission_required', canStart: false };
+    return { status: 'manual_experimental', reason: 'single_block_keep_command_with_server_ack_and_block_update_verification',
+      canStart: true, confirmationRequired: true };
   }
   if (definition.id === 'inspect_inventory') {
     const inventory = world.inventoryLedger?.playerInventory?.() ??
