@@ -4,6 +4,7 @@ const { BedrockOpenWorldLearningEngine } = require('./bedrock-open-world-skills.
 const {
   evaluateOdysseySkill, listOdysseySkills, planOdysseySkill, summarizeOdysseyLibrary
 } = require('./bedrock-odyssey-skill-library.cjs');
+const { bedrockNativeSkillCatalog, startBedrockNativeSkill } = require('./bedrock-native-skill-system.cjs');
 
 /**
  * Capability catalog for MinePilot's Bedrock runtime. A capability advertised
@@ -41,6 +42,12 @@ function evaluateCapabilities(world) {
   const layer2=ready?world?.layerTwo?.snapshot?.(world.gameplayWorld()):null;
   const resources=ready?world?.layerThree?.snapshot?.(world.gameplayWorld()):null;
   const life=world?.lifeSenses!=null;
+  const recipes=world?.recipeCatalog?.snapshot?.(64)??{};
+  const playerInventory=ready?world?.inventoryLedger?.playerInventory?.({maxAgeMs:10000})??null:null;
+  const craftingReady=ready&&world?.itemStackNetManager===true&&
+    (recipes.supported??0)>0&&playerInventory?.known===true&&playerInventory?.fresh===true&&
+    playerInventory?.fullSnapshotFresh===true&&playerInventory?.registryKnown===true&&
+    playerInventory?.unresolvedItemCount===0;
   const result={
     observe_world:ready?one('ready','server_observations') : one('blocked','world_not_ready'),
     world_memory:ready&&world?.intelligence?
@@ -65,7 +72,9 @@ function evaluateCapabilities(world) {
     mine:one('manual_experimental','single_block_action_needs_user_confirmation'),
     eat_food:one('unsupported','needs_item_use_transaction_and_host_ack'),
     attack_hostile:one('unsupported','needs_attack_transaction_and_host_ack'),
-    craft:one('unsupported','needs_recipe_container_stack_validation'),
+    craft:craftingReady?one('manual_experimental','server_recipe_catalog_and_fresh_authoritative_inventory; one confirmed 2x2 recipe'):
+      one('blocked',world?.itemStackNetManager!==true?'server_authoritative_inventory_not_negotiated':
+        (recipes.supported??0)===0?'supported_bedrock_recipes_not_observed':'fresh_resolved_server_inventory_required'),
     build_shelter:one('preview_only','no_verified_block_placement_executor')
   };
   return {
@@ -112,8 +121,11 @@ function odysseyCapabilityStates(world, manifest) {
       existing('attack_hostile').reason ?? 'combat_executor_unavailable'),
     craft: state(existing('craft').state ?? 'blocked',
       existing('craft').reason ?? 'recipe_transaction_unavailable'),
-    block_placement: state(existing('build_shelter').state ?? 'blocked',
-      existing('build_shelter').reason ?? 'verified_block_placement_unavailable'),
+    block_placement: state(manifest?.worldReady && world?.commandsEnabled === true &&
+      world?.permissionLevel === 'operator' ? 'manual_experimental' : 'blocked',
+      manifest?.worldReady && world?.commandsEnabled === true && world?.permissionLevel === 'operator'
+        ? 'operator_command_permission_for_single_block_placement'
+        : 'bedrock_operator_command_permission_required_for_single_block_placement'),
     equip_items: state('unsupported', 'armor_equipment_transaction_unavailable'),
     hotbar_selection: state(hotbarFresh ? 'experimental' : 'blocked',
       hotbarFresh ? 'fresh_server_observed_hotbar_and_server_equipment_confirmation' : 'fresh_hotbar_inventory_unavailable'),
@@ -155,6 +167,8 @@ function gameplaySkillManifest(world) {
   const odysseyCapabilities = odysseyCapabilityStates(world, manifest);
   return {
     ...manifest,
+    nativeSkillLibrary: bedrockNativeSkillCatalog(world, manifest),
+    recipeCatalog: world?.recipeCatalog?.snapshot?.(64) ?? { version:'minepilot.bedrock-recipes.v1', total:0, supported:0, recipes:[] },
     odysseyLibrary: summarizeOdysseyLibrary(odysseyCapabilities),
     // Reading a manifest is observational only. Curriculum state changes happen
     // exclusively on the bridge's explicit runtime tick.
@@ -215,5 +229,6 @@ module.exports = {
   odysseyCapabilityStates,
   evaluateOdysseySkill,
   listOdysseySkills,
-  planOdysseySkill
+  planOdysseySkill,
+  startBedrockNativeSkill
 };

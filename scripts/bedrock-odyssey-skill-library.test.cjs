@@ -54,7 +54,7 @@ test('experimental movement and manual mining are not marked ready',()=>{
 test('plans are dependency previews and never execute upstream JavaScript',()=>{
  const p=planOdysseySkill('mine_diamond',allReady);assert.equal(p.status,'blocked');
  assert.equal(p.execution,'bedrock_action_plan_only');assert.equal(p.executable,false);
- assert.ok(p.bedrockPlan);assert.equal(p.bedrockPlan.executable,false);assert.ok(p.bedrockPlan.actions.some(action=>action.name==='craftItem'));assert.ok(p.bedrockPlan.blockedActions.includes('craftItem'));
+ assert.ok(p.bedrockPlan);assert.equal(p.bedrockPlan.executable,false);assert.ok(p.bedrockPlan.actions.some(action=>action.name==='craftItem'));assert.ok(p.bedrockPlan.manualActions.includes('craftItem'));
  assert.equal(p.arbitraryCodeExecution,false);assert.ok(p.primitiveCalls.includes('mineBlock'));assert.ok(!Object.hasOwn(p,'code'));
  const unknown=planOdysseySkill('not_a_skill',allReady);assert.equal(unknown.status,'rejected');assert.equal(unknown.executable,false);assert.equal(unknown.arbitraryCodeExecution,false);
 });

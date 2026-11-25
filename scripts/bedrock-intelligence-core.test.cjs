@@ -116,8 +116,6 @@ test('Bedrock session bridge presents real intelligence status and stops active 
     player_position:{x:1,y:65,z:1},dimension:0,rotation:{x:0,z:0},
     current_tick:100n,movement_authority:1});
   client.emit('spawn');
-  // Intelligence requires a complete live-session position context: StartGame,
-  // spawn, a current server tick, movement authority and an observed chunk.
   client.emit('level_chunk',{x:0,z:0,dimension:0});
   commands.length=0;stopped.length=0;
   client.emit('update_attributes',{runtime_entity_id:123n,

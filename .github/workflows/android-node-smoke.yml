@@ -9,8 +9,21 @@ on:
       - scripts/android-node-bedrock-smoke.cjs
       - scripts/bedrock-gameplay-bridge.cjs
       - scripts/bedrock-gameplay-bridge.test.cjs
+      - scripts/bedrock-native-skill-system.cjs
+      - scripts/bedrock-native-skill-system.test.cjs
+      - scripts/bedrock-block-placement.cjs
+      - scripts/bedrock-block-placement.test.cjs
+      - .agents/skills/minecraft-bedrock-qa/SKILL.md
       - scripts/bedrock-stack-request-manager.cjs
       - scripts/bedrock-stack-request-manager.test.cjs
+      - scripts/bedrock-recipe-catalog.cjs
+      - scripts/bedrock-recipe-catalog.test.cjs
+      - scripts/bedrock-intelligence-core.test.cjs
+      - scripts/bedrock-manual-terrain.test.cjs
+      - scripts/bedrock-runtime-registry.cjs
+      - scripts/bedrock-vanilla-12660-states.json
+      - scripts/bedrock-vanilla-12660-hashed-states.json
+      - scripts/bedrock-terrain-cache.cjs
       - scripts/bedrock-inventory-ledger.cjs
       - scripts/bedrock-inventory-ledger.test.cjs
       - scripts/bedrock-odyssey-observation-executor.cjs
@@ -21,8 +34,10 @@ on:
       - package.json
       - tsconfig.json
       - 'android/**'
+
 jobs:
-  package:
+  sdk:
+    name: Stage Android Bedrock SDK bundle
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -32,6 +47,48 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Install engine build dependencies
+        run: npm install --ignore-scripts --omit=optional
+      - name: Test Xbox sign-in program with synthetic account responses
+        run: node --test scripts/android-xbox-auth-probe.test.cjs
+      - name: Test Bedrock inventory, bridge and stack transaction contracts
+        run: node --test scripts/bedrock-inventory-ledger.test.cjs scripts/bedrock-stack-request-manager.test.cjs scripts/bedrock-recipe-catalog.test.cjs scripts/bedrock-odyssey-observation-executor.test.cjs scripts/bedrock-native-skill-system.test.cjs scripts/bedrock-block-placement.test.cjs
+      - name: Stage SDK and run runtime smoke checks
+        env:
+          MINEPILOT_SKIP_SDK_CONTRACT_TESTS: '1'
+        run: bash scripts/stage-android-bedrock-sdk.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minepilot-bedrock-sdk-bundle
+          path: android/app/build/node-smoke/sdk/bedrock-sdk.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  sdk-contracts:
+    name: Run full Bedrock SDK contract suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install engine build dependencies
+        run: npm install --ignore-scripts --omit=optional
+      - name: Run full staged Bedrock SDK contract suite
+        run: bash scripts/stage-android-bedrock-sdk.sh
+
+  package:
+    name: Build and verify ARM64 APK
+    needs: sdk
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -44,14 +101,10 @@ jobs:
         run: sdkmanager 'build-tools;35.0.0' 'platforms;android-35' 'ndk;28.0.13004108' 'cmake;3.22.1'
       - name: Verify and stage ARM64 Node
         run: bash scripts/stage-android-node-smoke.sh
-      - name: Test Xbox sign-in program with synthetic account responses
-        run: node --test scripts/android-xbox-auth-probe.test.cjs
-      - name: Test Bedrock inventory, bridge and stack transaction contracts
-        run: node --test scripts/bedrock-inventory-ledger.test.cjs scripts/bedrock-stack-request-manager.test.cjs scripts/bedrock-odyssey-observation-executor.test.cjs
-      - name: Install engine build dependencies
-        run: npm install --ignore-scripts --omit=optional
-      - name: Stage and test the Bedrock SDK bundle
-        run: bash scripts/stage-android-bedrock-sdk.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: minepilot-bedrock-sdk-bundle
+          path: android/app/build/node-smoke/sdk
       - name: Build debug APK with Node and the Bedrock SDK
         working-directory: android
         run: gradle --no-daemon -PminepilotNodeSmoke=true :app:assembleDebug :app:testDebugUnitTest
@@ -67,7 +120,7 @@ jobs:
           with ZipFile(sys.argv[1]) as apk:
               for name in ("libnode.so", "libminepilot_node_smoke.so", "libc++_shared.so"):
                   data = apk.read(f"lib/arm64-v8a/{name}")
-                  assert data[:6] == b"\x7fELF\x02\x01", name
+                  assert data[:6] == bytes.fromhex("7f454c460201"), name
                   assert int.from_bytes(data[18:20], "little") == 183, name
               for name in ("bedrock-sdk.zip", "Node.js-LICENSE.txt", "Node.js-Mobile-LICENSE.txt"):
                   assert apk.getinfo(f"assets/{name}").file_size > 0, name

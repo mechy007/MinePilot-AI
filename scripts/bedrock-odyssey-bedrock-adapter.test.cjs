@@ -15,13 +15,17 @@ test('all 183 ODYSSEY compositions map every referenced primitive to a Bedrock a
 });
 
 test('Bedrock primitive evaluation never upgrades unsupported actions to executable', () => {
-  const unsupported = ['craftItem','cookFood','smeltItem','equipArmor',
+  const unsupported = ['cookFood','smeltItem','equipArmor',
     'feedAnimals','killMob','placeItem','plantSeeds'];
   for (const name of unsupported) {
     const result = evaluatePrimitive(name, { [PRIMITIVES[name].capability]: 'ready' });
     assert.equal(result.status, 'blocked', name);
     assert.equal(result.executable, false, name);
   }
+  const crafting = evaluatePrimitive('craftItem', { craft: 'manual_experimental' });
+  assert.equal(crafting.status, 'manual');
+  assert.equal(crafting.executable, false);
+  assert.equal(crafting.executor, 'odyssey_execute');
 });
 
 test('observation and bounded navigation primitives inherit only advertised Bedrock capabilities', () => {
@@ -53,7 +57,7 @@ test('Bedrock skill plans preserve primitive requirements and never claim dispat
   assert.equal(plan.skillId, skill.id);
   assert.equal(plan.executable, false);
   assert.equal(plan.execution, 'bedrock_action_plan_only');
-  assert.ok(plan.blockedActions.includes('craftItem'));
+  assert.ok(plan.manualActions.includes('craftItem'));
   const catalogPlan = planOdysseySkill(skill.id, {
     world_observation: 'ready', spatial_observation: 'ready', inventory_read: 'ready',
     navigation: 'experimental', craft: 'ready'
@@ -76,6 +80,7 @@ test('live primitive executor declarations are explicit and do not promote compo
   assert.equal(evaluatePrimitive('goto', { navigation: 'experimental' }).executor, 'odyssey_execute');
   assert.equal(evaluatePrimitive('exploreUntil', { navigation: 'experimental' }).executor, 'odyssey_execute');
   assert.equal(evaluatePrimitive('mineBlock', { mine: 'manual_experimental' }).executor, 'odyssey_execute');
+  assert.equal(evaluatePrimitive('craftItem', { craft: 'manual_experimental' }).executor, 'odyssey_execute');
   const plan = buildBedrockPrimitivePlan({ id: 'test', primitiveCalls: ['goto'] },
     { navigation: 'experimental' });
   assert.equal(plan.executable, false, 'single primitive IPC does not imply composition orchestration');
