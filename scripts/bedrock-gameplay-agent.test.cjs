@@ -74,9 +74,19 @@ function fixture() {
     blockBreaker:{snapshot(){return {active:false};}},
     autonomy:{snapshot(){return {active:false};}},
     lifeSenses:{snapshot(){return life;}},
-    intelligence,intelligenceTick(){},
+    intelligence,
     gameplayWorld(){return {spawned:true,position:this.position,dimension:0,
       chunks:1,safetyHold:false};}
+  };
+  world.intelligenceTick=()=>{
+    const age=now-world.lastServerPositionAt;
+    return intelligence.decide({
+      life,position:world.position,dimension:world.dimension,spawned:world.spawned,
+      respawnState:world.respawnRecovery.state,positionAgeMs:age,
+      positionUsable:age>=0&&age<=7000,idlePositionAnchor:false,
+      terrainReady:world.terrain.snapshot().decodedSections>0,
+      safetyHold:world.gameplayWorld().safetyHold
+    });
   };
   return {agent,world,sent,intelligence,layerTwo,layerThree,
     tick(){agent.pulse();ticks++;},
@@ -286,4 +296,25 @@ test('goto accepts only a nearby target with a verified route and verifies serve
   assert.equal(f.agent.snapshot().active,true);
   f.agent.stop();
   assert.equal(f.agent.snapshot().targetPosition,null);
+});
+
+test('gameplay agent follows intelligence intent and fails closed when the selected goal disagrees',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'explore'});
+  f.intelligence.setGoal('goto');
+  f.tick();
+  assert.equal(f.sent.length,0);
+  assert.equal(f.agent.snapshot().reason,'intelligence_goal_directive_mismatch');
+  assert.equal(f.agent.snapshot().intelligenceDirective.action,'go_to_position');
+});
+
+test('critical air is surfaced by intelligence and blocks ordinary exploration',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'explore'});
+  f.changeLife({air:3});
+  f.tick();
+  assert.equal(f.sent.length,0);
+  assert.equal(f.intelligence.snapshot().action,'seek_safety');
+  assert.equal(f.intelligence.snapshot().reason,'critical_air_supply');
+  assert.equal(f.agent.snapshot().reason,'critical_vitals_wait_for_safe_recovery');
 });
