@@ -110,8 +110,10 @@ class BedrockTerrainCache {
       if(!Number.isInteger(key)||key<0||key>=0x100000000)continue;
       const name=typeof value==='string'?value:value?.name;
       const boundingBox=typeof value==='object'?value?.boundingBox:null;
+      const fullCube=typeof value==='object' && typeof value?.fullCube==='boolean'
+        ? value.fullCube : null;
       if(typeof name==='string' && /^minecraft:[a-z0-9_./-]{1,90}$/.test(name))
-        this.registry.set(key,{name,boundingBox});
+        this.registry.set(key,{name,boundingBox,fullCube});
       if(name==='minecraft:air') this.airRuntimeId=key;
     }
     return this.registry.size>0;
@@ -235,8 +237,12 @@ class BedrockTerrainCache {
       return 'hazard';
     // Only a full-cube collision shape is treated as walkable support.
     // Partial/dynamic/honey/powder/unsupported shapes remain unknown.
-    if(entry.boundingBox==='block' &&
-      !/minecraft:(honey_block|slime|magma|powder_snow|soul_sand)$/.test(name))
+    // Trust exact captured collision profiles when available. Only blocks
+    // whose every captured state is a full unit cube support verified flat
+    // movement; partial, dynamic and unrecognized shapes remain unknown.
+    const fullCube=entry.fullCube === true ||
+      (entry.fullCube == null && entry.boundingBox==='block');
+    if(fullCube && !/minecraft:(honey_block|slime|magma|powder_snow|soul_sand)$/.test(name))
       return 'solid';
     return null;
   }
