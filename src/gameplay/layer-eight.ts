@@ -31,6 +31,7 @@ export type ReadinessSnapshot = Readonly<{
   observed: {
     entity: boolean; coordinates: boolean; chunkHeaders: number;
     corrections: number; positionAgeMs: number | null;
+    positionMode: 'server_fresh' | 'idle_spawn_anchor' | 'stale';
   };
 }>;
 const MAX_AGE_MS = 30_000;
@@ -40,8 +41,10 @@ const integer = (x: unknown): x is number => Number.isInteger(x) && (x as number
 export class LayerEightReadiness {
   assess(data: RuntimeEvidence): ReadinessSnapshot {
     const age = data.positionAgeMs;
-    const recentAge = age !== null && Number.isFinite(age) && age >= 0 && age <= MAX_AGE_MS;
-    const idleAnchor = data.idlePositionAnchor === true;
+    const validNumericAge = age !== null && Number.isFinite(age) && age >= 0 &&
+      age <= MAX_AGE_MS;
+    const recentAge = validNumericAge && age <= 7000;
+    const idleAnchor = data.idlePositionAnchor === true && validNumericAge;
     const validAge = recentAge || idleAnchor;
     const validHeaders = integer(data.receivedChunkHeaders) &&
       data.receivedChunkHeaders >= 1 && data.receivedChunkHeaders <= MAX_CHUNKS;
