@@ -612,7 +612,7 @@ class BedrockGameplayBridge {
       return false;
     const requests = [-2, -1, 0, 1, 2].map(y => ({ x: 0, y, z: 0 }));
     try {
-      this.client.queue('sub_chunk_request', { dimension, requests, origin: center });
+      this.client.queue('subchunk_request', { dimension, requests, origin: center });
       this.subchunkRequestKeys.set(key, now);
       while (this.subchunkRequestKeys.size > 128)
         this.subchunkRequestKeys.delete(this.subchunkRequestKeys.keys().next().value);
