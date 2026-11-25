@@ -747,9 +747,26 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
                             y < -256 || y > 512) return;
                     args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
+                } else if ("placeBlock".equals(primitive)) {
+                    String source = extras.getString("block_position", "").trim();
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    int x, y, z;
+                    try {
+                        x = Integer.parseInt(coordinates[0].trim());
+                        y = Integer.parseInt(coordinates[1].trim());
+                        z = Integer.parseInt(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
+                            y < -64 || y > 319) return;
+                    String blockId = extras.getString("block_id", "").trim();
+                    if (!blockId.matches("(?i)^(?:minecraft:)?[a-z0-9_./-]{1,80}$")) return;
+                    args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
+                    args.put("blockId", blockId.toLowerCase(java.util.Locale.ROOT));
                 } else if (!"exploreUntil".equals(primitive) && !"equipAxe".equals(primitive) &&
                         !"equipHoe".equals(primitive) && !"equipPickaxe".equals(primitive) &&
-                        !"equipSword".equals(primitive)) {
+                        !"equipSword".equals(primitive) && !"mineBlock".equals(primitive) &&
+                        !"placeBlock".equals(primitive)) {
                     return;
                 }
                 command.put("primitive", primitive).put("args", args).put("confirmed", true);
