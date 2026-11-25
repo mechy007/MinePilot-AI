@@ -101,8 +101,10 @@ test('manifest never labels unsupported food, attacks, recipes or building as ex
   assert.ok(catalog.permittedGoalNames.includes('survive'));
   const skill=Object.fromEntries(catalog.skills.map(x=>[x.name,x]));
   assert.equal(skill.explore.state,'experimental');
-  for(const name of ['eat_food','attack_hostile','craft'])
+  for(const name of ['eat_food','attack_hostile'])
     assert.equal(skill[name].state,'unsupported');
+  assert.equal(skill.craft.state,'blocked',
+    'crafting is blocked without an observed server recipe catalogue and fresh authoritative inventory');
   assert.equal(skill.build_shelter.state,'preview_only');
   assert.equal(skill.collect_observed_drops.state,'experimental');
   f.world.movement.capability=()=> 'unavailable';
