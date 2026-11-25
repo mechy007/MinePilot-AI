@@ -1465,3 +1465,51 @@ test('manual movement is still blocked by missing authority, critical health and
   assert.equal(bridge.execute({ ...base, requestId: 'manual-disabled' }).reason, 'movement_unavailable');
   bridge.stop();
 });
+
+test('manual look controls rotate camera without translating the bot', () => {
+  const client = new Client();
+  let now = 1000;
+  let pulse = null;
+  const movement = new ExperimentalPlayerInput(client, true, {
+    clock: () => now,
+    setInterval: callback => { pulse = callback; return 1; },
+    clearInterval: () => {}
+  });
+  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
+  initialized(client, bridge);
+  for (const [mode, yaw] of [['turn_left', 355], ['turn_right', 5]]) {
+    initialized(client, bridge);
+    const result = bridge.execute({
+      version: 'minepilot.gameplay.v1', requestId: mode,
+      action: 'manual_move', confirmed: true, mode, ticks: 2
+    });
+    assert.equal(result.status, 'accepted');
+    now += 50;
+    pulse();
+    const frame = client.sent.at(-1).value;
+    assert.deepEqual(frame.move_vector, { x: 0, z: 0 });
+    assert.deepEqual(frame.input_data, []);
+    assert.equal(frame.yaw, yaw);
+    bridge.execute({ version: 'minepilot.gameplay.v1', requestId: mode + '-stop', action: 'manual_stop' });
+  }
+  bridge.stop();
+});
+
+test('vanilla runtime registry refuses hashed IDs and server custom block definitions', () => {
+  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
+    require('./bedrock-runtime-registry.cjs');
+  clearRuntimeRegistryCache();
+  const load = () => ({ blocks: [
+    { minStateId: 0, maxStateId: 1000, name: 'air', boundingBox: 'empty' }
+  ] });
+  assert.equal(createVanillaRuntimeRegistry({
+    engine: '1.26.60', block_network_ids_are_hashes: true
+  }, load), null);
+  assert.equal(createVanillaRuntimeRegistry({
+    engine: '1.26.60', block_properties: [{ name: 'custom:example', states: {} }]
+  }, load), null);
+  const registry = createVanillaRuntimeRegistry({ engine: '1.26.60' }, load);
+  assert.equal(registry.size, 1001);
+  assert.equal(registry.get(0).name, 'minecraft:air');
+  clearRuntimeRegistryCache();
+});
