@@ -70,6 +70,9 @@ class BedrockGameplayBridge {
     this.routePlanner = options.routePlanner ?? null;
     this.registryResolver = options.registryResolver ?? null;
     this.navigationRoute = null;
+    this.subchunkRequestKeys = new Map();
+    this.subchunkRequestsSent = 0;
+    this.subchunkRequestErrors = 0;
     this.autonomy = options.autonomy ?? null;
     this.blockBreaker = options.blockBreaker ?? null;
     this.lifeSenses = options.lifeSenses ?? null;
@@ -129,7 +132,11 @@ class BedrockGameplayBridge {
     this.bind('set_player_game_type', p => this.gameModeChange(p));
     this.bind('update_player_game_type', p => this.gameModeChange(p));
     this.bind('set_movement_authority', p => this.authorityChange(p));
-    this.bind('level_chunk', p => { this.chunk(p); this.terrain?.levelChunk(p); });
+    this.bind('level_chunk', p => {
+      this.chunk(p);
+      this.terrain?.levelChunk(p);
+      this.requestLocalSubchunks(p);
+    });
     this.bind('subchunk', p => this.terrain?.subChunk(p));
     // Support the canonical packet spelling used by alternate SDK adapters.
     this.bind('sub_chunk', p => this.terrain?.subChunk(p));
@@ -233,6 +240,7 @@ class BedrockGameplayBridge {
     this.serverTickObservedAt = this.serverTick!=null?this.clock():null;
     this.players.clear();
     this.receivedChunks.clear();
+    this.subchunkRequestKeys.clear();
     this.lastWorldAt = this.clock();
     this.spawned = false;
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
@@ -571,6 +579,45 @@ class BedrockGameplayBridge {
     if (this.receivedChunks.size > MAX_CHUNKS) this.receivedChunks.delete(this.receivedChunks.keys().next().value);
     this.lastWorldAt = this.clock();
   }
+
+  requestLocalSubchunks(packet) {
+    if (this.closed || typeof this.client.queue !== 'function' || !packet ||
+        !Number.isInteger(packet.x) || !Number.isInteger(packet.z) ||
+        !Number.isInteger(packet.sub_chunk_count) ||
+        ![0xffffffff, -1].includes(packet.sub_chunk_count)) return false;
+    const dimension = validDimension(packet.dimension);
+    const position = this.position;
+    if (dimension == null || dimension !== this.dimension || !finitePosition(position))
+      return false;
+    // Bedrock 1.26.x skeleton LevelChunks use UINT32_MAX as their subchunk
+    // count. They carry no voxel payload: clients must request subchunks.
+    // Request only five vertical sections of this chunk column around the bot.
+    const center = {
+      x: packet.x,
+      y: Math.floor(position.y / 16),
+      z: packet.z
+    };
+    if (![center.x, center.y, center.z].every(Number.isInteger) ||
+        Math.abs(center.x) > 1875000 || Math.abs(center.z) > 1875000 ||
+        center.y < -16 || center.y > 32) return false;
+    const key = [dimension, center.x, center.y, center.z].join(':');
+    const now = this.clock();
+    const previous = this.subchunkRequestKeys.get(key);
+    if (Number.isFinite(previous) && now - previous >= 0 && now - previous < 15000)
+      return false;
+    const requests = [-2, -1, 0, 1, 2].map(y => ({ x: 0, y, z: 0 }));
+    try {
+      this.client.queue('sub_chunk_request', { dimension, requests, origin: center });
+      this.subchunkRequestKeys.set(key, now);
+      while (this.subchunkRequestKeys.size > 128)
+        this.subchunkRequestKeys.delete(this.subchunkRequestKeys.keys().next().value);
+      this.subchunkRequestsSent++;
+      return true;
+    } catch {
+      this.subchunkRequestErrors++;
+      return false;
+    }
+  }
   move(packet) {
     if (this.closed || !packet) return;
     const id = ident(packet.runtime_entity_id ?? packet.runtime_id);
@@ -648,6 +695,7 @@ class BedrockGameplayBridge {
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.receivedChunks.clear();
+    this.subchunkRequestKeys.clear();
     this.players.clear();
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
     else this.movement?.stop();
@@ -747,6 +795,8 @@ class BedrockGameplayBridge {
       dimension: this.dimension,
       visiblePlayers: this.players.size,
       loadedChunkHeaders: this.receivedChunks.size,
+      subchunkRequestsSent: this.subchunkRequestsSent,
+      subchunkRequestErrors: this.subchunkRequestErrors,
       // A chunk header does NOT prove decoded, navigable block/voxel data.
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
