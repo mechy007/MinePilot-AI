@@ -562,6 +562,12 @@ class BedrockGameplayBridge {
     this.layerTwo?.observeEquipment(selected ?? packet?.slot, itemId);
     if (!Number.isInteger(selected) || selected < 0 || selected > 8) return;
     this.selectedHotbarSlot = selected;
+    const verified = this.lastHotbarSelection;
+    if (verified?.status === 'verified' &&
+        (verified.slot !== selected || (itemId != null && Number(itemId) !== verified.networkId))) {
+      this.lastHotbarSelection = { ...verified, status: 'invalidated',
+        reason: 'server_equipment_changed' };
+    }
     const pending = this.pendingHotbarSelection;
     if (pending && pending.slot === selected && Number(itemId) === pending.networkId) {
       this.lastHotbarSelection = { ...pending, status: 'verified',
@@ -973,6 +979,8 @@ class BedrockGameplayBridge {
       if (raw.primitive === 'placeBlock')
         return this.startSingleBlockPlacement(raw, args);
       if (raw.primitive === 'mineBlock') {
+        if (this.autonomy?.snapshot()?.active)
+          return { status: 'rejected', reason: 'autonomy_busy' };
         const p = args.position;
         if (!p || !['x','y','z'].every(k => Number.isInteger(p[k])))
           return { status: 'rejected', reason: 'integer_block_position_required' };
