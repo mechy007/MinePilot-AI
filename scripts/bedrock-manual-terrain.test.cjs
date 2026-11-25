@@ -20,6 +20,7 @@ const start = {
   movement_authority: 1
 };
 
+
 function initialize(client, bridge) {
   client.emit('start_game', start);
   client.emit('spawn');
@@ -280,7 +281,7 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
 });
 
 test('numeric palette is exact-version only and fails closed on custom block registration', () => {
-  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
+  const { createVanillaRuntimeRegistry, createNumericRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
   clearRuntimeRegistryCache();
   const loader = () => ({
@@ -290,9 +291,9 @@ test('numeric palette is exact-version only and fails closed on custom block reg
     'missing server version cannot safely select a protocol palette');
   assert.equal(createVanillaRuntimeRegistry({ server_version: '1.26.66.1' }, loader), null,
     'captured numeric IDs cannot be reused on another release');
-  assert.equal(createVanillaRuntimeRegistry({
+  assert.equal(createNumericRuntimeRegistry({
     server_version: '1.26.60.6', block_network_ids_are_hashes: true
-  }, loader), null);
+  }, loader), null, 'hashed Bedrock IDs cannot use the numeric palette');
 
   const customWorld = createVanillaRuntimeRegistry({
     server_version: '1.26.60.6',
