@@ -34,7 +34,17 @@ function setup(){
       snapshot(){return {active:false};},
       runVerifiedStep(world,target){count++;return {status:'accepted'};}},
     autonomy:{snapshot(){return {active:false};}},
-    intelligence:brain,intelligenceTick(){},
+    intelligence:brain,
+    intelligenceTick(){
+      const age=now-world.lastServerPositionAt;
+      return brain.decide({
+        life,position:world.position,dimension:world.dimension,spawned:world.spawned,
+        respawnState:world.respawnRecovery.state,positionAgeMs:age,
+        positionUsable:age>=0&&age<=7000,idlePositionAnchor:false,
+        terrainReady:world.terrain.snapshot().decodedSections>0,
+        safetyHold:world.gameplayWorld().safetyHold
+      });
+    },
     lifeSenses:{snapshot(){return life;}},
     layerThree:{
       snapshot(){return {inventoryKnown:true,nearbyItemNames:selected?[

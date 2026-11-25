@@ -7,7 +7,7 @@ const {BedrockGameplayBridge}=require('./bedrock-gameplay-bridge.cjs');
 const {EventEmitter}=require('node:events');
 
 function fixture() {
-  let now=1000,enabled=true,active=false,muted=false;
+  let now=1000,enabled=true,active=false,unconfirmed=false,muted=false;
   let ticks=0,stopCount=0,foodPlans=0;
   let callback;
   const sent=[];
@@ -21,13 +21,13 @@ function fixture() {
   const intelligence=new MinePilotIntelligence({clock});
   const movement={
     capability(){return enabled?'experimental':'unavailable';},
-    snapshot(){return {active};},
+    snapshot(){return {active,unconfirmedMovement:unconfirmed};},
     runVerifiedStep(world,point,ticks){
       assert.ok(Math.hypot(point.x-world.position.x,point.z-world.position.z)<=2.1);
-      sent.push({point:{...point},ticks});active=true;
+      sent.push({point:{...point},ticks});active=true;unconfirmed=true;
       return {status:'accepted',reason:'queued_not_verified'};
     },
-    stop(reason){stopCount++;active=false;},
+    stop(reason){stopCount++;active=false;unconfirmed=false;},
   };
   const layerTwo={
     chosen:null,
@@ -74,9 +74,20 @@ function fixture() {
     blockBreaker:{snapshot(){return {active:false};}},
     autonomy:{snapshot(){return {active:false};}},
     lifeSenses:{snapshot(){return life;}},
-    intelligence,intelligenceTick(){},
+    intelligence,
+    positionUsable(){return !unconfirmed && now-world.lastServerPositionAt<=7000;},
     gameplayWorld(){return {spawned:true,position:this.position,dimension:0,
       chunks:1,safetyHold:false};}
+  };
+  world.intelligenceTick=()=>{
+    const age=now-world.lastServerPositionAt;
+    return intelligence.decide({
+      life,position:world.position,dimension:world.dimension,spawned:world.spawned,
+      respawnState:world.respawnRecovery.state,positionAgeMs:age,
+      positionUsable:age>=0&&age<=7000,idlePositionAnchor:false,
+      terrainReady:world.terrain.snapshot().decodedSections>0,
+      safetyHold:world.gameplayWorld().safetyHold
+    });
   };
   return {agent,world,sent,intelligence,layerTwo,layerThree,
     tick(){agent.pulse();ticks++;},
@@ -86,7 +97,7 @@ function fixture() {
     movementEnds(){active=false;},
     advance(ms){now+=ms;},
     updatePosition(point){
-      world.position={...point};world.lastServerPositionAt=now;
+      world.position={...point};world.lastServerPositionAt=now;unconfirmed=false;
     },
     get callbacks(){return callback;},
     get stopCount(){return stopCount;},
@@ -113,6 +124,29 @@ test('agent is opt-in and cannot run without experimental movement, live world, 
   assert.equal(f.agent.snapshot().active,false);
   assert.equal(f.intelligence.snapshot().goal,'standby');
 });
+test('in-flight movement waits for server confirmation without stale-position self-abort',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'explore'});
+  f.tick();
+  assert.equal(f.sent.length,1);
+  assert.equal(f.agent.snapshot().active,true);
+  assert.equal(f.world.positionUsable(),false);
+  f.movementEnds();
+  f.advance(300);
+  f.tick();
+  assert.equal(f.agent.snapshot().active,true,
+    'the agent must keep waiting for its own bounded movement acknowledgement');
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,0);
+  assert.equal(f.agent.awaiting!==null,true);
+  const from=f.agent.awaiting.from, target=f.agent.awaiting.target;
+  f.updatePosition({x:from.x+(target.x-from.x)*0.6,y:from.y,
+    z:from.z+(target.z-from.z)*0.6});
+  f.tick();
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,1);
+  assert.equal(f.agent.snapshot().active,true);
+  f.agent.stop();
+});
+
 test('observe-plan-move-verify: queued movement is never claimed as server-confirmed',()=>{
   const f=fixture();
   f.agent.start(f.world,{confirmed:true,goal:'explore'});
@@ -137,20 +171,15 @@ test('observe-plan-move-verify: queued movement is never claimed as server-confi
   assert.equal(f.agent.snapshot().phase,'verified');
   assert.equal(f.sent.length,1);
 });
-test('unconfirmed movement times out twice and stops without uncontrolled retrying',()=>{
+test('unconfirmed movement timeout stops without retrying from a stale server anchor',()=>{
   const f=fixture();
   f.agent.start(f.world,{confirmed:true,goal:'explore'});
   f.tick();f.movementEnds();
   f.advance(4600);f.tick();
-  assert.equal(f.agent.snapshot().failures,1);
-  f.advance(1100);f.world.lastServerPositionAt+=5100;
-  f.tick();
-  assert.equal(f.sent.length,2);
-  f.movementEnds();
-  f.advance(4600);f.tick();
+  assert.equal(f.sent.length,1);
   assert.equal(f.agent.snapshot().active,false);
   assert.equal(f.agent.snapshot().reason,'server_movement_not_confirmed');
-  assert.equal(f.agent.snapshot().failures,2);
+  assert.equal(f.agent.snapshot().failures,1);
 });
 test('unknown terrain, missing food interaction and stale state never emit movement',()=>{
   const f=fixture();
@@ -286,4 +315,25 @@ test('goto accepts only a nearby target with a verified route and verifies serve
   assert.equal(f.agent.snapshot().active,true);
   f.agent.stop();
   assert.equal(f.agent.snapshot().targetPosition,null);
+});
+
+test('gameplay agent follows intelligence intent and fails closed when the selected goal disagrees',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'explore'});
+  f.intelligence.setGoal('goto');
+  f.tick();
+  assert.equal(f.sent.length,0);
+  assert.equal(f.agent.snapshot().reason,'intelligence_goal_directive_mismatch');
+  assert.equal(f.agent.snapshot().intelligenceDirective.action,'go_to_position');
+});
+
+test('critical air is surfaced by intelligence and blocks ordinary exploration',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'explore'});
+  f.changeLife({air:3});
+  f.tick();
+  assert.equal(f.sent.length,0);
+  assert.equal(f.intelligence.snapshot().action,'seek_safety');
+  assert.equal(f.intelligence.snapshot().reason,'critical_air_supply');
+  assert.equal(f.agent.snapshot().reason,'critical_vitals_wait_for_safe_recovery');
 });

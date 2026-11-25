@@ -70,15 +70,18 @@ class MinePilotIntelligence {
     if(!observation.spawned || observation.respawnState!=='alive' ||
        life.state==='dead') {
       candidates.push(candidate('await_respawn',100,'not_alive',1,false,['respawn_state']));
-    } else if(!worldReady) {
-      candidates.push(candidate('observe',90,'world_state_stale',1,false,['position_freshness']));
     } else {
+      // Vitals and nearby-entity observations remain useful for emergency
+      // stopping while movement awaits a fresh authoritative position packet.
       const health=life.health;
       const nearby=Array.isArray(life.nearbyEntities)?life.nearbyEntities:[];
       const threat=nearby.find(e=>e?.hostile===true &&
         Number.isFinite(e.distance) && e.distance<=HAZARD_DISTANCE);
       if(Number.isFinite(health) && health<=6) {
         candidates.push(candidate('seek_safety',95,'critical_health',1,false,['self_health']));
+      }
+      if(Number.isFinite(life.air) && life.air<=4) {
+        candidates.push(candidate('seek_safety',94,'critical_air_supply',1,false,['self_air']));
       }
       if(threat) {
         candidates.push(candidate('avoid_threat',85,'hostile_nearby',0.95,false,
@@ -87,21 +90,28 @@ class MinePilotIntelligence {
       if(Number.isFinite(life.hunger)&&life.hunger<=6) {
         candidates.push(candidate('find_food',70,'low_hunger',1,false,['self_hunger']));
       }
-      const knownTerrain=observation.terrainReady===true &&
-        life.localTerrain?.unknown===0 &&
-        life.localTerrain?.hazard===0;
-      if(this.goal!=='standby') {
-        const safe=knownTerrain && observation.safetyHold!==true;
-        candidates.push(candidate(
-          this.goal==='survive'?'survive_world':
-          this.goal==='follow'?'follow_player':
-          this.goal==='return_home'?'return_home':
-          this.goal==='explore'?'explore':'gather_resources',
-          40,safe?'goal_can_be_planned':'terrain_or_safety_unverified',
-          safe?0.8:0.35,false,
-          ['selected_goal',safe?'known_local_terrain':'unknown_local_terrain']));
+      if(!worldReady) {
+        // Stale position blocks new navigation, but does not suppress the
+        // higher-priority emergency directives above.
+        candidates.push(candidate('observe',60,'world_state_stale',1,false,['position_freshness']));
+      } else {
+        const knownTerrain=observation.terrainReady===true &&
+          life.localTerrain?.unknown===0 &&
+          life.localTerrain?.hazard===0;
+        if(this.goal!=='standby') {
+          const safe=knownTerrain && observation.safetyHold!==true;
+          candidates.push(candidate(
+            this.goal==='survive'?'survive_world':
+            this.goal==='follow'?'follow_player':
+            this.goal==='return_home'?'return_home':
+            this.goal==='explore'?'explore':
+            this.goal==='goto'?'go_to_position':'gather_resources',
+            40,safe?'goal_can_be_planned':'terrain_or_safety_unverified',
+            safe?0.8:0.35,false,
+            ['selected_goal',safe?'known_local_terrain':'unknown_local_terrain']));
+        }
+        candidates.push(candidate('observe',10,'monitor_world',1,false,['live_packet_data']));
       }
-      candidates.push(candidate('observe',10,'monitor_world',1,false,['live_packet_data']));
     }
     candidates.sort((a,b)=>b.priority-a.priority);
     const selection=candidates[0];
