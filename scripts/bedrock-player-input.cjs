@@ -111,7 +111,6 @@ class ExperimentalPlayerInput {
     this.manualHoldActive = false;
     this.manualHoldDeadline = 0;
     this.unconfirmedMovement = false;
-    this.unconfirmedMovement = false;
     this.manualAnchor = null;
     this.manualAnchorWorld = null;
     this.manualAnchorDimension = null;
@@ -464,6 +463,7 @@ class ExperimentalPlayerInput {
     this.initialPosition = null;
     this.lastServerPosition = null;
     this.lastServerPositionAt = null;
+    this.unconfirmedMovement = false;
     this.manualAnchor = null;
     this.manualAnchorWorld = null;
     this.manualAnchorDimension = null;
