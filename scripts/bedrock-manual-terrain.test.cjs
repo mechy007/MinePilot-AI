@@ -98,8 +98,10 @@ test('manual directional controls send bounded camera-relative vectors and stop 
     assert.equal(result.status, 'accepted', mode);
     pulse();
     const frame = client.sent.at(-1).value;
-    assert.deepEqual(frame.move_vector, vector, mode);
-    assert.deepEqual(frame.raw_move_vector, vector, mode);
+    const wireVector = { x: vector.x, y: vector.z };
+    assert.deepEqual(frame.move_vector, wireVector, mode);
+    assert.deepEqual(frame.analogue_move_vector, wireVector, mode);
+    assert.deepEqual(frame.raw_move_vector, wireVector, mode);
     assert.deepEqual(frame.input_data, [flag], mode);
     const stopped = bridge.execute({
       version: 'minepilot.gameplay.v1', requestId: mode + '-stop',
