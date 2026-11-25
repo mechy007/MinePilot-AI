@@ -131,6 +131,8 @@ class BedrockGameplayBridge {
     this.bind('set_movement_authority', p => this.authorityChange(p));
     this.bind('level_chunk', p => { this.chunk(p); this.terrain?.levelChunk(p); });
     this.bind('subchunk', p => this.terrain?.subChunk(p));
+    // Support the canonical packet spelling used by alternate SDK adapters.
+    this.bind('sub_chunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
     this.bind('inventory_slot', p => {
