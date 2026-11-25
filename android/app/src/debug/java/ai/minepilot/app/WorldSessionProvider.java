@@ -196,11 +196,11 @@ public final class WorldSessionProvider extends ContentProvider {
                             for (int i = 0; i < Math.min(32, nativeEntries.length()); i++) {
                                 JSONObject entry = nativeEntries.optJSONObject(i);
                                 if (entry == null) continue;
-                                String id = entry.optString("id", "");
+                                String skillId = entry.optString("id", "");
                                 String state = entry.optString("status", "");
-                                if (id.matches("[a-z][a-z0-9_]{2,47}") &&
+                                if (skillId.matches("[a-z][a-z0-9_]{2,47}") &&
                                         state.matches("[a-z_]{2,32}")) {
-                                    ids.add(id);
+                                    ids.add(skillId);
                                     states.add(state);
                                 }
                             }
