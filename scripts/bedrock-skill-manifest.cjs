@@ -113,8 +113,11 @@ function odysseyCapabilityStates(world, manifest) {
       existing('attack_hostile').reason ?? 'combat_executor_unavailable'),
     craft: state(existing('craft').state ?? 'blocked',
       existing('craft').reason ?? 'recipe_transaction_unavailable'),
-    block_placement: state(existing('build_shelter').state ?? 'blocked',
-      existing('build_shelter').reason ?? 'verified_block_placement_unavailable'),
+    block_placement: state(manifest?.worldReady && world?.commandsEnabled === true &&
+      world?.permissionLevel === 'operator' ? 'manual_experimental' : 'blocked',
+      manifest?.worldReady && world?.commandsEnabled === true && world?.permissionLevel === 'operator'
+        ? 'operator_command_permission_for_single_block_placement'
+        : 'bedrock_operator_command_permission_required_for_single_block_placement'),
     equip_items: state('unsupported', 'armor_equipment_transaction_unavailable'),
     hotbar_selection: state(hotbarFresh ? 'experimental' : 'blocked',
       hotbarFresh ? 'fresh_server_observed_hotbar_and_server_equipment_confirmation' : 'fresh_hotbar_inventory_unavailable'),
