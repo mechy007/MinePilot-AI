@@ -320,7 +320,9 @@ test('numeric palette is exact-version only and fails closed on custom block reg
   assert.equal(customWorld, null,
     'production custom blocks may renumber a non-hashed runtime palette');
 
+  console.error('[manual-terrain-test:7e] before injected registry');
   const map = createVanillaRuntimeRegistry({ server_version: '1.26.60.6' }, loader);
+  console.error('[manual-terrain-test:7f] after injected registry');
   assert.ok(map instanceof Map);
   assert.equal(map.get(0).name, 'minecraft:air');
   clearRuntimeRegistryCache();
