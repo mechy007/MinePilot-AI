@@ -153,6 +153,12 @@ test('numeric vanilla registry requires the exact server_version and refuses has
   assert.equal(customWorldMap.get(0).name, 'minecraft:air');
   assert.equal(customWorldMap.get(1201), undefined,
     'unmapped custom IDs remain unknown rather than being guessed');
+  const partialTerrain = new BedrockTerrainCache();
+  partialTerrain.reset(0);
+  partialTerrain.setRegistry(customWorldMap);
+  partialTerrain.store(0, 0, 0, 4, new Uint32Array(4096).fill(1201));
+  assert.equal(partialTerrain.tile(0, 0, 64, 0), 'unknown',
+    'unmapped custom blocks cannot be classified as air or safe terrain');
   const map = createVanillaRuntimeRegistry({ server_version: '1.26.60.6' }, loader);
   assert.ok(map instanceof Map);
   assert.equal(map.get(0).name, 'minecraft:air');
