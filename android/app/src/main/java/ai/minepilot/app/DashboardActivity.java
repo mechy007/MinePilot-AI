@@ -22,6 +22,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import org.json.JSONObject;
 
@@ -36,6 +37,20 @@ public final class DashboardActivity extends Activity {
     private TextView worldHunger;
     private TextView lastEvent;
     private TextView gameplayStatus;
+    private Button telemetryExpand;
+    private boolean telemetryExpanded;
+    private final ArrayList<Button> manualControlButtons = new ArrayList<>();
+    private final android.os.Handler manualControlHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private String activeManualMode = "";
+    private boolean manualControlsEnabled;
+    private final Runnable repeatManualControl = new Runnable() {
+        @Override public void run() {
+            if (activeManualMode.isEmpty() || !manualControlsEnabled) return;
+            sendManualMotionPulse(activeManualMode);
+            manualControlHandler.postDelayed(this, 450);
+        }
+    };
     private LifeAnalyticsView lifeAnalytics;
     private FirstPersonVoxelView firstPersonView;
     private TextView brainStatus;
@@ -245,6 +260,8 @@ public final class DashboardActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        stopManualControl();
+        manualControlsEnabled = false;
         dashboardVisible = false;
         worldViewGeneration++;
         logRefresh.removeCallbacks(pollWorld);
@@ -253,6 +270,8 @@ public final class DashboardActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        stopManualControl();
+        manualControlHandler.removeCallbacksAndMessages(null);
         worldReader.shutdownNow();
         super.onDestroy();
     }
@@ -356,6 +375,9 @@ public final class DashboardActivity extends Activity {
     }
 
     private void show(String tab) {
+        if (!"World".equals(tab)) stopManualControl();
+        manualControlButtons.clear();
+        manualControlsEnabled = false;
         logRefresh.removeCallbacks(updateLogs);
         logRefresh.removeCallbacks(pollWorld);
         worldViewGeneration++;
@@ -508,20 +530,22 @@ public final class DashboardActivity extends Activity {
         worldHunger = addVital(vitals, "Hunger", 0);
         body.addView(vitals, panelLayout(10));
 
+        addManualControlPanel();
+
         // Lightweight live visualization of packet-confirmed observations.
         // This is not a streamed game camera or guessed voxel map.
         LinearLayout analytics = card();
         analytics.addView(text("VISUAL ANALYTICS  ·  LIVE SURVIVAL", 11, GRASS, true));
         lifeAnalytics = new LifeAnalyticsView(this);
         analytics.addView(lifeAnalytics, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(420)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(280)));
         body.addView(analytics, panelLayout(10));
 
         LinearLayout povCard = card();
         povCard.addView(text("BOT CAMERA  ·  FIRST PERSON (EXPERIMENTAL)", 11, GRASS, true));
         firstPersonView = new FirstPersonVoxelView(this);
         povCard.addView(firstPersonView,new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(250)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(210)));
         povCard.addView(text("Reconstructed 3D view of decoded blocks only. Not a live Minecraft screen stream.",
                 11, MUTED, false));
         body.addView(povCard, panelLayout(10));
@@ -557,7 +581,16 @@ public final class DashboardActivity extends Activity {
         gameplay.addView(text("GAMEPLAY TELEMETRY", 11, GRASS, true));
         gameplayStatus = text("Waiting for a server-reported position", 13, MUTED, false);
         gameplayStatus.setPadding(0, dp(5), 0, dp(6));
+        gameplayStatus.setMaxLines(14);
+        gameplayStatus.setEllipsize(android.text.TextUtils.TruncateAt.END);
         gameplay.addView(gameplayStatus);
+        telemetryExpand = actionButton("Show full diagnostics", false, () -> {
+            telemetryExpanded = !telemetryExpanded;
+            gameplayStatus.setMaxLines(telemetryExpanded ? Integer.MAX_VALUE : 14);
+            gameplayStatus.setEllipsize(telemetryExpanded ? null : android.text.TextUtils.TruncateAt.END);
+            telemetryExpand.setText(telemetryExpanded ? "Collapse diagnostics" : "Show full diagnostics");
+        });
+        gameplay.addView(telemetryExpand, panelLayout(2));
         body.addView(gameplay, panelLayout(10));
         inspectWorld = actionButton("Inspect bot status", false, () -> requestGameplay("inspect", false));
         inspectWorld.setVisibility(View.GONE);
@@ -725,10 +758,133 @@ public final class DashboardActivity extends Activity {
         });
     }
 
+    private void addManualControlPanel() {
+        LinearLayout panel = card();
+        panel.addView(text("MANUAL BOT CONTROLS", 11, GRASS, true));
+        TextView hint = text("Hold a direction to move. Release to brake. Look buttons rotate the bot without walking.", 12, MUTED, false);
+        hint.setPadding(0, dp(7), 0, dp(10));
+        panel.addView(hint);
+
+        LinearLayout top = manualControlRow();
+        addManualPadButton(top, "LOOK LEFT", "turn_left", "Look left");
+        addManualPadButton(top, "↑", "forward", "Move forward");
+        addManualPadSpacer(top);
+        panel.addView(top);
+
+        LinearLayout middle = manualControlRow();
+        addManualPadButton(middle, "←", "strafe_left", "Strafe left");
+        Button stop = actionButton("STOP", true, this::stopManualControl);
+        stop.setTextSize(14);
+        stop.setContentDescription("Stop all manual movement");
+        manualControlButtons.add(stop);
+        addManualPadCell(middle, stop);
+        addManualPadButton(middle, "→", "strafe_right", "Strafe right");
+        panel.addView(middle);
+
+        LinearLayout bottom = manualControlRow();
+        addManualPadSpacer(bottom);
+        addManualPadButton(bottom, "↓", "backward", "Move backward");
+        addManualPadButton(bottom, "LOOK RIGHT", "turn_right", "Look right");
+        panel.addView(bottom);
+
+        TextView footer = text("Experimental Bedrock controls · no jump, sprint, mining or combat is triggered here.", 11, MUTED, false);
+        footer.setPadding(0, dp(8), 0, 0);
+        panel.addView(footer);
+        body.addView(panel, panelLayout(10));
+    }
+
+    private LinearLayout manualControlRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        return row;
+    }
+
+    private void addManualPadSpacer(LinearLayout row) {
+        View spacer = new View(this);
+        row.addView(spacer, new LinearLayout.LayoutParams(0, dp(54), 1));
+    }
+
+    private void addManualPadCell(LinearLayout row, Button button) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(54), 1);
+        params.setMargins(dp(3), dp(3), dp(3), dp(3));
+        row.addView(button, params);
+    }
+
+    private void addManualPadButton(LinearLayout row, String label, String mode, String description) {
+        Button control = actionButton(label, false, () -> {});
+        control.setTextSize(label.length() > 3 ? 11 : 23);
+        control.setContentDescription(description + ". Press and hold.");
+        control.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            if (action == android.view.MotionEvent.ACTION_DOWN) {
+                if (!manualControlsEnabled || worldSessionId.isEmpty()) {
+                    showStatus("Connect the bot to a Friend World before using manual movement.");
+                    return true;
+                }
+                stopManualControl();
+                activeManualMode = mode;
+                sendManualMotionPulse(mode);
+                manualControlHandler.removeCallbacks(repeatManualControl);
+                manualControlHandler.postDelayed(repeatManualControl, 450);
+                view.setPressed(true);
+                return true;
+            }
+            if (action == android.view.MotionEvent.ACTION_UP ||
+                    action == android.view.MotionEvent.ACTION_CANCEL) {
+                view.setPressed(false);
+                if (mode.equals(activeManualMode)) stopManualControl();
+                return true;
+            }
+            return true;
+        });
+        manualControlButtons.add(control);
+        addManualPadCell(row, control);
+    }
+
+    private void sendManualMotionPulse(String mode) {
+        String session = worldSessionId;
+        if (session.isEmpty() || !manualControlsEnabled) return;
+        Bundle extras = new Bundle();
+        extras.putString("action", "manual_move");
+        extras.putBoolean("confirmed", true);
+        extras.putString("motion_mode", mode);
+        extras.putInt("motion_ticks", 6);
+        worldReader.execute(() -> {
+            Bundle receipt = worldRequest("gameplay", session, extras);
+            if (receipt == null || !receipt.getBoolean("accepted")) {
+                runOnUiThread(() -> {
+                    if (mode.equals(activeManualMode)) {
+                        stopManualControl();
+                        showStatus("Manual movement was rejected. Check world and movement readiness.");
+                    }
+                });
+            }
+        });
+    }
+
+    private void sendManualRelease() {
+        String session = worldSessionId;
+        if (session.isEmpty()) return;
+        Bundle extras = new Bundle();
+        extras.putString("action", "manual_stop");
+        worldReader.execute(() -> worldRequest("gameplay", session, extras));
+    }
+
+    private void stopManualControl() {
+        manualControlHandler.removeCallbacks(repeatManualControl);
+        boolean wasMoving = !activeManualMode.isEmpty();
+        activeManualMode = "";
+        if (wasMoving) sendManualRelease();
+    }
+
     private void showWorldStatus(Bundle current) {
         String phase = current.getString("phase", "");
         worldSessionId = current.getString("session_id", "");
         boolean playing = "spawned".equals(phase);
+        manualControlsEnabled = playing;
+        for (Button control : manualControlButtons) control.setEnabled(playing);
+        if (!playing) stopManualControl();
         boolean canStop = (playing || "connecting".equals(phase)) && !worldSessionId.isEmpty();
         String assessment = switch (current.getString("assessment", "")) {
             case "dead" -> "Bot is down";
