@@ -38,13 +38,13 @@ test('stale or absent player position blocks new plans without breaking existing
 });
 test('idle spawn anchor permits limited planning preview without implying server confirmation',()=>{
   const gate=new LayerEightReadiness();
-  const status=gate.assess({...good,positionAgeMs:12000,idlePositionAnchor:true});
+  const status=gate.assess({...good,positionAgeMs:12000,positionUsable:true,idlePositionAnchor:true});
   assert.equal(status.commandEligible,true);
   assert.equal(status.commandReason,'idle_spawn_anchor');
   assert.equal(status.observed.positionMode,'idle_spawn_anchor');
   assert.equal(status.releaseReady,false);
   assert.equal(status.liveWalkVerified,false);
-  const invalidated=gate.assess({...good,positionAgeMs:12000,idlePositionAnchor:false});
+  const invalidated=gate.assess({...good,positionAgeMs:12000,positionUsable:false,idlePositionAnchor:false});
   assert.equal(invalidated.commandEligible,false);
   assert.equal(invalidated.commandReason,'server_position_stale');
 });
