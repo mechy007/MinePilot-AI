@@ -228,9 +228,9 @@ test('numeric palette is exact-version only and fails closed on custom block reg
   const customWorld = createVanillaRuntimeRegistry({
     server_version: '1.26.60.6',
     block_properties: [{ name: 'addon:custom', states: {} }]
-  }, loader);
+  });
   assert.equal(customWorld, null,
-    'custom blocks may renumber a non-hashed runtime palette');
+    'production custom blocks may renumber a non-hashed runtime palette');
 
   const map = createVanillaRuntimeRegistry({ server_version: '1.26.60.6' }, loader);
   assert.ok(map instanceof Map);
