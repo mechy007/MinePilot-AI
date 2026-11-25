@@ -392,6 +392,7 @@ class ExperimentalPlayerInput {
   stop(reason = 'user_stopped', opts = {}) {
     this.blockExecutor?.abort?.('movement_stopped');
     const active = this.timer != null;
+    const wasManualHold = this.manualHoldActive;
     if (this.timer) this.clearInterval(this.timer);
     this.timer = null;
     this.remaining = 0;
@@ -402,14 +403,15 @@ class ExperimentalPlayerInput {
         finite3(world.position) && this.predicted && this.lastTick != null) {
       try {
         const neutralTick = this.tickClock.next();
-        // On stopping, never echo a speculative locomotion position back to the
-        // server. Prefer the latest authoritative world position (which may
-        // have been corrected during the diagnostic), then the observed
-        // position from the last server packet. Predicted coordinates are
-        // valid only while the bounded input probe is running.
-        const neutralPosition = finite3(world.position)
-          ? world.position : finite3(this.lastServerPosition)
-            ? this.lastServerPosition : null;
+        // For a user-held manual stream, keep the last predicted input
+        // position when neutralizing. Rewinding to an older server anchor
+        // after a quiet (no-correction) movement session would undo the
+        // position carried by the preceding PlayerAuthInput frames. A server
+        // correction observed during the hold already overwrites predicted.
+        const neutralPosition = wasManualHold && finite3(this.predicted)
+          ? this.predicted : finite3(world.position)
+            ? world.position : finite3(this.lastServerPosition)
+              ? this.lastServerPosition : null;
         if (neutralPosition) this.client.queue('player_auth_input',
           buildInputPacket(neutralPosition, this.lastYaw, neutralTick, false,
             {pitch:world.pitch}));
