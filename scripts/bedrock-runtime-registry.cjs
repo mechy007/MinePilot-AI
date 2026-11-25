@@ -7,9 +7,11 @@
  */
 let cached = null;
 function createVanillaRuntimeRegistry(startGame, loadMinecraftData = null) {
-  const engine = startGame?.engine;
-  if (typeof engine === 'string' && engine.length &&
-      !/^1\.26\.60(?:\.|$)/.test(engine)) return null;
+  // StartGame's wire field is server_version; engine remains a compatibility alias
+  // for older recorded fixtures. Unknown versions cannot select a safe palette.
+  const serverVersion = startGame?.server_version ?? startGame?.engine;
+  if (typeof serverVersion !== 'string' ||
+      !/^1\.26\.60(?:\.|$)/.test(serverVersion)) return null;
   // Hashed block network IDs cannot be resolved by the pinned vanilla
   // numeric-state table; never apply static IDs to those worlds.
   if (startGame?.block_network_ids_are_hashes === true) return null;
