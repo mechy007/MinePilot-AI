@@ -3,7 +3,6 @@ package ai.minepilot.app;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -16,6 +15,7 @@ public final class ManualJoystickView extends View {
     private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint knob = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint cross = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint highlight = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Listener listener;
     private float x;
     private float y;
@@ -24,7 +24,6 @@ public final class ManualJoystickView extends View {
     private float radius;
     private float knobRadius;
     private String direction = "";
-    private boolean active;
 
     public ManualJoystickView(Context context) { super(context); init(); }
     public ManualJoystickView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -42,6 +41,9 @@ public final class ManualJoystickView extends View {
         knob.setStyle(Paint.Style.FILL);
         cross.setColor(0xff52627a);
         cross.setStrokeWidth(getResources().getDisplayMetrics().density);
+        highlight.setColor(0x55313b4e);
+        highlight.setStyle(Paint.Style.STROKE);
+        highlight.setStrokeWidth(getResources().getDisplayMetrics().density * 2f);
     }
 
     public void setListener(Listener value) { listener = value; }
@@ -75,10 +77,6 @@ public final class ManualJoystickView extends View {
         canvas.drawLine(centerX - radius * .72f, centerY, centerX + radius * .72f, centerY, cross);
         canvas.drawLine(centerX, centerY - radius * .72f, centerX, centerY + radius * .72f, cross);
         canvas.drawCircle(x, y, knobRadius, knob);
-        Paint highlight = new Paint(Paint.ANTI_ALIAS_FLAG);
-        highlight.setColor(0x55313b4e);
-        highlight.setStyle(Paint.Style.STROKE);
-        highlight.setStrokeWidth(getResources().getDisplayMetrics().density * 2f);
         canvas.drawCircle(x, y, knobRadius * .68f, highlight);
     }
 
@@ -87,7 +85,6 @@ public final class ManualJoystickView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_MOVE:
-                active = true;
                 update(event.getX(), event.getY());
                 return true;
             case MotionEvent.ACTION_UP:
@@ -125,7 +122,6 @@ public final class ManualJoystickView extends View {
     }
 
     private void release() {
-        active = false;
         x = centerX;
         y = centerY;
         direction = "";
