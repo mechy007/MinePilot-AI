@@ -139,9 +139,16 @@ test('Bedrock session bridge presents real intelligence status and stops active 
 });
 
 
-test('bounded goto is a recognized intelligence goal without granting autonomous privileges', () => {
+test('bounded goto maps to its own directive and critical air produces a safety directive', () => {
   const brain = new MinePilotIntelligence({ clock: () => 1000 });
   assert.equal(brain.setGoal('goto').status, 'accepted');
+  assert.equal(brain.decide(obs()).action, 'go_to_position');
   assert.equal(brain.snapshot().goal, 'goto');
+  const lowAir = brain.decide(obs({ life: {
+    health: 20, hunger: 20, air: 3, nearbyEntities: [],
+    localTerrain: { status: 'observed', unknown: 0, hazard: 0 }
+  }}));
+  assert.equal(lowAir.action, 'seek_safety');
+  assert.equal(lowAir.reason, 'critical_air_supply');
   assert.equal(brain.setGoal('standby').status, 'accepted');
 });
