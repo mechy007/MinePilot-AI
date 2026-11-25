@@ -45,6 +45,8 @@ export class LayerEightReadiness {
       age <= MAX_AGE_MS;
     const recentAge = validNumericAge && age <= 7000;
     const idleAnchor = data.idlePositionAnchor === true && validNumericAge;
+    const positionMode: ReadinessSnapshot['observed']['positionMode'] =
+      recentAge ? 'server_fresh' : idleAnchor ? 'idle_spawn_anchor' : 'stale';
     const validAge = recentAge || idleAnchor;
     const validHeaders = integer(data.receivedChunkHeaders) &&
       data.receivedChunkHeaders >= 1 && data.receivedChunkHeaders <= MAX_CHUNKS;
@@ -55,7 +57,7 @@ export class LayerEightReadiness {
       corrections: integer(data.movementCorrections) ?
         Math.min(1000000,data.movementCorrections) : 0,
       positionAgeMs: age !== null && Number.isFinite(age) && age >= 0 ? Math.round(age) : null,
-      positionMode: recentAge ? 'server_fresh' : idleAnchor ? 'idle_spawn_anchor' : 'stale'
+      positionMode
     };
     const ready = !!data.spawned && !!data.hasSelfEntity && !!data.hasPosition &&
       validHeaders && validAge && !data.sessionClosed;
