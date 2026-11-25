@@ -274,9 +274,13 @@ public final class DashboardActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        // stopManualControl queues a neutral input on the single session
+        // executor. Drain that safety release instead of cancelling it with
+        // shutdownNow while the activity is being destroyed.
         stopManualControl();
+        manualControlsEnabled = false;
         manualControlHandler.removeCallbacksAndMessages(null);
-        worldReader.shutdownNow();
+        worldReader.shutdown();
         super.onDestroy();
     }
 
