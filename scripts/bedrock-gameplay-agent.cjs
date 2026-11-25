@@ -75,7 +75,11 @@ class BedrockGameplayAgent {
       : world.lastServerPositionAt!=null &&
         this.clock()-world.lastServerPositionAt>=0 &&
         this.clock()-world.lastServerPositionAt<=POSITION_TTL_MS;
-    if(!positionUsable)return 'server_position_stale';
+    const pendingOwnAck=this.active && this.world===world && this.awaiting &&
+      world.movement?.snapshot?.()?.unconfirmedMovement===true &&
+      this.clock()-this.awaiting.startedAt>=0 &&
+      this.clock()-this.awaiting.startedAt<=ACK_MS+1800;
+    if(!positionUsable&&!pendingOwnAck)return 'server_position_stale';
     if(!world.terrain?.snapshot?.().collisionClassificationReady ||
        typeof world.terrain.tile!=='function' ||
        typeof world.routePlanner!=='function')
@@ -357,6 +361,9 @@ class BedrockGameplayAgent {
     // agent remains the bounded executor and independently verifies every
     // route, movement pulse and server acknowledgement.
     const brain=world.intelligenceTick?.() ?? world.intelligence.snapshot?.();
+    const pendingOwnAck=Boolean(this.awaiting &&
+      world.movement?.snapshot?.()?.unconfirmedMovement===true &&
+      now-this.awaiting.startedAt>=0 && now-this.awaiting.startedAt<=ACK_MS+1800);
     if(!brain || typeof brain.action!=='string') {
       this.pauseForIntelligence('intelligence_decision_unavailable');return;
     }
@@ -367,7 +374,10 @@ class BedrockGameplayAgent {
     if(brain.action==='await_respawn') {
       this.stop('intelligence_awaiting_respawn');return;
     }
-    if(brain.action==='observe' || brain.positionUsable===false || brain.positionMode==='stale') {
+    const awaitingPositionOnly= pendingOwnAck && brain.action==='observe' &&
+      brain.reason==='world_state_stale';
+    if((brain.action==='observe' || brain.positionUsable===false || brain.positionMode==='stale') &&
+       !awaitingPositionOnly) {
       this.pauseForIntelligence(brain.reason==='world_state_stale'
         ?'intelligence_world_state_stale':'intelligence_observation_only');return;
     }
@@ -406,7 +416,7 @@ class BedrockGameplayAgent {
     } else if(hunger && !enemy) {
       this.pauseForIntelligence('intelligence_food_directive_missing');return;
     }
-    if(brain.action!=='avoid_threat' && brain.action!=='find_food' &&
+    if(!awaitingPositionOnly && brain.action!=='avoid_threat' && brain.action!=='find_food' &&
        brain.action!==GOAL_DIRECTIVES[this.goal]) {
       this.pauseForIntelligence('intelligence_goal_directive_mismatch');return;
     }
