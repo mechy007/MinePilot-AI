@@ -1143,12 +1143,12 @@ class BedrockGameplayBridge {
       if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
         return { status: 'rejected', reason: 'autonomous_controller_busy' };
       if (!this.movement || this.movement.capability(this) !== 'experimental' ||
-          typeof this.movement.runDiagnostic !== 'function')
+          typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
-      // Manual input intentionally bypasses only the long-idle planning-age
-      // gate. The movement capability still requires a live authenticated
-      // session, Bedrock authority, valid tick clock and neutral input presence.
-      return this.movement.runDiagnostic(this, { mode: raw.mode, ticks: raw.ticks });
+      // Every refresh updates the existing manual hold. The input writer keeps
+      // one prediction origin and one server-tick stream until explicit STOP
+      // or the 1.1s UI keepalive watchdog expires.
+      return this.movement.runManualHold(this, { mode: raw.mode, ticks: raw.ticks });
     }
     if (raw.action === 'motion_diagnostic') {
       if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
