@@ -2,8 +2,8 @@
 
 /**
  * Minecraft-data 1.26.60 vanilla block runtime-id resolution.
- * Only trust an exact version match and no server-supplied custom palette.
- * This stage does not guess IDs from a block name or a chunk header.
+ * Only trust an exact protocol-version match and non-hashed numeric network IDs.
+ * Unmapped custom states remain absent and therefore classify as unknown.
  */
 let cached = null;
 function createVanillaRuntimeRegistry(startGame, loadMinecraftData = null) {
@@ -15,8 +15,9 @@ function createVanillaRuntimeRegistry(startGame, loadMinecraftData = null) {
   // Hashed block network IDs cannot be resolved by the pinned vanilla
   // numeric-state table; never apply static IDs to those worlds.
   if (startGame?.block_network_ids_are_hashes === true) return null;
-  const custom = startGame?.block_properties;
-  if (Array.isArray(custom) && custom.length) return null;
+  // Keep the known vanilla subset even when the server advertises custom
+  // block properties. The terrain classifier treats every unmapped ID as
+  // unknown, so custom blocks can never be mistaken for air or safe support.
   if (cached) return cached;
   let data;
   try {
