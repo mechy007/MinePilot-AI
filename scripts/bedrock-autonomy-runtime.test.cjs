@@ -69,19 +69,21 @@ test('A* only traverses verified same-level safe tiles and avoids hazards',()=>{
   assert.ok(reroute.path.some(p=>p.z!==0.5));
   assert.equal(planLocalRoute(t,0,start,{x:4.5,y:67.62,z:0.5}).status,'unverified');
 });
-test('vanilla registry uses state ID ranges and declines custom server palette',()=>{
+test('vanilla registry uses state ID ranges while unknown custom and hashed states stay blocked',()=>{
   clearRuntimeRegistryCache();
   const fake={blocks:[
     {name:'air',minStateId:air,maxStateId:air,boundingBox:'empty'},
     {name:'stone',minStateId:0,maxStateId:1100,boundingBox:'block'}
   ]};
-  assert.equal(createVanillaRuntimeRegistry({engine:'1.26.60.1',
-    block_properties:[{name:'custom:foo'}]},()=>fake),null);
-  const mapped=createVanillaRuntimeRegistry({engine:'1.26.60.1',
-    block_properties:[]},()=>fake);
+  assert.equal(createVanillaRuntimeRegistry({server_version:'1.26.60.1',
+    block_network_ids_are_hashes:true},()=>fake),null);
+  const mapped=createVanillaRuntimeRegistry({server_version:'1.26.60.1',
+    block_properties:[{name:'custom:foo'}]},()=>fake);
   assert.equal(mapped.get(air).name,'minecraft:air');
   assert.equal(mapped.get(200).boundingBox,'block');
-  assert.equal(createVanillaRuntimeRegistry({engine:'1.27.0'},()=>fake),null);
+  assert.equal(mapped.get(2000),undefined,
+    'custom numeric IDs without a verified state mapping stay unknown');
+  assert.equal(createVanillaRuntimeRegistry({server_version:'1.27.0'},()=>fake),null);
   clearRuntimeRegistryCache();
 });
 test('bounded autonomy performs a real step but never chains without host progress',()=>{
