@@ -309,6 +309,7 @@ test('numeric palette is exact-version only and fails closed on custom block reg
   assert.equal(createVanillaRuntimeRegistry({
     server_version: '1.26.60.6', block_network_ids_are_hashes: true
   }, loader), null);
+  console.error('[manual-terrain-test:7b] initial rejects done');
 
   const customWorld = createVanillaRuntimeRegistry({
     server_version: '1.26.60.6',
