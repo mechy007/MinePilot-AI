@@ -75,8 +75,12 @@ test('vanilla registry uses state ID ranges while unknown custom and hashed stat
     {name:'air',minStateId:air,maxStateId:air,boundingBox:'empty'},
     {name:'stone',minStateId:0,maxStateId:1100,boundingBox:'block'}
   ]};
-  assert.equal(createVanillaRuntimeRegistry({server_version:'1.26.60.1',
-    block_network_ids_are_hashes:true},()=>fake),null);
+  const hashed=createVanillaRuntimeRegistry({server_version:'1.26.66.1',
+    block_network_ids_are_hashes:true});
+  assert.ok(hashed instanceof Map);
+  assert.equal(hashed.get((-2144268767)>>>0).name,'minecraft:stone');
+  // Injected minecraft-data is a synthetic unit-test fixture, not the
+  // production ordered palette. Production custom registrations fail closed.
   const mapped=createVanillaRuntimeRegistry({server_version:'1.26.60.1',
     block_properties:[{name:'custom:foo'}]},()=>fake);
   assert.equal(mapped.get(air).name,'minecraft:air');
