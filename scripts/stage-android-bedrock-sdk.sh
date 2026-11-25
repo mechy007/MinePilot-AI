@@ -203,6 +203,7 @@ cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
 cp "$root/scripts/bedrock-stack-request-manager.cjs" "$temp/bedrock-stack-request-manager.cjs"
+cp "$root/scripts/bedrock-recipe-catalog.cjs" "$temp/bedrock-recipe-catalog.cjs"
 cp "$root/scripts/bedrock-inventory-ledger.cjs" "$temp/bedrock-inventory-ledger.cjs"
 cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
 cp "$root/scripts/bedrock-auth-input-clock.cjs" "$temp/bedrock-auth-input-clock.cjs"
@@ -217,6 +218,8 @@ cp "$root/scripts/bedrock-life-senses.cjs" "$temp/bedrock-life-senses.cjs"
 cp "$root/scripts/bedrock-intelligence-core.cjs" "$temp/bedrock-intelligence-core.cjs"
 cp "$root/scripts/bedrock-gameplay-agent.cjs" "$temp/bedrock-gameplay-agent.cjs"
 cp "$root/scripts/bedrock-skill-manifest.cjs" "$temp/bedrock-skill-manifest.cjs"
+cp "$root/scripts/bedrock-native-skill-system.cjs" "$temp/bedrock-native-skill-system.cjs"
+cp "$root/scripts/bedrock-block-placement.cjs" "$temp/bedrock-block-placement.cjs"
 cp "$root/scripts/bedrock-open-world-skills.cjs" "$temp/bedrock-open-world-skills.cjs"
 cp "$root/scripts/bedrock-odyssey-skill-library.cjs" "$temp/bedrock-odyssey-skill-library.cjs"
 cp "$root/scripts/bedrock-odyssey-bedrock-adapter.cjs" "$temp/bedrock-odyssey-bedrock-adapter.cjs"
@@ -246,6 +249,8 @@ cp "$root/scripts/bedrock-gameplay-bridge.test.cjs" "$temp/bedrock-gameplay-brid
 cp "$root/scripts/bedrock-manual-terrain.test.cjs" "$temp/bedrock-manual-terrain.test.cjs"
 cp "$root/scripts/bedrock-stack-request-manager.test.cjs" "$temp/bedrock-stack-request-manager.test.cjs"
 cp "$root/scripts/bedrock-inventory-ledger.test.cjs" "$temp/bedrock-inventory-ledger.test.cjs"
+cp "$root/scripts/bedrock-recipe-catalog.test.cjs" "$temp/bedrock-recipe-catalog.test.cjs"
+cp "$root/scripts/bedrock-block-placement.test.cjs" "$temp/bedrock-block-placement.test.cjs"
 
 python3 - "$temp" <<'PY'
 from pathlib import Path
@@ -261,7 +266,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json", "bedrock-vanilla-12660-hashed-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
-        "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-skill-manifest.cjs", "bedrock-open-world-skills.cjs", "bedrock-odyssey-skill-library.cjs", "bedrock-odyssey-bedrock-adapter.cjs", "bedrock-odyssey-skill-catalog.json", "bedrock-odyssey-observation-executor.cjs", "bedrock-stack-request-manager.cjs", "bedrock-inventory-ledger.cjs", "bedrock-first-person-scene.cjs",
+        "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-skill-manifest.cjs", "bedrock-native-skill-system.cjs", "bedrock-block-placement.cjs", "bedrock-open-world-skills.cjs", "bedrock-odyssey-skill-library.cjs", "bedrock-odyssey-bedrock-adapter.cjs", "bedrock-odyssey-skill-catalog.json", "bedrock-odyssey-observation-executor.cjs", "bedrock-stack-request-manager.cjs", "bedrock-inventory-ledger.cjs", "bedrock-recipe-catalog.cjs", "bedrock-first-person-scene.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
@@ -303,13 +308,21 @@ cp "$root/scripts/bedrock-life-senses.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-intelligence-core.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-gameplay-agent.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-voyager-learning.test.cjs" "$temp/verify/"
+cp "$root/scripts/bedrock-native-skill-system.test.cjs" "$temp/verify/"
+cp "$root/scripts/bedrock-block-placement.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-auth-input-clock.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-survival-mission.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-first-person-scene.test.cjs" "$temp/verify/"
-timeout --signal=TERM --kill-after=10s 180s node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-manual-terrain.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-auth-input-clock.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs"
+cp "$root/scripts/bedrock-recipe-catalog.test.cjs" "$temp/verify/"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
+
+if [[ "${MINEPILOT_SKIP_SDK_CONTRACT_TESTS:-0}" != "1" ]]; then
+  timeout --signal=TERM --kill-after=10s 180s node --test --test-concurrency=1 "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-manual-terrain.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-native-skill-system.test.cjs" "$temp/verify/bedrock-block-placement.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-auth-input-clock.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs" "$temp/verify/bedrock-recipe-catalog.test.cjs"
+else
+  echo "Full SDK contract suite is scheduled in its own CI job."
+fi
 du -h "$destination/bedrock-sdk.zip"

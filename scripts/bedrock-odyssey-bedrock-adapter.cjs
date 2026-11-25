@@ -11,7 +11,7 @@ const PRIMITIVES = Object.freeze({
   goto: { capability: 'navigation', action: 'navigate_to_observed_target', mode: 'bounded', executor: 'odyssey_execute' },
   exploreUntil: { capability: 'navigation', action: 'explore_verified_terrain', mode: 'bounded', executor: 'odyssey_execute' },
   mineBlock: { capability: 'mine', action: 'break_observed_block', mode: 'manual_experimental', executor: 'odyssey_execute' },
-  craftItem: { capability: 'craft', action: 'craft_recipe', mode: 'unsupported' },
+  craftItem: { capability: 'craft', action: 'craft_recipe', mode: 'manual_experimental', executor: 'odyssey_execute' },
   cookFood: { capability: 'cook', action: 'cook_food', mode: 'unsupported' },
   smeltItem: { capability: 'smelt', action: 'smelt_item', mode: 'unsupported' },
   equipArmor: { capability: 'equip_items', action: 'equip_armor', mode: 'unsupported' },

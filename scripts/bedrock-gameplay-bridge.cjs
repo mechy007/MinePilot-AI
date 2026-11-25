@@ -8,15 +8,17 @@
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { executeBedrockObservation } = require('./bedrock-odyssey-observation-executor.cjs');
+const { normalizeBedrockBlockId, validateBedrockBlockPosition, isBedrockAirBlock, buildBedrockSetBlockCommand } = require('./bedrock-block-placement.cjs');
 const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.cjs');
 const { BedrockInventoryLedger } = require('./bedrock-inventory-ledger.cjs');
+const { BedrockRecipeCatalog, sumItem } = require('./bedrock-recipe-catalog.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
-const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
+const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill, learningEngineFor, evaluateCapabilities, startBedrockNativeSkill } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -103,10 +105,17 @@ class BedrockGameplayBridge {
     this.worldGameMode = 'unknown';
     this.difficulty = null;
     this.itemStackNetManager = null;
+    this.commandsEnabled = false;
+    this.permissionLevel = 'visitor';
+    this.pendingBlockPlacement = null;
+    this.lastBlockPlacement = null;
     this.inventoryLedger = options.inventoryLedger ?? new BedrockInventoryLedger({ clock: this.clock });
     this.stackRequests = new BedrockStackRequestManager(this.client, {
       isEnabled: () => this.itemStackNetManager === true, timeoutMs: 5000
     });
+    this.recipeCatalog = options.recipeCatalog ?? new BedrockRecipeCatalog({ clock: this.clock });
+    this.pendingCraft = null;
+    this.lastCraft = null;
     this.selectedHotbarSlot = null;
     this.pendingHotbarSelection = null;
     this.lastHotbarSelection = null;
@@ -155,17 +164,22 @@ class BedrockGameplayBridge {
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerSix?.observeContainer(p);
+      this.checkPendingCraft();
     });
     this.bind('item_registry', p => {
       this.inventoryLedger?.observeItemRegistry(p);
+      this.recipeCatalog?.observeItemRegistry(p);
       this.layerThree?.observeItemRegistry(p);
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
     });
+    this.bind('crafting_data', p => this.recipeCatalog?.observeCraftingData(p));
     this.bind('set_time', p => this.layerFour?.observeTime(p?.time));
+    this.bind('command_output', p => this.onCommandOutput(p));
     this.bind('update_block', p => {
       this.blockBreaker?.observedBlock(p, this.dimension);
       this.terrain?.updateBlock(p, this.dimension);
+      this.observeBlockPlacement(p);
       this.layerThree?.observeBlock(p, this.dimension);
       this.layerFive?.observeBlockUpdate(p, this.dimension);
       this.layerSix?.observeBlock(p, this.dimension);
@@ -194,6 +208,11 @@ class BedrockGameplayBridge {
     if (!packet || typeof packet !== 'object') return;
     stopLocalAutopilot(this, 'new_world_session');
     this.gameplayAgent?.stop('new_world_session');
+    this.cancelPendingBlockPlacement('new_world_session');
+    this.cancelPendingCraft('new_world_session');
+    this.recipeCatalog?.reset();
+    this.commandsEnabled = packet.enable_commands === true;
+    this.permissionLevel = typeof packet.permission_level === 'string' ? packet.permission_level : 'visitor';
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
     this.selfUnique = ident(packet.entity_id);
     this.position = safePoint(packet.player_position);
@@ -286,6 +305,7 @@ class BedrockGameplayBridge {
   observeHealth(health) {
     if (this.closed || !Number.isFinite(health) || !this.self) return;
     if (health <= 0) {
+      this.cancelPendingBlockPlacement('player_died');
       // Ignore duplicate zero-health updates and initial login fixtures.
       if (!this.spawned || this.respawnRecovery.state !== 'alive') return;
       this.respawnRecovery.state = 'dead_waiting_for_server';
@@ -724,6 +744,8 @@ class BedrockGameplayBridge {
   }
   dimensionChange(packet) {
     if (this.closed) return;
+    this.cancelPendingBlockPlacement('dimension_changed');
+    this.cancelPendingCraft('dimension_changed');
     this.gameplayAgent?.stop('dimension_changed');
     this.dimension = validDimension(packet?.dimension);
     this.terrain?.reset(this.dimension);
@@ -844,9 +866,20 @@ class BedrockGameplayBridge {
       subchunkRequestErrors: this.subchunkRequestErrors,
       blockNetworkIdsAreHashes: this.blockNetworkIdsAreHashes,
       serverCustomBlockPropertiesCount: this.serverCustomBlockPropertiesCount,
+      commandPermission: { enabled: this.commandsEnabled, level: this.permissionLevel },
+      blockPlacement: this.pendingBlockPlacement ? {
+        state: 'awaiting_server_confirmation', position: { ...this.pendingBlockPlacement.position },
+        blockId: this.pendingBlockPlacement.blockId,
+        serverAcknowledged: this.pendingBlockPlacement.acknowledged,
+        serverObserved: this.pendingBlockPlacement.observed
+      } : this.lastBlockPlacement ? { ...this.lastBlockPlacement,
+        position: { ...this.lastBlockPlacement.position } } : { state: 'idle' },
       // A chunk header does NOT prove decoded, navigable block/voxel data.
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
+      craftingRecipes: this.recipeCatalog?.snapshot?.(64) ?? null,
+      crafting: this.pendingCraft ? { state: 'awaiting_server_confirmation', recipeId: this.pendingCraft.recipe.id,
+        resultItem: this.pendingCraft.resultItem, timesCrafted: this.pendingCraft.timesCrafted } : this.lastCraft ? { ...this.lastCraft } : { state: 'idle' },
       ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
       ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
       ...(this.gameplayAgent ? { gameplayAgent: this.gameplayAgent.snapshot() } : {}),
@@ -909,7 +942,7 @@ class BedrockGameplayBridge {
     // Stop, status and disabling suggestions remain possible when stale.
     if (this.layerEight && [
       'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food',
-      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start'
+      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start', 'native_skill_start'
     ].includes(raw.action)) {
       const preflight = this.layerEight.allowPreview(this.readinessInput());
       if (!preflight.allowed)
@@ -925,6 +958,7 @@ class BedrockGameplayBridge {
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
       const args = raw.args && typeof raw.args === 'object' && !Array.isArray(raw.args) ? raw.args : {};
+      if (raw.primitive === 'craftRecipe') return this.startCraftRecipe(raw, args);
       if (raw.primitive === 'exploreUntil') {
         const result = this.gameplayAgent?.start(this, { confirmed: true, goal: 'explore' }) ??
           { status: 'rejected', reason: 'gameplay_agent_unavailable' };
@@ -942,6 +976,8 @@ class BedrockGameplayBridge {
       }
       if (['equipAxe','equipHoe','equipPickaxe','equipSword'].includes(raw.primitive))
         return this.selectHotbarTool(raw.primitive);
+      if (raw.primitive === 'placeBlock')
+        return this.startSingleBlockPlacement(raw, args);
       if (raw.primitive === 'mineBlock') {
         if (this.autonomy?.snapshot()?.active)
           return { status: 'rejected', reason: 'autonomy_busy' };
@@ -973,6 +1009,10 @@ class BedrockGameplayBridge {
     }
     if (raw.action === 'learning_start') {
       return startLearningTask(this, raw.taskId, { confirmed: raw.confirmed });
+    }
+    if (raw.action === 'native_skill_start') {
+      return startBedrockNativeSkill(this, evaluateCapabilities(this), learningEngineFor(this),
+        raw.skillId, { confirmed: raw.confirmed });
     }
     if (raw.action === 'learning_stop') {
       return stopLearningTask(this, 'learning_user_stopped');
@@ -1146,6 +1186,7 @@ class BedrockGameplayBridge {
       return result;
     }
     if (raw.action === 'stop_movement') {
+      this.cancelPendingBlockPlacement('user_stop');
       this.gameplayAgent?.stop('user_stop');
       this.layerOne?.stop();
       this.layerTwo?.cancel();
@@ -1249,6 +1290,225 @@ class BedrockGameplayBridge {
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
+  startSingleBlockPlacement(raw, args = {}) {
+    if (raw?.confirmed !== true)
+      return { status: 'rejected', reason: 'confirmation_required' };
+    if (!this.spawned || !this.position || !this.positionUsable())
+      return { status: 'rejected', reason: 'fresh_server_position_required' };
+    if (this.commandsEnabled !== true || this.permissionLevel !== 'operator')
+      return { status: 'rejected', reason: 'bedrock_operator_command_permission_required' };
+    if (this.pendingBlockPlacement)
+      return { status: 'rejected', reason: 'block_placement_busy' };
+    if (!this.terrain || typeof this.terrain.blockName !== 'function')
+      return { status: 'rejected', reason: 'decoded_block_terrain_required' };
+    if (!this.selfUnique || typeof this.client.queue !== 'function')
+      return { status: 'rejected', reason: 'command_request_identity_unavailable' };
+
+    let position, blockId, command;
+    try {
+      position = validateBedrockBlockPosition(args.position, this.dimension);
+      blockId = normalizeBedrockBlockId(args.blockId);
+      command = buildBedrockSetBlockCommand(position, blockId, this.dimension);
+    } catch (error) {
+      return { status: 'rejected', reason: error?.message || 'invalid_block_placement' };
+    }
+    const current = this.terrain.blockName(this.dimension, position.x, position.y, position.z);
+    if (typeof current !== 'string')
+      return { status: 'rejected', reason: 'target_block_not_observed' };
+    if (!isBedrockAirBlock(current))
+      return { status: 'rejected', reason: 'target_must_be_observed_air' };
+    const distance = Math.hypot(
+      position.x + 0.5 - this.position.x,
+      position.y + 0.5 - this.position.y,
+      position.z + 0.5 - this.position.z
+    );
+    if (!Number.isFinite(distance) || distance > 6)
+      return { status: 'rejected', reason: 'target_out_of_interaction_range' };
+
+    const correlationId = randomUUID();
+    const pending = {
+      requestId: raw.requestId, correlationId, position, dimension: this.dimension,
+      blockId, acknowledged: false, observed: false, startedAt: this.clock(), timer: null
+    };
+    pending.timer = setTimeout(() => {
+      this.finishBlockPlacement('rejected', pending.acknowledged
+        ? 'block_change_not_server_observed' : 'command_acknowledgement_timeout');
+    }, 7000);
+    pending.timer.unref?.();
+    this.pendingBlockPlacement = pending;
+    try {
+      this.client.queue('command_request', {
+        command,
+        origin: {
+          type: 'Player', uuid: randomUUID(), request_id: correlationId,
+          player_entity_id: BigInt(this.selfUnique)
+        },
+        internal: false,
+        version: 'Latest'
+      });
+    } catch {
+      this.finishBlockPlacement('rejected', 'command_request_write_failed');
+      return { status: 'rejected', reason: 'command_request_write_failed' };
+    }
+    return { status: 'accepted', reason: 'bedrock_command_dispatched',
+      awaitingServerConfirmation: true, position, blockId };
+  }
+  onCommandOutput(packet) {
+    const pending = this.pendingBlockPlacement;
+    if (!pending || packet?.origin?.request_id !== pending.correlationId) return false;
+    const successCount = Number.isInteger(packet.success_count) ? packet.success_count : 0;
+    const explicitFailure = Array.isArray(packet.output) &&
+      packet.output.some(output => output?.success === false);
+    if (successCount < 1 || explicitFailure) {
+      this.finishBlockPlacement('rejected', 'bedrock_command_rejected');
+      return true;
+    }
+    pending.acknowledged = true;
+    if (pending.observed) this.finishBlockPlacement('ok', 'block_placed_and_server_observed');
+    return true;
+  }
+  observeBlockPlacement(packet) {
+    const pending = this.pendingBlockPlacement, point = packet?.position;
+    if (!pending || pending.dimension !== this.dimension || !point ||
+        (packet.layer != null && packet.layer !== 0) ||
+        point.x !== pending.position.x || point.y !== pending.position.y ||
+        point.z !== pending.position.z) return false;
+    const name = this.terrain?.blockName?.(this.dimension, point.x, point.y, point.z);
+    if (name !== pending.blockId) return false;
+    pending.observed = true;
+    if (pending.acknowledged) this.finishBlockPlacement('ok', 'block_placed_and_server_observed');
+    return true;
+  }
+  finishBlockPlacement(status, reason) {
+    const pending = this.pendingBlockPlacement;
+    if (!pending) return false;
+    clearTimeout(pending.timer);
+    this.pendingBlockPlacement = null;
+    const detail = {
+      requestId: pending.requestId, status, reason, position: { ...pending.position },
+      blockId: pending.blockId, serverAcknowledged: pending.acknowledged,
+      serverObserved: pending.observed, completedAt: this.clock()
+    };
+    this.lastBlockPlacement = detail;
+    if (this.lastReceipt?.requestId === pending.requestId) {
+      const receipt = { ...this.lastReceipt, status, reason, blockPlacement: detail };
+      this.lastReceipt = receipt;
+      if (this.receiptPath) {
+        try { atomicJson(this.receiptPath, receipt); } catch {}
+      }
+    }
+    return true;
+  }
+  cancelPendingBlockPlacement(reason = 'cancelled') {
+    if (this.pendingBlockPlacement) return this.finishBlockPlacement('rejected', reason);
+    return false;
+  }
+
+  startCraftRecipe(raw, args) {
+    if (this.closed || !this.spawned) return { status: 'rejected', reason: 'bedrock_world_not_ready' };
+    if (this.itemStackNetManager !== true)
+      return { status: 'rejected', reason: 'server_authoritative_inventory_not_negotiated' };
+    if (this.pendingCraft || this.stackRequests.snapshot().pending)
+      return { status: 'rejected', reason: 'craft_transaction_busy' };
+    const resultItem = typeof args.resultItem === 'string' ? args.resultItem.trim().toLowerCase() : '';
+    const timesCrafted = args.timesCrafted ?? 1;
+    const recipeId = typeof args.recipeId === 'string' ? args.recipeId : undefined;
+    const inventory = this.inventoryLedger?.playerInventory?.({ maxAgeMs: 10000 });
+    const plan = this.recipeCatalog?.resolve(resultItem, inventory, { recipeId, timesCrafted });
+    if (plan?.status !== 'ready')
+      return { status: plan?.status === 'blocked' ? 'blocked' : 'rejected',
+        reason: plan?.reason ?? 'bedrock_recipe_catalog_unavailable',
+        ...(Array.isArray(plan?.missing) ? { missing: plan.missing } : {}) };
+    const pending = {
+      requestId: raw.requestId, recipe: plan.recipe, resultItem,
+      timesCrafted: plan.timesCrafted, outputExpected: plan.outputExpected,
+      outputBefore: plan.outputBefore, ingredientBefore: plan.ingredientBefore,
+      inventoryRevision: plan.inventoryRevision, inventoryGeneration: plan.inventoryGeneration,
+      acknowledged: false, startedAt: this.clock(), timer: null
+    };
+    this.pendingCraft = pending;
+    this.lastCraft = {
+      status: 'awaiting_server_confirmation', reason: 'craft_recipe_request_sent',
+      recipeId: pending.recipe.id, resultItem, timesCrafted: pending.timesCrafted,
+      outputExpected: pending.outputExpected, serverAcknowledged: false, inventoryVerified: false
+    };
+    pending.timer = setTimeout(() => {
+      if (this.pendingCraft === pending) this.finishCraft('rejected', 'craft_inventory_postcondition_timeout');
+    }, 8000);
+    pending.timer.unref?.();
+    this.stackRequests.send([{
+      type_id: 'craft_recipe',
+      recipe_network_id: pending.recipe.networkId,
+      times_crafted: pending.timesCrafted
+    }], { timeoutMs: 5000 }).then(() => {
+      if (this.pendingCraft !== pending) return;
+      pending.acknowledged = true;
+      this.lastCraft = { ...this.lastCraft, serverAcknowledged: true };
+      this.checkPendingCraft();
+    }).catch(error => {
+      if (this.pendingCraft !== pending) return;
+      const reason = error?.outcome === 'server_rejected' ? 'bedrock_craft_rejected_by_server'
+        : error?.outcome === 'unsupported' ? 'server_authoritative_inventory_unavailable'
+          : error?.outcome === 'timeout' ? 'bedrock_craft_response_timeout'
+            : 'bedrock_craft_request_failed';
+      this.finishCraft('rejected', reason);
+    });
+    return { status: 'accepted', reason: 'bedrock_craft_recipe_request_queued',
+      primitive: 'craftRecipe', recipeId: pending.recipe.id, resultItem,
+      timesCrafted: pending.timesCrafted, awaitingServerConfirmation: true };
+  }
+
+  checkPendingCraft() {
+    const pending = this.pendingCraft;
+    if (!pending) return false;
+    const inventory = this.inventoryLedger?.playerInventory?.({ maxAgeMs: 10000 });
+    if (!inventory || inventory.known !== true || inventory.fresh !== true ||
+        inventory.fullSnapshotFresh !== true || inventory.generation !== pending.inventoryGeneration ||
+        !Number.isInteger(inventory.revision) || inventory.revision <= pending.inventoryRevision ||
+        !Number.isFinite(inventory.observedAt) || inventory.observedAt <= pending.startedAt) return false;
+    const outputAfter = sumItem(inventory, pending.resultItem);
+    const outputVerified = outputAfter >= pending.outputBefore + pending.outputExpected;
+    const ingredientsVerified = pending.recipe.ingredients.every(item =>
+      sumItem(inventory, item.name) <= (pending.ingredientBefore[item.name] ?? 0) -
+        item.count * pending.timesCrafted);
+    if (!outputVerified || !ingredientsVerified) return false;
+    pending.inventoryVerified = true;
+    if (pending.acknowledged) {
+      this.finishCraft('ok', 'craft_response_and_inventory_verified', inventory);
+      return true;
+    }
+    return false;
+  }
+
+  finishCraft(status, reason, inventory = null) {
+    const pending = this.pendingCraft;
+    if (!pending) return false;
+    this.pendingCraft = null;
+    if (pending.timer) clearTimeout(pending.timer);
+    const detail = {
+      status, reason, recipeId: pending.recipe.id, resultItem: pending.resultItem,
+      timesCrafted: pending.timesCrafted, outputExpected: pending.outputExpected,
+      serverAcknowledged: pending.acknowledged === true,
+      inventoryVerified: status === 'ok',
+      inventoryRevision: inventory?.revision ?? null,
+      completedAt: this.clock()
+    };
+    this.lastCraft = detail;
+    if (this.lastReceipt?.requestId === pending.requestId) {
+      const receipt = { ...this.lastReceipt, status, reason, crafting: detail,
+        awaitingServerConfirmation: false };
+      this.lastReceipt = receipt;
+      if (this.receiptPath) {
+        try { atomicJson(this.receiptPath, receipt); } catch {}
+      }
+    }
+    return true;
+  }
+
+  cancelPendingCraft(reason = 'cancelled') {
+    return this.finishCraft('rejected', reason);
+  }
+
   tickLearning() {
     // One explicit owner advances the curriculum. Reads of snapshots/manifests
     // never mutate task state. Keep failures visible without crashing the SDK loop.
@@ -1283,16 +1543,22 @@ class BedrockGameplayBridge {
     // All other commands share the normal single 100 ms runtime tick.
     if (command?.action !== 'agent_start') this.tickLearning();
     const result = this.execute(command);
+    const completedPlacement = command?.action === 'odyssey_execute' && command?.primitive === 'placeBlock' &&
+      this.lastBlockPlacement?.requestId === command?.requestId ? this.lastBlockPlacement : null;
     const receipt = {
       version: 'minepilot.gameplay.v1',
       requestId: typeof command?.requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(command.requestId)
         ? command.requestId : '',
-      status: result.status,
-      reason: result.reason,
+      status: completedPlacement?.status ?? result.status,
+      reason: completedPlacement?.reason ?? result.reason,
+      ...(completedPlacement ? { blockPlacement: completedPlacement } : {}),
       ...(command?.action === 'odyssey_execute' ? {
         primitive: command.primitive,
         dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
         ...(typeof result.itemName === 'string' ? { itemName: result.itemName } : {}),
+        ...(typeof result.resultItem === 'string' ? { resultItem: result.resultItem } : {}),
+        ...(typeof result.recipeId === 'string' ? { recipeId: result.recipeId } : {}),
+        ...(Number.isInteger(result.timesCrafted) ? { timesCrafted: result.timesCrafted } : {}),
         ...(Number.isInteger(result.selectedSlot) ? { selectedSlot: result.selectedSlot } : {}),
         awaitingServerConfirmation: result.awaitingServerConfirmation === true
       } : {}),
@@ -1307,6 +1573,8 @@ class BedrockGameplayBridge {
   }
   stop() {
     if (this.closed) return;
+    this.cancelPendingBlockPlacement('session_closed');
+    this.cancelPendingCraft('session_closed');
     this.closed = true;
     stopLocalAutopilot(this, 'session_closed');
     if (this.watch) clearInterval(this.watch);

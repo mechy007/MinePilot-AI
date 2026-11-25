@@ -1628,3 +1628,194 @@ test('subchunk request packet shape is accepted by the pinned Bedrock 1.26.60 se
   });
   assert.ok(Buffer.isBuffer(buffer) && buffer.length > 10);
 });
+
+test('single-block placement requires Bedrock operator permission, observed air, acknowledgement and block-update proof', () => {
+  const client = new Client();
+  let blockName = 'minecraft:air';
+  const terrain = {
+    reset() {}, levelChunk() {},
+    blockName(dimension, x, y, z) {
+      return dimension === 0 && x === 8 && y === 64 && z === 10 ? blockName : null;
+    },
+    updateBlock() {},
+    snapshot() { return { decodedSections: 1, registryEntries: 1 }; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { terrain }).start();
+  client.emit('start_game', {
+    ...start, entity_id: 321n, enable_commands: true, permission_level: 'operator'
+  });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+  const result = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'place-one',
+    action: 'odyssey_execute', primitive: 'placeBlock', confirmed: true,
+    args: { position: { x: 8, y: 64, z: 10 }, blockId: 'stone' }
+  });
+  assert.equal(result.status, 'accepted');
+  const request = client.sent.find(packet => packet.packet === 'command_request');
+  assert.ok(request);
+  assert.equal(request.value.command, 'setblock 8 64 10 minecraft:stone keep');
+  assert.equal(request.value.origin.type, 'Player');
+  assert.equal(request.value.origin.player_entity_id, 321n);
+  assert.equal(request.value.internal, false);
+  assert.equal(request.value.version, 'Latest');
+
+  client.emit('command_output', {
+    origin: { request_id: request.value.origin.request_id },
+    success_count: 1, output: [{ success: true }]
+  });
+  assert.equal(bridge.snapshot().blockPlacement.state, 'awaiting_server_confirmation');
+  assert.equal(bridge.snapshot().blockPlacement.serverAcknowledged, true);
+  assert.equal(bridge.snapshot().blockPlacement.serverObserved, false);
+
+  blockName = 'minecraft:stone';
+  client.emit('update_block', {
+    position: { x: 8, y: 64, z: 10 }, block_runtime_id: 3317, layer: 0
+  });
+  assert.equal(bridge.snapshot().blockPlacement.status, 'ok');
+  assert.equal(bridge.snapshot().blockPlacement.serverObserved, true);
+  assert.equal(bridge.snapshot().blockPlacement.reason, 'block_placed_and_server_observed');
+  bridge.stop();
+});
+
+test('single-block placement rejects non-operator and occupied targets without sending commands', () => {
+  for (const permission of ['member', 'operator']) {
+    const client = new Client();
+    const terrain = {
+      reset() {}, levelChunk() {}, updateBlock() {},
+      blockName() { return permission === 'operator' ? 'minecraft:stone' : 'minecraft:air'; },
+      snapshot() { return { decodedSections: 1, registryEntries: 1 }; }
+    };
+    const bridge = new BedrockGameplayBridge(client, { terrain }).start();
+    client.emit('start_game', {
+      ...start, entity_id: 321n, enable_commands: true, permission_level: permission
+    });
+    client.emit('spawn');
+    client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+    const result = bridge.execute({
+      version: 'minepilot.gameplay.v1', requestId: 'place-guard',
+      action: 'odyssey_execute', primitive: 'placeBlock', confirmed: true,
+      args: { position: { x: 8, y: 64, z: 10 }, blockId: 'stone' }
+    });
+    assert.equal(result.status, 'rejected');
+    assert.equal(result.reason, permission === 'operator'
+      ? 'target_must_be_observed_air' : 'bedrock_operator_command_permission_required');
+    assert.equal(client.sent.some(packet => packet.packet === 'command_request'), false);
+    bridge.stop();
+  }
+});
+
+test('block placement Bedrock command packet serializes against the pinned 1.26.60 protocol schema', () => {
+  const { createSerializer } = require('bedrock-protocol/src/transforms/serializer');
+  const serializer = createSerializer('1.26.60');
+  const buffer = serializer.createPacketBuffer({
+    name: 'command_request',
+    params: {
+      command: 'setblock 8 64 10 minecraft:stone keep',
+      origin: {
+        type: 'Player', uuid: '123e4567-e89b-42d3-a456-426614174000',
+        request_id: '123e4567-e89b-42d3-a456-426614174001',
+        player_entity_id: 321n
+      },
+      internal: false, version: 'Latest'
+    }
+  });
+  assert.ok(Buffer.isBuffer(buffer) && buffer.length > 20);
+});
+
+test('Bedrock crafting dispatch requires exact server recipe, stack response and fresh inventory postcondition', async () => {
+  let now = 1000;
+  let currentInventory = {
+    known: true, fresh: true, fullSnapshotFresh: true, registryKnown: true,
+    unresolvedItemCount: 0, revision: 10, generation: 1, observedAt: now,
+    items: [
+      { slot: 0, itemName: 'minecraft:oak_log', count: 1, empty: false },
+      { slot: 1, itemName: 'minecraft:oak_planks', count: 0, empty: false }
+    ]
+  };
+  const inventoryLedger = {
+    reset() {},
+    observeItemRegistry() {},
+    observeContent() {},
+    playerInventory() { return currentInventory; },
+    snapshot() { return { player: currentInventory, windows: [] }; }
+  };
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    clock: () => now, inventoryLedger
+  }).start();
+  client.emit('start_game', { ...start, enable_item_stack_net_manager: true });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+  client.emit('item_registry', { itemstates: [
+    { runtime_id: 1, name: 'minecraft:oak_log' },
+    { runtime_id: 2, name: 'minecraft:oak_planks' }
+  ] });
+  client.emit('crafting_data', { clear_recipes: true, shaped_recipes: [], shapeless_recipes: [{
+    recipe_id: 'minecraft:oak_planks',
+    network_id: 42,
+    input: [{ type: 1, descriptor_type: 'name', name: 'minecraft:oak_log', metadata: 0, count: 1 }],
+    output: [{ network_id: 2, count: 4, metadata: 0 }],
+    block: 'crafting_table'
+  }] });
+
+  const result = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'craft-one',
+    action: 'odyssey_execute', primitive: 'craftRecipe', confirmed: true,
+    args: { resultItem: 'minecraft:oak_planks', timesCrafted: 1 }
+  });
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.awaitingServerConfirmation, true);
+  const packet = client.sent.find(item => item.packet === 'item_stack_request');
+  assert.ok(packet);
+  assert.deepEqual(packet.value.requests[0].actions[0], {
+    type_id: 'craft_recipe', legacy_type_id: 12,
+    recipe_network_id: 42, times_crafted: 1
+  });
+
+  client.emit('item_stack_response', { responses: [{ request_id: -1, status: 'ok' }] });
+  await Promise.resolve();
+  now = 1010;
+  currentInventory = {
+    ...currentInventory, revision: 11, observedAt: now,
+    items: [
+      { slot: 0, itemName: 'minecraft:oak_log', count: 0, empty: false },
+      { slot: 1, itemName: 'minecraft:oak_planks', count: 4, empty: false }
+    ]
+  };
+  client.emit('inventory_content', { window_id: 0, container: { container_id: 'hotbar_and_inventory' }, input: [] });
+  const crafting = bridge.snapshot().crafting;
+  assert.equal(crafting.status, 'ok');
+  assert.equal(crafting.reason, 'craft_response_and_inventory_verified');
+  assert.equal(crafting.serverAcknowledged, true);
+  assert.equal(crafting.inventoryVerified, true);
+  bridge.stop();
+});
+
+test('Bedrock crafting rejects unsupported recipe, stale inventory and unnegotiated stack transactions', () => {
+  const client = new Client();
+  let currentInventory = {
+    known: true, fresh: false, fullSnapshotFresh: false, registryKnown: true,
+    unresolvedItemCount: 0, revision: 1, generation: 1, observedAt: 1000, items: []
+  };
+  const inventoryLedger = {
+    reset() {}, observeItemRegistry() {}, observeContent() {},
+    playerInventory() { return currentInventory; },
+    snapshot() { return { player: currentInventory, windows: [] }; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { inventoryLedger }).start();
+  client.emit('start_game', { ...start, enable_item_stack_net_manager: false });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+  const result = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'craft-blocked',
+    action: 'odyssey_execute', primitive: 'craftRecipe', confirmed: true,
+    args: { resultItem: 'minecraft:oak_planks' }
+  });
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.reason, 'server_authoritative_inventory_not_negotiated');
+  assert.equal(client.sent.some(item => item.packet === 'item_stack_request'), false);
+  bridge.stop();
+
+  currentInventory = { ...currentInventory, fresh: true, fullSnapshotFresh: true };
+});

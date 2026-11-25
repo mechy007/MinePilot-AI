@@ -176,6 +176,38 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("gameplay_skill_ready",usable);
                     result.putInt("gameplay_skill_limited",preview);
                     result.putInt("gameplay_skill_unsupported",unsupported);
+                    JSONObject nativeLibrary = capabilities.optJSONObject("nativeSkillLibrary");
+                    if (nativeLibrary != null) {
+                        result.putInt("native_skill_total", Math.max(0, Math.min(64,
+                                nativeLibrary.optInt("total", 0))));
+                        result.putInt("native_skill_executable", Math.max(0, Math.min(64,
+                                nativeLibrary.optInt("executable", 0))));
+                        JSONObject nativeCounts = nativeLibrary.optJSONObject("counts");
+                        if (nativeCounts != null) {
+                            result.putInt("native_skill_ready", Math.max(0, Math.min(64, nativeCounts.optInt("ready", 0))));
+                            result.putInt("native_skill_experimental", Math.max(0, Math.min(64, nativeCounts.optInt("experimental", 0))));
+                            result.putInt("native_skill_manual", Math.max(0, Math.min(64, nativeCounts.optInt("manual_experimental", 0))));
+                            result.putInt("native_skill_blocked", Math.max(0, Math.min(64, nativeCounts.optInt("blocked", 0))));
+                        }
+                        org.json.JSONArray nativeEntries = nativeLibrary.optJSONArray("skills");
+                        if (nativeEntries != null) {
+                            java.util.ArrayList<String> ids = new java.util.ArrayList<>();
+                            java.util.ArrayList<String> states = new java.util.ArrayList<>();
+                            for (int i = 0; i < Math.min(32, nativeEntries.length()); i++) {
+                                JSONObject entry = nativeEntries.optJSONObject(i);
+                                if (entry == null) continue;
+                                String skillId = entry.optString("id", "");
+                                String state = entry.optString("status", "");
+                                if (skillId.matches("[a-z][a-z0-9_]{2,47}") &&
+                                        state.matches("[a-z_]{2,32}")) {
+                                    ids.add(skillId);
+                                    states.add(state);
+                                }
+                            }
+                            result.putStringArray("native_skill_ids", ids.toArray(new String[0]));
+                            result.putStringArray("native_skill_states", states.toArray(new String[0]));
+                        }
+                    }
                     JSONObject learning = capabilities.optJSONObject("learning");
                     if (learning != null) {
                         result.putString("learning_version", learning.optString("version", ""));
@@ -590,13 +622,19 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putString("last_command_result", observedText);
                         result.putBoolean("last_command_read_only", command.optBoolean("readOnly", false));
                     }
-                    if (primitive.matches("goto|exploreUntil|mineBlock|equipAxe|equipHoe|equipPickaxe|equipSword")) {
+                    if (primitive.matches("goto|exploreUntil|mineBlock|equipAxe|equipHoe|equipPickaxe|equipSword|craftRecipe")) {
                         result.putString("last_command_primitive", primitive);
                         result.putBoolean("last_command_dispatch_accepted", command.optBoolean("dispatchAccepted", false));
                         result.putBoolean("last_command_awaiting_server_confirmation",
                                 command.optBoolean("awaitingServerConfirmation", false));
                         String itemName = command.optString("itemName", "");
                         if (!itemName.isEmpty()) result.putString("last_command_item_name", itemName);
+                        String crafted = command.optString("resultItem", "");
+                        if (!crafted.isEmpty()) result.putString("last_command_craft_item", crafted);
+                        String recipeId = command.optString("recipeId", "");
+                        if (!recipeId.isEmpty()) result.putString("last_command_recipe_id", recipeId);
+                        int craftedCount = command.optInt("timesCrafted", 0);
+                        if (craftedCount > 0 && craftedCount <= 8) result.putInt("last_command_craft_count", craftedCount);
                         int selectedSlot = command.optInt("selectedSlot", -1);
                         if (selectedSlot >= 0 && selectedSlot <= 8)
                             result.putInt("last_command_selected_slot", selectedSlot);
@@ -627,7 +665,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
-                !"experimental_break".equals(action) && !"learning_start".equals(action) &&
+                !"experimental_break".equals(action) && !"learning_start".equals(action) && !"native_skill_start".equals(action) &&
                 !"learning_stop".equals(action) && !"learning_propose".equals(action) &&
                 !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action) &&
                 !"odyssey_observe".equals(action) && !"odyssey_execute".equals(action)) return;
@@ -635,7 +673,7 @@ public final class WorldSessionProvider extends ContentProvider {
         if (("manual_move".equals(action) || "probe_step".equals(action) ||
                 "motion_diagnostic".equals(action) || "verified_step".equals(action) ||
                 "autonomy_follow".equals(action) || "follow_player".equals(action) ||
-                "agent_start".equals(action) || "learning_start".equals(action) ||
+                "agent_start".equals(action) || "learning_start".equals(action) || "native_skill_start".equals(action) ||
                 "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
                 "odyssey_observe".equals(action) || "odyssey_execute".equals(action) || "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
@@ -656,6 +694,11 @@ public final class WorldSessionProvider extends ContentProvider {
                 String taskId = extras.getString("task_id", "");
                 if (!taskId.matches("[a-z][a-z0-9_]{2,47}")) return;
                 command.put("taskId", taskId).put("confirmed", true);
+            }
+            if ("native_skill_start".equals(action)) {
+                String skillId = extras.getString("skill_id", "");
+                if (!skillId.matches("[a-z][a-z0-9_]{2,47}")) return;
+                command.put("skillId", skillId).put("confirmed", true);
             }
             if ("odyssey_observe".equals(action)) {
                 String primitive = extras.getString("primitive", "");
@@ -710,9 +753,36 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
                             y < -256 || y > 512) return;
                     args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
+                } else if ("craftRecipe".equals(primitive)) {
+                    String itemName = extras.getString("item_name", "").trim().toLowerCase(java.util.Locale.ROOT);
+                    int timesCrafted = extras.getInt("times_crafted", 1);
+                    if (!itemName.matches("minecraft:[a-z0-9_./-]{1,80}") || timesCrafted < 1 || timesCrafted > 8) return;
+                    args.put("resultItem", itemName).put("timesCrafted", timesCrafted);
+                    String recipeId = extras.getString("recipe_id", "").trim();
+                    if (!recipeId.isEmpty()) {
+                        if (!recipeId.matches("[a-zA-Z0-9_.:/-]{1,128}")) return;
+                        args.put("recipeId", recipeId);
+                    }
+                } else if ("placeBlock".equals(primitive)) {
+                    String source = extras.getString("block_position", "").trim();
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    int x, y, z;
+                    try {
+                        x = Integer.parseInt(coordinates[0].trim());
+                        y = Integer.parseInt(coordinates[1].trim());
+                        z = Integer.parseInt(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
+                            y < -64 || y > 319) return;
+                    String blockId = extras.getString("block_id", "").trim();
+                    if (!blockId.matches("(?i)^(?:minecraft:)?[a-z0-9_./-]{1,80}$")) return;
+                    args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
+                    args.put("blockId", blockId.toLowerCase(java.util.Locale.ROOT));
                 } else if (!"exploreUntil".equals(primitive) && !"equipAxe".equals(primitive) &&
                         !"equipHoe".equals(primitive) && !"equipPickaxe".equals(primitive) &&
-                        !"equipSword".equals(primitive)) {
+                        !"equipSword".equals(primitive) && !"mineBlock".equals(primitive) &&
+                        !"placeBlock".equals(primitive) && !"craftRecipe".equals(primitive)) {
                     return;
                 }
                 command.put("primitive", primitive).put("args", args).put("confirmed", true);
