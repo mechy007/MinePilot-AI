@@ -766,7 +766,7 @@ public final class DashboardActivity extends Activity {
         panel.addView(hint);
 
         LinearLayout top = manualControlRow();
-        addManualPadButton(top, "LOOK LEFT", "turn_left", "Look left");
+        addManualPadSpacer(top);
         addManualPadButton(top, "↑", "forward", "Move forward");
         addManualPadSpacer(top);
         panel.addView(top);
@@ -782,7 +782,7 @@ public final class DashboardActivity extends Activity {
         panel.addView(middle);
 
         LinearLayout bottom = manualControlRow();
-        addManualPadSpacer(bottom);
+        addManualPadButton(bottom, "LOOK LEFT", "turn_left", "Look left");
         addManualPadButton(bottom, "↓", "backward", "Move backward");
         addManualPadButton(bottom, "LOOK RIGHT", "turn_right", "Look right");
         panel.addView(bottom);
