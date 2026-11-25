@@ -301,6 +301,7 @@ test('numeric palette is exact-version only and fails closed on custom block reg
   const loader = () => ({
     blocks: [{ minStateId: 0, maxStateId: 1200, name: 'air', boundingBox: 'empty' }]
   });
+  console.error('[manual-terrain-test:7a] loader ready');
   assert.equal(createVanillaRuntimeRegistry({}, loader), null,
     'missing server version cannot safely select a protocol palette');
   assert.equal(createVanillaRuntimeRegistry({ server_version: '1.26.66.1' }, loader), null,
