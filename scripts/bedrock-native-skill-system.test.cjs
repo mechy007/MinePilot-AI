@@ -38,7 +38,8 @@ test('catalog is explicitly Bedrock-native and never advertises Java runtime exe
   assert.ok(catalog.skills.length >= 10);
   assert.equal(catalog.skills.find(skill => skill.id === 'place_single_block').status, 'manual_experimental');
   assert.ok(catalog.skills.every(skill => skill.edition === 'bedrock'));
-  assert.ok(catalog.roadmap.every(skill => skill.status === 'unsupported'));
+  assert.equal(catalog.roadmap.find(skill => skill.id === 'craft_items').status, 'partial');
+  assert.ok(catalog.roadmap.filter(skill => skill.id !== 'craft_items').every(skill => skill.status === 'unsupported'));
 });
 
 test('world and inventory inspection require live Bedrock evidence', () => {
@@ -113,4 +114,16 @@ test('single-block placement is visible only with fresh world and Bedrock operat
   world.positionUsable = () => false;
   assert.equal(evaluateBedrockSkill(definition, world, manifest).reason,
     'fresh_server_position_required');
+});
+
+test('recipe crafting is experimental only when the live Bedrock craft capability is advertised', () => {
+  const { world, manifest } = fixture();
+  const definition = require('./bedrock-native-skill-system.cjs').DEFINITIONS
+    .find(item => item.id === 'craft_recipe');
+  assert.equal(evaluateBedrockSkill(definition, world, manifest).status, 'blocked');
+  manifest.skills.push({ name: 'craft', state: 'manual_experimental', reason: 'server_recipe_catalog' });
+  assert.equal(evaluateBedrockSkill(definition, world, manifest).status, 'manual_experimental');
+  const engine = { start: () => { throw new Error('crafting must use the dedicated Bedrock transaction executor'); } };
+  assert.equal(startBedrockNativeSkill(world, manifest, engine, 'craft_recipe', { confirmed: true }).reason,
+    'manual_experimental_executor_requires_dedicated_action_path');
 });

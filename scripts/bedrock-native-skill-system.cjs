@@ -35,13 +35,16 @@ const DEFINITIONS = Object.freeze([
   { id: 'mine_single_block', title: 'Mine one block', family: 'gathering',
     description: 'Experimental single-block break only; requires explicit user confirmation and server-side block-change evidence.',
     mode: 'manual_experimental', taskId: null, requires: ['mine'] },
+  { id: 'craft_recipe', title: 'Craft one recipe', family: 'crafting',
+    description: 'Experimental single craft through the Bedrock server recipe ID and item-stack transaction; only exact vanilla ingredients fitting the player 2x2 grid are allowed, with fresh inventory evidence required before and after.',
+    mode: 'manual_experimental', taskId: null, requires: ['craft'] },
   { id: 'place_single_block', title: 'Place one block', family: 'building',
     description: 'Experimental placement of one vanilla Bedrock block into an observed air cell within six blocks, using operator-only command execution and server block-update verification.',
     mode: 'manual_experimental', taskId: null }
 ]);
 
 const ROADMAP = Object.freeze([
-  { id: 'craft_items', family: 'crafting', status: 'unsupported', reason: 'Bedrock recipe and inventory transaction executor not implemented' },
+  { id: 'craft_items', family: 'crafting', status: 'partial', reason: 'One explicit server-authoritative 2x2 recipe is experimental; bulk crafting, 3x3 recipes, tags, variants and specialist stations remain unavailable' },
   { id: 'eat_food', family: 'survival', status: 'unsupported', reason: 'Bedrock item-use transaction and host acknowledgement not implemented' },
   { id: 'combat', family: 'combat', status: 'unsupported', reason: 'Bedrock attack action and authoritative hit verification not implemented' },
   { id: 'place_blocks', family: 'building', status: 'unsupported', reason: 'Only single-block operator command placement is experimental; multi-block building executor remains unavailable' },

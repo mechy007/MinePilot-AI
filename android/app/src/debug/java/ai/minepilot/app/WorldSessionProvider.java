@@ -622,13 +622,19 @@ public final class WorldSessionProvider extends ContentProvider {
                         result.putString("last_command_result", observedText);
                         result.putBoolean("last_command_read_only", command.optBoolean("readOnly", false));
                     }
-                    if (primitive.matches("goto|exploreUntil|mineBlock|equipAxe|equipHoe|equipPickaxe|equipSword")) {
+                    if (primitive.matches("goto|exploreUntil|mineBlock|equipAxe|equipHoe|equipPickaxe|equipSword|craftRecipe")) {
                         result.putString("last_command_primitive", primitive);
                         result.putBoolean("last_command_dispatch_accepted", command.optBoolean("dispatchAccepted", false));
                         result.putBoolean("last_command_awaiting_server_confirmation",
                                 command.optBoolean("awaitingServerConfirmation", false));
                         String itemName = command.optString("itemName", "");
                         if (!itemName.isEmpty()) result.putString("last_command_item_name", itemName);
+                        String crafted = command.optString("resultItem", "");
+                        if (!crafted.isEmpty()) result.putString("last_command_craft_item", crafted);
+                        String recipeId = command.optString("recipeId", "");
+                        if (!recipeId.isEmpty()) result.putString("last_command_recipe_id", recipeId);
+                        int craftedCount = command.optInt("timesCrafted", 0);
+                        if (craftedCount > 0 && craftedCount <= 8) result.putInt("last_command_craft_count", craftedCount);
                         int selectedSlot = command.optInt("selectedSlot", -1);
                         if (selectedSlot >= 0 && selectedSlot <= 8)
                             result.putInt("last_command_selected_slot", selectedSlot);
@@ -747,6 +753,16 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
                             y < -256 || y > 512) return;
                     args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
+                } else if ("craftRecipe".equals(primitive)) {
+                    String itemName = extras.getString("item_name", "").trim().toLowerCase(java.util.Locale.ROOT);
+                    int timesCrafted = extras.getInt("times_crafted", 1);
+                    if (!itemName.matches("minecraft:[a-z0-9_./-]{1,80}") || timesCrafted < 1 || timesCrafted > 8) return;
+                    args.put("resultItem", itemName).put("timesCrafted", timesCrafted);
+                    String recipeId = extras.getString("recipe_id", "").trim();
+                    if (!recipeId.isEmpty()) {
+                        if (!recipeId.matches("[a-zA-Z0-9_.:/-]{1,128}")) return;
+                        args.put("recipeId", recipeId);
+                    }
                 } else if ("placeBlock".equals(primitive)) {
                     String source = extras.getString("block_position", "").trim();
                     String[] coordinates = source.split(",", -1);
@@ -766,7 +782,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 } else if (!"exploreUntil".equals(primitive) && !"equipAxe".equals(primitive) &&
                         !"equipHoe".equals(primitive) && !"equipPickaxe".equals(primitive) &&
                         !"equipSword".equals(primitive) && !"mineBlock".equals(primitive) &&
-                        !"placeBlock".equals(primitive)) {
+                        !"placeBlock".equals(primitive) && !"craftRecipe".equals(primitive)) {
                     return;
                 }
                 command.put("primitive", primitive).put("args", args).put("confirmed", true);

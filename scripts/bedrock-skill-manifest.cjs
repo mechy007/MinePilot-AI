@@ -42,6 +42,12 @@ function evaluateCapabilities(world) {
   const layer2=ready?world?.layerTwo?.snapshot?.(world.gameplayWorld()):null;
   const resources=ready?world?.layerThree?.snapshot?.(world.gameplayWorld()):null;
   const life=world?.lifeSenses!=null;
+  const recipes=world?.recipeCatalog?.snapshot?.(64)??{};
+  const playerInventory=ready?world?.inventoryLedger?.playerInventory?.({maxAgeMs:10000})??null:null;
+  const craftingReady=ready&&world?.itemStackNetManager===true&&
+    (recipes.supported??0)>0&&playerInventory?.known===true&&playerInventory?.fresh===true&&
+    playerInventory?.fullSnapshotFresh===true&&playerInventory?.registryKnown===true&&
+    playerInventory?.unresolvedItemCount===0;
   const result={
     observe_world:ready?one('ready','server_observations') : one('blocked','world_not_ready'),
     world_memory:ready&&world?.intelligence?
@@ -66,7 +72,9 @@ function evaluateCapabilities(world) {
     mine:one('manual_experimental','single_block_action_needs_user_confirmation'),
     eat_food:one('unsupported','needs_item_use_transaction_and_host_ack'),
     attack_hostile:one('unsupported','needs_attack_transaction_and_host_ack'),
-    craft:one('unsupported','needs_recipe_container_stack_validation'),
+    craft:craftingReady?one('manual_experimental','server_recipe_catalog_and_fresh_authoritative_inventory; one confirmed 2x2 recipe'):
+      one('blocked',world?.itemStackNetManager!==true?'server_authoritative_inventory_not_negotiated':
+        (recipes.supported??0)===0?'supported_bedrock_recipes_not_observed':'fresh_resolved_server_inventory_required'),
     build_shelter:one('preview_only','no_verified_block_placement_executor')
   };
   return {
@@ -160,6 +168,7 @@ function gameplaySkillManifest(world) {
   return {
     ...manifest,
     nativeSkillLibrary: bedrockNativeSkillCatalog(world, manifest),
+    recipeCatalog: world?.recipeCatalog?.snapshot?.(64) ?? { version:'minepilot.bedrock-recipes.v1', total:0, supported:0, recipes:[] },
     odysseyLibrary: summarizeOdysseyLibrary(odysseyCapabilities),
     // Reading a manifest is observational only. Curriculum state changes happen
     // exclusively on the bridge's explicit runtime tick.

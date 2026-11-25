@@ -11,6 +11,7 @@ const { executeBedrockObservation } = require('./bedrock-odyssey-observation-exe
 const { normalizeBedrockBlockId, validateBedrockBlockPosition, isBedrockAirBlock, buildBedrockSetBlockCommand } = require('./bedrock-block-placement.cjs');
 const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.cjs');
 const { BedrockInventoryLedger } = require('./bedrock-inventory-ledger.cjs');
+const { BedrockRecipeCatalog, sumItem } = require('./bedrock-recipe-catalog.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill, learningEngineFor, evaluateCapabilities, startBedrockNativeSkill } = require('./bedrock-skill-manifest.cjs');
 
@@ -112,6 +113,9 @@ class BedrockGameplayBridge {
     this.stackRequests = new BedrockStackRequestManager(this.client, {
       isEnabled: () => this.itemStackNetManager === true, timeoutMs: 5000
     });
+    this.recipeCatalog = options.recipeCatalog ?? new BedrockRecipeCatalog({ clock: this.clock });
+    this.pendingCraft = null;
+    this.lastCraft = null;
     this.selectedHotbarSlot = null;
     this.pendingHotbarSelection = null;
     this.lastHotbarSelection = null;
@@ -160,13 +164,16 @@ class BedrockGameplayBridge {
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerSix?.observeContainer(p);
+      this.checkPendingCraft();
     });
     this.bind('item_registry', p => {
       this.inventoryLedger?.observeItemRegistry(p);
+      this.recipeCatalog?.observeItemRegistry(p);
       this.layerThree?.observeItemRegistry(p);
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
     });
+    this.bind('crafting_data', p => this.recipeCatalog?.observeCraftingData(p));
     this.bind('set_time', p => this.layerFour?.observeTime(p?.time));
     this.bind('command_output', p => this.onCommandOutput(p));
     this.bind('update_block', p => {
@@ -202,6 +209,8 @@ class BedrockGameplayBridge {
     stopLocalAutopilot(this, 'new_world_session');
     this.gameplayAgent?.stop('new_world_session');
     this.cancelPendingBlockPlacement('new_world_session');
+    this.cancelPendingCraft('new_world_session');
+    this.recipeCatalog?.reset();
     this.commandsEnabled = packet.enable_commands === true;
     this.permissionLevel = typeof packet.permission_level === 'string' ? packet.permission_level : 'visitor';
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
@@ -730,6 +739,7 @@ class BedrockGameplayBridge {
   dimensionChange(packet) {
     if (this.closed) return;
     this.cancelPendingBlockPlacement('dimension_changed');
+    this.cancelPendingCraft('dimension_changed');
     this.gameplayAgent?.stop('dimension_changed');
     this.dimension = validDimension(packet?.dimension);
     this.terrain?.reset(this.dimension);
@@ -861,6 +871,9 @@ class BedrockGameplayBridge {
       // A chunk header does NOT prove decoded, navigable block/voxel data.
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
+      craftingRecipes: this.recipeCatalog?.snapshot?.(64) ?? null,
+      crafting: this.pendingCraft ? { state: 'awaiting_server_confirmation', recipeId: this.pendingCraft.recipe.id,
+        resultItem: this.pendingCraft.resultItem, timesCrafted: this.pendingCraft.timesCrafted } : this.lastCraft ? { ...this.lastCraft } : { state: 'idle' },
       ...(this.navigationRoute ? { navigationRoute: this.navigationRoute } : {}),
       ...(this.autonomy ? { autonomy: this.autonomy.snapshot() } : {}),
       ...(this.gameplayAgent ? { gameplayAgent: this.gameplayAgent.snapshot() } : {}),
@@ -939,6 +952,7 @@ class BedrockGameplayBridge {
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
       const args = raw.args && typeof raw.args === 'object' && !Array.isArray(raw.args) ? raw.args : {};
+      if (raw.primitive === 'craftRecipe') return this.startCraftRecipe(raw, args);
       if (raw.primitive === 'exploreUntil') {
         const result = this.gameplayAgent?.start(this, { confirmed: true, goal: 'explore' }) ??
           { status: 'rejected', reason: 'gameplay_agent_unavailable' };
@@ -1382,6 +1396,111 @@ class BedrockGameplayBridge {
     return false;
   }
 
+  startCraftRecipe(raw, args) {
+    if (this.closed || !this.spawned) return { status: 'rejected', reason: 'bedrock_world_not_ready' };
+    if (this.itemStackNetManager !== true)
+      return { status: 'rejected', reason: 'server_authoritative_inventory_not_negotiated' };
+    if (this.pendingCraft || this.stackRequests.snapshot().pending)
+      return { status: 'rejected', reason: 'craft_transaction_busy' };
+    const resultItem = typeof args.resultItem === 'string' ? args.resultItem.trim().toLowerCase() : '';
+    const timesCrafted = args.timesCrafted ?? 1;
+    const recipeId = typeof args.recipeId === 'string' ? args.recipeId : undefined;
+    const inventory = this.inventoryLedger?.playerInventory?.({ maxAgeMs: 10000 });
+    const plan = this.recipeCatalog?.resolve(resultItem, inventory, { recipeId, timesCrafted });
+    if (plan?.status !== 'ready')
+      return { status: plan?.status === 'blocked' ? 'blocked' : 'rejected',
+        reason: plan?.reason ?? 'bedrock_recipe_catalog_unavailable',
+        ...(Array.isArray(plan?.missing) ? { missing: plan.missing } : {}) };
+    const pending = {
+      requestId: raw.requestId, recipe: plan.recipe, resultItem,
+      timesCrafted: plan.timesCrafted, outputExpected: plan.outputExpected,
+      outputBefore: plan.outputBefore, ingredientBefore: plan.ingredientBefore,
+      inventoryRevision: plan.inventoryRevision, inventoryGeneration: plan.inventoryGeneration,
+      acknowledged: false, startedAt: this.clock(), timer: null
+    };
+    this.pendingCraft = pending;
+    this.lastCraft = {
+      status: 'awaiting_server_confirmation', reason: 'craft_recipe_request_sent',
+      recipeId: pending.recipe.id, resultItem, timesCrafted: pending.timesCrafted,
+      outputExpected: pending.outputExpected, serverAcknowledged: false, inventoryVerified: false
+    };
+    pending.timer = setTimeout(() => {
+      if (this.pendingCraft === pending) this.finishCraft('rejected', 'craft_inventory_postcondition_timeout');
+    }, 8000);
+    pending.timer.unref?.();
+    this.stackRequests.send([{
+      type_id: 'craft_recipe',
+      recipe_network_id: pending.recipe.networkId,
+      times_crafted: pending.timesCrafted
+    }], { timeoutMs: 5000 }).then(() => {
+      if (this.pendingCraft !== pending) return;
+      pending.acknowledged = true;
+      this.lastCraft = { ...this.lastCraft, serverAcknowledged: true };
+      this.checkPendingCraft();
+    }).catch(error => {
+      if (this.pendingCraft !== pending) return;
+      const reason = error?.outcome === 'server_rejected' ? 'bedrock_craft_rejected_by_server'
+        : error?.outcome === 'unsupported' ? 'server_authoritative_inventory_unavailable'
+          : error?.outcome === 'timeout' ? 'bedrock_craft_response_timeout'
+            : 'bedrock_craft_request_failed';
+      this.finishCraft('rejected', reason);
+    });
+    return { status: 'accepted', reason: 'bedrock_craft_recipe_request_queued',
+      primitive: 'craftRecipe', recipeId: pending.recipe.id, resultItem,
+      timesCrafted: pending.timesCrafted, awaitingServerConfirmation: true };
+  }
+
+  checkPendingCraft() {
+    const pending = this.pendingCraft;
+    if (!pending) return false;
+    const inventory = this.inventoryLedger?.playerInventory?.({ maxAgeMs: 10000 });
+    if (!inventory || inventory.known !== true || inventory.fresh !== true ||
+        inventory.fullSnapshotFresh !== true || inventory.generation !== pending.inventoryGeneration ||
+        !Number.isInteger(inventory.revision) || inventory.revision <= pending.inventoryRevision ||
+        !Number.isFinite(inventory.observedAt) || inventory.observedAt <= pending.startedAt) return false;
+    const outputAfter = sumItem(inventory, pending.resultItem);
+    const outputVerified = outputAfter >= pending.outputBefore + pending.outputExpected;
+    const ingredientsVerified = pending.recipe.ingredients.every(item =>
+      sumItem(inventory, item.name) <= (pending.ingredientBefore[item.name] ?? 0) -
+        item.count * pending.timesCrafted);
+    if (!outputVerified || !ingredientsVerified) return false;
+    pending.inventoryVerified = true;
+    if (pending.acknowledged) {
+      this.finishCraft('ok', 'craft_response_and_inventory_verified', inventory);
+      return true;
+    }
+    return false;
+  }
+
+  finishCraft(status, reason, inventory = null) {
+    const pending = this.pendingCraft;
+    if (!pending) return false;
+    this.pendingCraft = null;
+    if (pending.timer) clearTimeout(pending.timer);
+    const detail = {
+      status, reason, recipeId: pending.recipe.id, resultItem: pending.resultItem,
+      timesCrafted: pending.timesCrafted, outputExpected: pending.outputExpected,
+      serverAcknowledged: pending.acknowledged === true,
+      inventoryVerified: status === 'ok',
+      inventoryRevision: inventory?.revision ?? null,
+      completedAt: this.clock()
+    };
+    this.lastCraft = detail;
+    if (this.lastReceipt?.requestId === pending.requestId) {
+      const receipt = { ...this.lastReceipt, status, reason, crafting: detail,
+        awaitingServerConfirmation: false };
+      this.lastReceipt = receipt;
+      if (this.receiptPath) {
+        try { atomicJson(this.receiptPath, receipt); } catch {}
+      }
+    }
+    return true;
+  }
+
+  cancelPendingCraft(reason = 'cancelled') {
+    return this.finishCraft('rejected', reason);
+  }
+
   tickLearning() {
     // One explicit owner advances the curriculum. Reads of snapshots/manifests
     // never mutate task state. Keep failures visible without crashing the SDK loop.
@@ -1429,6 +1548,9 @@ class BedrockGameplayBridge {
         primitive: command.primitive,
         dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
         ...(typeof result.itemName === 'string' ? { itemName: result.itemName } : {}),
+        ...(typeof result.resultItem === 'string' ? { resultItem: result.resultItem } : {}),
+        ...(typeof result.recipeId === 'string' ? { recipeId: result.recipeId } : {}),
+        ...(Number.isInteger(result.timesCrafted) ? { timesCrafted: result.timesCrafted } : {}),
         ...(Number.isInteger(result.selectedSlot) ? { selectedSlot: result.selectedSlot } : {}),
         awaitingServerConfirmation: result.awaitingServerConfirmation === true
       } : {}),
@@ -1444,6 +1566,7 @@ class BedrockGameplayBridge {
   stop() {
     if (this.closed) return;
     this.cancelPendingBlockPlacement('session_closed');
+    this.cancelPendingCraft('session_closed');
     this.closed = true;
     stopLocalAutopilot(this, 'session_closed');
     if (this.watch) clearInterval(this.watch);

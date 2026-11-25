@@ -1699,3 +1699,100 @@ test('block placement Bedrock command packet serializes against the pinned 1.26.
   });
   assert.ok(Buffer.isBuffer(buffer) && buffer.length > 20);
 });
+
+test('Bedrock crafting dispatch requires exact server recipe, stack response and fresh inventory postcondition', async () => {
+  let now = 1000;
+  let currentInventory = {
+    known: true, fresh: true, fullSnapshotFresh: true, registryKnown: true,
+    unresolvedItemCount: 0, revision: 10, generation: 1, observedAt: now,
+    items: [
+      { slot: 0, itemName: 'minecraft:oak_log', count: 1, empty: false },
+      { slot: 1, itemName: 'minecraft:oak_planks', count: 0, empty: false }
+    ]
+  };
+  const inventoryLedger = {
+    reset() {},
+    observeItemRegistry() {},
+    observeContent() {},
+    playerInventory() { return currentInventory; },
+    snapshot() { return { player: currentInventory, windows: [] }; }
+  };
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    clock: () => now, inventoryLedger
+  }).start();
+  client.emit('start_game', { ...start, enable_item_stack_net_manager: true });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+  client.emit('item_registry', { itemstates: [
+    { runtime_id: 1, name: 'minecraft:oak_log' },
+    { runtime_id: 2, name: 'minecraft:oak_planks' }
+  ] });
+  client.emit('crafting_data', { clear_recipes: true, shaped_recipes: [], shapeless_recipes: [{
+    recipe_id: 'minecraft:oak_planks',
+    network_id: 42,
+    input: [{ type: 1, descriptor_type: 'name', name: 'minecraft:oak_log', metadata: 0, count: 1 }],
+    output: [{ network_id: 2, count: 4, metadata: 0 }],
+    block: 'crafting_table'
+  }] });
+
+  const result = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'craft-one',
+    action: 'odyssey_execute', primitive: 'craftRecipe', confirmed: true,
+    args: { resultItem: 'minecraft:oak_planks', timesCrafted: 1 }
+  });
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.awaitingServerConfirmation, true);
+  const packet = client.sent.find(item => item.packet === 'item_stack_request');
+  assert.ok(packet);
+  assert.deepEqual(packet.value.requests[0].actions[0], {
+    type_id: 'craft_recipe', legacy_type_id: 12,
+    recipe_network_id: 42, times_crafted: 1
+  });
+
+  client.emit('item_stack_response', { responses: [{ request_id: -1, status: 'ok' }] });
+  await Promise.resolve();
+  now = 1010;
+  currentInventory = {
+    ...currentInventory, revision: 11, observedAt: now,
+    items: [
+      { slot: 0, itemName: 'minecraft:oak_log', count: 0, empty: false },
+      { slot: 1, itemName: 'minecraft:oak_planks', count: 4, empty: false }
+    ]
+  };
+  client.emit('inventory_content', { window_id: 0, container: { container_id: 'hotbar_and_inventory' }, input: [] });
+  const crafting = bridge.snapshot().crafting;
+  assert.equal(crafting.status, 'ok');
+  assert.equal(crafting.reason, 'craft_response_and_inventory_verified');
+  assert.equal(crafting.serverAcknowledged, true);
+  assert.equal(crafting.inventoryVerified, true);
+  bridge.stop();
+});
+
+test('Bedrock crafting rejects unsupported recipe, stale inventory and unnegotiated stack transactions', () => {
+  const client = new Client();
+  let currentInventory = {
+    known: true, fresh: false, fullSnapshotFresh: false, registryKnown: true,
+    unresolvedItemCount: 0, revision: 1, generation: 1, observedAt: 1000, items: []
+  };
+  const inventoryLedger = {
+    reset() {}, observeItemRegistry() {}, observeContent() {},
+    playerInventory() { return currentInventory; },
+    snapshot() { return { player: currentInventory, windows: [] }; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { inventoryLedger }).start();
+  client.emit('start_game', { ...start, enable_item_stack_net_manager: false });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 0, z: 0, dimension: 0 });
+  const result = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'craft-blocked',
+    action: 'odyssey_execute', primitive: 'craftRecipe', confirmed: true,
+    args: { resultItem: 'minecraft:oak_planks' }
+  });
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.reason, 'server_authoritative_inventory_not_negotiated');
+  assert.equal(client.sent.some(item => item.packet === 'item_stack_request'), false);
+  bridge.stop();
+
+  currentInventory = { ...currentInventory, fresh: true, fullSnapshotFresh: true };
+});
