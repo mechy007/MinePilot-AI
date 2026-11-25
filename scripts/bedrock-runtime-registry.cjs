@@ -5,11 +5,11 @@
  *
  * Hashed IDs are FNV-1a 32 of little-endian NBT {name, states}. The reverse
  * table is generated from the captured 1.26.60/protocol-2225 vanilla state
- * catalogue. New or add-on blocks absent from the table remain unknown.
+ * catalogue. Unknown add-on hashes remain unmapped.
  *
- * The legacy non-hashed numeric palette is accepted only for the exact
- * captured 1.26.60 family and only when the server declares no unknown
- * blocks; an add-on can renumber that palette.
+ * Legacy non-hashed numeric IDs use the captured 1.26.60 palette only and
+ * are disabled when the server declares unknown blocks, because add-ons may
+ * shift the ordered palette.
  */
 let cachedNumeric = null;
 let cachedHashed = null;
@@ -32,8 +32,8 @@ function createHashedRuntimeRegistry(startGame) {
   const serverVersion = startGame?.server_version ?? startGame?.engine;
   if (!isProtocol2225(serverVersion) ||
       startGame?.block_network_ids_are_hashes !== true) return null;
-
   if (cachedHashed) return cachedHashed;
+
   let data;
   try {
     data = require('./bedrock-vanilla-12660-hashed-states.json');
@@ -49,10 +49,11 @@ function createHashedRuntimeRegistry(startGame) {
 
   const names = new Set();
   for (const entry of data.blocks) {
-    if (!Array.isArray(entry) || entry.length !== 2 ||
+    if (!Array.isArray(entry) || entry.length !== 3 ||
         typeof entry[0] !== 'string' ||
         !/^minecraft:[a-z0-9_./-]{1,80}$/.test(entry[0]) ||
         !['block', 'empty', null].includes(entry[1]) ||
+        typeof entry[2] !== 'boolean' ||
         names.has(entry[0])) return null;
     names.add(entry[0]);
   }
@@ -63,20 +64,19 @@ function createHashedRuntimeRegistry(startGame) {
         !Number.isInteger(entry[0]) ||
         !Number.isInteger(entry[1]) ||
         entry[1] < 0 || entry[1] >= data.blocks.length ||
-        map.has(entry[0])) return null;
-    const [name, boundingBox] = data.blocks[entry[1]];
-    map.set(entry[0], { name, boundingBox });
+        map.has(entry[0] >>> 0)) return null;
+    const [name, boundingBox, fullCube] = data.blocks[entry[1]];
+    // FNV is a signed int32, but the chunk palette carries the same bits as
+    // an unsigned varuint32. Normalize before indexing the decoded palette.
+    map.set(entry[0] >>> 0, { name, boundingBox, fullCube });
   }
 
-  // Known captured live-server vectors guard the hash/NBT encoder and file.
   if (map.size !== data.stateCombinationCount ||
       map.get((-2144268767) >>> 0)?.name !== 'minecraft:stone' ||
       map.get((-604749536) >>> 0)?.name !== 'minecraft:air' ||
       map.get(203547508)?.name !== 'minecraft:brown_mushroom_block' ||
       map.get(1659726445)?.name !== 'minecraft:pointed_dripstone') return null;
 
-  // Hashed IDs are independent of palette order and add-on registration.
-  // Add-on hashes absent from this vanilla reverse table remain unknown.
   cachedHashed = map;
   return map;
 }
@@ -95,13 +95,12 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   let data;
   try {
     if (typeof loadMinecraftData === 'function') {
-      // Test-only injection permits malformed/foreign registry fixtures.
       data = loadMinecraftData('bedrock_1.26.60');
     } else {
       const pinned = require('./bedrock-vanilla-12660-states.json');
       if (pinned.protocol !== '1.26.60' || !Array.isArray(pinned.blocks)) return null;
-      data = { blocks: pinned.blocks.map(([minStateId, maxStateId, name, boundingBox]) => ({
-        minStateId, maxStateId, name, boundingBox
+      data = { blocks: pinned.blocks.map(([minStateId, maxStateId, name, boundingBox, fullCube]) => ({
+        minStateId, maxStateId, name, boundingBox, fullCube
       })) };
     }
   } catch {
@@ -117,10 +116,15 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
         block.maxStateId > 131071 ||
         block.maxStateId - block.minStateId > 8192 ||
         !/^[a-z0-9_./-]{1,80}$/.test(block.name ?? '') ||
-        !['block', 'empty', null].includes(block.boundingBox ?? null)) continue;
+        !['block', 'empty', null].includes(block.boundingBox ?? null) ||
+        (loadMinecraftData == null && typeof block.fullCube !== 'boolean')) continue;
     for (let id = block.minStateId; id <= block.maxStateId; id++) {
       if (map.has(id)) return null;
-      map.set(id, { name: 'minecraft:' + block.name, boundingBox: block.boundingBox ?? null });
+      map.set(id, {
+        name: 'minecraft:' + block.name,
+        boundingBox: block.boundingBox ?? null,
+        ...(typeof block.fullCube === 'boolean' ? { fullCube: block.fullCube } : {})
+      });
     }
   }
   if (map.size < 1000 ||
@@ -133,10 +137,9 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
 }
 
 function createVanillaRuntimeRegistry(startGame, loadMinecraftData = null) {
-  if (startGame?.block_network_ids_are_hashes === true) {
-    return createHashedRuntimeRegistry(startGame);
-  }
-  return createNumericRuntimeRegistry(startGame, loadMinecraftData);
+  return startGame?.block_network_ids_are_hashes === true
+    ? createHashedRuntimeRegistry(startGame)
+    : createNumericRuntimeRegistry(startGame, loadMinecraftData);
 }
 
 function clearRuntimeRegistryCache() {
