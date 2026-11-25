@@ -10,6 +10,10 @@ export type RuntimeEvidence = Readonly<{
   hasSelfEntity: boolean;
   hasPosition: boolean;
   positionAgeMs: number | null;
+  /** True only while the session's original server position remains a safe idle anchor. */
+  idlePositionAnchor?: boolean;
+  /** Explicit false invalidates even a numerically recent timestamp after input. */
+  positionUsable?: boolean;
   receivedChunkHeaders: number;
   movementAuthority: number | null;
   blocksDecoded: boolean;
@@ -29,16 +33,22 @@ export type ReadinessSnapshot = Readonly<{
   observed: {
     entity: boolean; coordinates: boolean; chunkHeaders: number;
     corrections: number; positionAgeMs: number | null;
+    positionMode: 'server_fresh' | 'idle_spawn_anchor' | 'stale';
   };
 }>;
-const MAX_AGE_MS = 30_000;
 const MAX_CHUNKS = 128;
 const integer = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 0;
 
 export class LayerEightReadiness {
   assess(data: RuntimeEvidence): ReadinessSnapshot {
     const age = data.positionAgeMs;
-    const validAge = age !== null && Number.isFinite(age) && age >= 0 && age <= MAX_AGE_MS;
+    const validNumericAge = age !== null && Number.isFinite(age) && age >= 0;
+    const recentAge = data.positionUsable !== false && validNumericAge && age <= 7000;
+    const idleAnchor = data.positionUsable === true &&
+      data.idlePositionAnchor === true && validNumericAge;
+    const positionMode: ReadinessSnapshot['observed']['positionMode'] =
+      recentAge ? 'server_fresh' : idleAnchor ? 'idle_spawn_anchor' : 'stale';
+    const validAge = recentAge || idleAnchor;
     const validHeaders = integer(data.receivedChunkHeaders) &&
       data.receivedChunkHeaders >= 1 && data.receivedChunkHeaders <= MAX_CHUNKS;
     const observed = {
@@ -47,7 +57,8 @@ export class LayerEightReadiness {
         Math.min(MAX_CHUNKS, data.receivedChunkHeaders) : 0,
       corrections: integer(data.movementCorrections) ?
         Math.min(1000000,data.movementCorrections) : 0,
-      positionAgeMs: age !== null && Number.isFinite(age) && age >= 0 ? Math.round(age) : null
+      positionAgeMs: age !== null && Number.isFinite(age) && age >= 0 ? Math.round(age) : null,
+      positionMode
     };
     const ready = !!data.spawned && !!data.hasSelfEntity && !!data.hasPosition &&
       validHeaders && validAge && !data.sessionClosed;
@@ -55,7 +66,8 @@ export class LayerEightReadiness {
       !data.spawned || !data.hasSelfEntity ? 'not_spawned' :
       !data.hasPosition ? 'position_unknown' :
       !validHeaders ? 'world_chunks_unavailable' :
-      !validAge ? 'server_position_stale' : 'bounded_planning_only';
+      !validAge ? 'server_position_stale' :
+      idleAnchor && !recentAge ? 'idle_spawn_anchor' : 'bounded_planning_only';
     const stage: ReadinessSnapshot['stage'] = data.sessionClosed ? 'disconnected' :
       !data.spawned || !data.hasSelfEntity ? 'awaiting_world' :
       !ready ? 'observing' : 'planning_preview';

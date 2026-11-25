@@ -16,7 +16,7 @@ const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearni
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -70,6 +70,11 @@ class BedrockGameplayBridge {
     this.routePlanner = options.routePlanner ?? null;
     this.registryResolver = options.registryResolver ?? null;
     this.navigationRoute = null;
+    this.subchunkRequestKeys = new Map();
+    this.subchunkRequestsSent = 0;
+    this.subchunkRequestErrors = 0;
+    this.blockNetworkIdsAreHashes = false;
+    this.serverCustomBlockPropertiesCount = 0;
     this.autonomy = options.autonomy ?? null;
     this.blockBreaker = options.blockBreaker ?? null;
     this.lifeSenses = options.lifeSenses ?? null;
@@ -129,8 +134,14 @@ class BedrockGameplayBridge {
     this.bind('set_player_game_type', p => this.gameModeChange(p));
     this.bind('update_player_game_type', p => this.gameModeChange(p));
     this.bind('set_movement_authority', p => this.authorityChange(p));
-    this.bind('level_chunk', p => { this.chunk(p); this.terrain?.levelChunk(p); });
+    this.bind('level_chunk', p => {
+      this.chunk(p);
+      this.terrain?.levelChunk(p);
+      this.requestLocalSubchunks(p);
+    });
     this.bind('subchunk', p => this.terrain?.subChunk(p));
+    // Support the canonical packet spelling used by alternate SDK adapters.
+    this.bind('sub_chunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
     this.bind('inventory_slot', p => {
@@ -192,6 +203,9 @@ class BedrockGameplayBridge {
       Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
+    this.blockNetworkIdsAreHashes = packet.block_network_ids_are_hashes === true;
+    this.serverCustomBlockPropertiesCount = Array.isArray(packet.block_properties)
+      ? Math.min(1024, packet.block_properties.length) : 0;
     this.itemStackNetManager = typeof packet.enable_item_stack_net_manager === 'boolean'
       ? packet.enable_item_stack_net_manager : null;
     this.inventoryLedger?.reset();
@@ -231,6 +245,7 @@ class BedrockGameplayBridge {
     this.serverTickObservedAt = this.serverTick!=null?this.clock():null;
     this.players.clear();
     this.receivedChunks.clear();
+    this.subchunkRequestKeys.clear();
     this.lastWorldAt = this.clock();
     this.spawned = false;
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
@@ -426,6 +441,30 @@ class BedrockGameplayBridge {
     const survival = this.layerFour?.observeVitals(values);
     if (firstWarning || survival?.becameCritical || this.layerFour?.critical) this.movement?.stop();
   }
+  positionStatus() {
+    const age = this.lastServerPositionAt == null
+      ? null : this.clock() - this.lastServerPositionAt;
+    const motion = this.movement?.snapshot?.() ?? {};
+    const sessionReady = !this.closed && this.spawned && this.self != null &&
+      this.position != null && Number.isInteger(this.dimension) &&
+      [1, 2].includes(this.movementAuthority) &&
+      typeof this.serverTick === 'bigint' && this.receivedChunks.size > 0;
+    if (!sessionReady || age == null || !Number.isFinite(age) || age < 0)
+      return { usable: false, mode: 'position_unknown', ageMs: age };
+    if (motion.unconfirmedMovement === true)
+      return { usable: false, mode: 'awaiting_server_position', ageMs: age };
+    if (age <= 7000)
+      return { usable: true, mode: 'server_fresh', ageMs: age };
+    // Bedrock may stay silent when the predicted input needs no correction.
+    // Preserve the original server anchor for this live session while neutral
+    // presence continues and no non-neutral input has been sent.
+    if (motion.presenceActive === true &&
+        Number.isInteger(motion.presenceFrames) && motion.presenceFrames > 0)
+      return { usable: true, mode: 'idle_spawn_anchor', ageMs: age };
+    return { usable: false, mode: 'server_position_stale', ageMs: age };
+  }
+  positionUsable() { return this.positionStatus().usable; }
+  isIdlePositionAnchor() { return this.positionStatus().mode === 'idle_spawn_anchor'; }
   gameplayWorld() {
     return { position: this.position, dimension: this.dimension, spawned: this.spawned,
       chunks: this.receivedChunks.size,
@@ -437,6 +476,8 @@ class BedrockGameplayBridge {
     return {
       spawned: this.spawned, hasSelfEntity: this.self != null,
       hasPosition: this.position !== null, positionAgeMs: age,
+      positionUsable: this.positionUsable(),
+      idlePositionAnchor: this.isIdlePositionAnchor(),
       receivedChunkHeaders: this.receivedChunks.size,
       movementAuthority: this.movementAuthority,
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
@@ -575,6 +616,51 @@ class BedrockGameplayBridge {
     if (this.receivedChunks.size > MAX_CHUNKS) this.receivedChunks.delete(this.receivedChunks.keys().next().value);
     this.lastWorldAt = this.clock();
   }
+
+  requestLocalSubchunks(packet) {
+    if (this.closed || typeof this.client.queue !== 'function' || !packet ||
+        !Number.isInteger(packet.x) || !Number.isInteger(packet.z) ||
+        !Number.isInteger(packet.sub_chunk_count) ||
+        ![0xffffffff, -1].includes(packet.sub_chunk_count)) return false;
+    const dimension = validDimension(packet.dimension);
+    const position = this.position;
+    if (dimension == null || dimension !== this.dimension || !finitePosition(position))
+      return false;
+    // Bedrock 1.26.x skeleton LevelChunks use UINT32_MAX as their subchunk
+    // count. They carry no voxel payload: clients must request subchunks.
+    // Request only five vertical sections of this chunk column around the bot.
+    // Protocol 2225 requires the player's absolute SubChunk position as
+    // the request center. LevelChunk x/z are chunk coordinates, so express
+    // the target chunk column as a bounded relative offset from that center.
+    const center = {
+      x: Math.floor(position.x / 16),
+      y: Math.floor(position.y / 16),
+      z: Math.floor(position.z / 16)
+    };
+    const dx = packet.x - center.x;
+    const dz = packet.z - center.z;
+    if (![center.x, center.y, center.z, dx, dz].every(Number.isInteger) ||
+        Math.abs(center.x) > 1875000 || Math.abs(center.z) > 1875000 ||
+        Math.abs(dx) > 127 || Math.abs(dz) > 127 ||
+        center.y < -16 || center.y > 32) return false;
+    const key = [dimension, packet.x, center.y, packet.z].join(':');
+    const now = this.clock();
+    const previous = this.subchunkRequestKeys.get(key);
+    if (Number.isFinite(previous) && now - previous >= 0 && now - previous < 15000)
+      return false;
+    const requests = [-2, -1, 0, 1, 2].map(y => ({ x: dx, y, z: dz }));
+    try {
+      this.client.queue('subchunk_request', { dimension, requests, origin: center });
+      this.subchunkRequestKeys.set(key, now);
+      while (this.subchunkRequestKeys.size > 128)
+        this.subchunkRequestKeys.delete(this.subchunkRequestKeys.keys().next().value);
+      this.subchunkRequestsSent++;
+      return true;
+    } catch {
+      this.subchunkRequestErrors++;
+      return false;
+    }
+  }
   move(packet) {
     if (this.closed || !packet) return;
     const id = ident(packet.runtime_entity_id ?? packet.runtime_id);
@@ -652,6 +738,7 @@ class BedrockGameplayBridge {
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.receivedChunks.clear();
+    this.subchunkRequestKeys.clear();
     this.players.clear();
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
     else this.movement?.stop();
@@ -717,6 +804,8 @@ class BedrockGameplayBridge {
     const result=this.intelligence.decide({
       life,position:this.position,dimension:this.dimension,spawned:this.spawned,
       respawnState:this.respawnRecovery.state,positionAgeMs:age,
+      positionUsable:this.positionUsable(),
+      idlePositionAnchor:this.isIdlePositionAnchor(),
       terrainReady:(this.terrain?.snapshot()?.decodedSections??0)>0,
       safetyHold:this.gameplayWorld().safetyHold
     });
@@ -751,6 +840,10 @@ class BedrockGameplayBridge {
       dimension: this.dimension,
       visiblePlayers: this.players.size,
       loadedChunkHeaders: this.receivedChunks.size,
+      subchunkRequestsSent: this.subchunkRequestsSent,
+      subchunkRequestErrors: this.subchunkRequestErrors,
+      blockNetworkIdsAreHashes: this.blockNetworkIdsAreHashes,
+      serverCustomBlockPropertiesCount: this.serverCustomBlockPropertiesCount,
       // A chunk header does NOT prove decoded, navigable block/voxel data.
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
@@ -809,7 +902,7 @@ class BedrockGameplayBridge {
     }
     if (this.closed) return { status: 'rejected', reason: 'session_closed' };
     if (this.gameplayAgent?.snapshot()?.active && ![
-      'status','inspect','agent_stop','autonomy_stop','stop_movement','advisor_review','learning_stop','learning_autopilot_stop','odyssey_observe'
+      'status','inspect','agent_stop','autonomy_stop','stop_movement','manual_move','manual_stop','advisor_review','learning_stop','learning_autopilot_stop','odyssey_observe'
     ].includes(raw.action))
       return {status:'rejected',reason:'gameplay_agent_busy_stop_first'};
     // Layer 8 enforces a fresh authenticated world for *new* plans.
@@ -1066,6 +1159,32 @@ class BedrockGameplayBridge {
       this.blockBreaker?.abort('user_stop');
       this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
+    }
+    if (raw.action === 'manual_stop') {
+      this.movement?.stop?.('manual_control_released');
+      return { status: 'ok', reason: 'manual_control_released' };
+    }
+    if (raw.action === 'manual_move') {
+      if (raw.confirmed !== true)
+        return { status: 'rejected', reason: 'confirmation_required' };
+      if (!['forward','backward','strafe_left','strafe_right','turn_left','turn_right'].includes(raw.mode) ||
+          !Number.isInteger(raw.ticks) || raw.ticks < 1 || raw.ticks > 8)
+        return { status: 'rejected', reason: 'unsupported_manual_input' };
+      if (this.blockBreaker?.snapshot()?.active)
+        return { status: 'rejected', reason: 'block_action_busy' };
+      if (this.layerOne?.snapshot()?.safetyHold)
+        return { status: 'rejected', reason: 'critical_health' };
+      if (this.layerFour?.critical)
+        return { status: 'rejected', reason: 'survival_hold' };
+      if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
+        return { status: 'rejected', reason: 'autonomous_controller_busy' };
+      if (!this.movement || this.movement.capability(this) !== 'experimental' ||
+          typeof this.movement.runManualHold !== 'function')
+        return { status: 'rejected', reason: 'movement_unavailable' };
+      // Every refresh updates the existing manual hold. The input writer keeps
+      // one prediction origin and one server-tick stream until explicit STOP
+      // or the 1.1s UI keepalive watchdog expires.
+      return this.movement.runManualHold(this, { mode: raw.mode, ticks: raw.ticks });
     }
     if (raw.action === 'motion_diagnostic') {
       if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};

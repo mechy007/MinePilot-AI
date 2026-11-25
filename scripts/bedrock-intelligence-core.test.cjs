@@ -33,6 +33,39 @@ test('intelligence chooses death, stale packet state, low health, threat, hunger
     nearbyEntities:[{hostile:true,distance:3}],localTerrain:{unknown:0,hazard:0,status:'observed'}}})).action,'seek_safety');
   assert.equal(brain.decide(obs({respawnState:'dead_waiting_for_server'})).action,'await_respawn');
 });
+test('idle spawn anchor is usable for previews but never labeled server-verified',()=>{
+  const brain=new MinePilotIntelligence({clock:()=>100});
+  brain.reset(0);
+  const snapshot=brain.decide(obs({
+    positionAgeMs:12000,
+    positionUsable:true,
+    idlePositionAnchor:true
+  }));
+  assert.equal(snapshot.action,'observe');
+  assert.equal(snapshot.positionUsable,true);
+  assert.equal(snapshot.positionMode,'idle_spawn_anchor');
+  assert.equal(snapshot.verifiedWorld,false);
+  assert.equal(brain.decide(obs({
+    positionAgeMs:12000,
+    positionUsable:false,
+    idlePositionAnchor:false
+  })).reason,'world_state_stale');
+});
+
+test('movement input invalidates even a numerically recent server position timestamp',()=>{
+  const brain=new MinePilotIntelligence({clock:()=>100});
+  brain.reset(0);
+  const snapshot=brain.decide(obs({
+    positionAgeMs:100,
+    positionUsable:false,
+    idlePositionAnchor:false
+  }));
+  assert.equal(snapshot.positionMode,'stale');
+  assert.equal(snapshot.positionUsable,false);
+  assert.equal(snapshot.verifiedWorld,false);
+  assert.equal(snapshot.reason,'world_state_stale');
+});
+
 test('memory, history, and decisions remain bounded and reset across dimensions',()=>{
   let t=100;
   const brain=new MinePilotIntelligence({clock:()=>t++});
@@ -80,8 +113,13 @@ test('Bedrock session bridge presents real intelligence status and stops active 
     movement,autonomy,lifeSenses:life,intelligence:brain,clock:()=>1000
   }).start();
   client.emit('start_game',{runtime_entity_id:123n,
-    player_position:{x:1,y:65,z:1},dimension:0,rotation:{x:0,z:0}});
-  client.emit('spawn');commands.length=0;stopped.length=0;
+    player_position:{x:1,y:65,z:1},dimension:0,rotation:{x:0,z:0},
+    current_tick:100n,movement_authority:1});
+  client.emit('spawn');
+  // Intelligence requires a complete live-session position context: StartGame,
+  // spawn, a current server tick, movement authority and an observed chunk.
+  client.emit('level_chunk',{x:0,z:0,dimension:0});
+  commands.length=0;stopped.length=0;
   client.emit('update_attributes',{runtime_entity_id:123n,
     attributes:[{name:'minecraft:health',current:20}]});
   client.emit('add_actor',{runtime_entity_id:100n,

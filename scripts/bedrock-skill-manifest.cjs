@@ -31,10 +31,12 @@ function evaluateCapabilities(world) {
   const terrain=world?.terrain?.snapshot?.()??{};
   const navigate=ready&&terrain.collisionClassificationReady===true &&
     world?.movement?.capability?.(world)==='experimental' &&
-    world?.lastServerPositionAt!=null &&
-    Number.isFinite(world?.clock?.()-world.lastServerPositionAt) &&
-    world.clock()-world.lastServerPositionAt>=0 &&
-    world.clock()-world.lastServerPositionAt<=7000 &&
+    (typeof world?.positionUsable === 'function'
+      ? world.positionUsable()
+      : world?.lastServerPositionAt!=null &&
+        Number.isFinite(world?.clock?.()-world.lastServerPositionAt) &&
+        world.clock()-world.lastServerPositionAt>=0 &&
+        world.clock()-world.lastServerPositionAt<=7000) &&
     [1,2].includes(world?.movementAuthority);
   const layer2=ready?world?.layerTwo?.snapshot?.(world.gameplayWorld()):null;
   const resources=ready?world?.layerThree?.snapshot?.(world.gameplayWorld()):null;

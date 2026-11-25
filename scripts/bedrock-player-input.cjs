@@ -12,6 +12,12 @@ const { AuthInputTickClock, TICK_MS: INPUT_TICK_MS } = require('./bedrock-auth-i
 const PROBE_TICKS = 6;
 const PROBE_STEP = 0.065; // User-confirmed diagnostic only.
 const VERIFIED_STEP = 0.11; // Conservative flat-ground target, not full Bedrock physics.
+const MANUAL_INPUTS = Object.freeze({
+  forward: { vector: { x: 0, z: 1 }, flag: 10 },
+  backward: { vector: { x: 0, z: -1 }, flag: 11 },
+  strafe_left: { vector: { x: -1, z: 0 }, flag: 12 },
+  strafe_right: { vector: { x: 1, z: 0 }, flag: 13 }
+});
 // A stopped client may receive no periodic self-position echoes. The probe is
 // still explicitly confirmed and only allowed shortly after a real StartGame.
 const MAX_FRESH_MS = 30_000;
@@ -27,32 +33,40 @@ function buildInputPacket(position, yaw, tick, moving, options = {}) {
   const pitch = Number.isFinite(options.pitch) && Math.abs(options.pitch)<=90
     ? options.pitch : 0;
   const vertical = pitch * Math.PI / 180;
-  const shift = moving ? { x: -Math.sin(angle) * step, y: 0, z: Math.cos(angle) * step }
-    : { x: 0, y: 0, z: 0 };
+  const vector = options.moveVector ?? (moving ? { x: 0, z: 1 } : { x: 0, z: 0 });
+  if (!Number.isFinite(vector.x) || !Number.isFinite(vector.z) ||
+      Math.abs(vector.x) > 1 || Math.abs(vector.z) > 1)
+    throw new TypeError('Invalid local movement vector');
+  // Bedrock move_vector is camera-relative: +Z forward, +X right.
+  const shift = moving ? {
+    x: (vector.x * Math.cos(angle) - vector.z * Math.sin(angle)) * step,
+    y: 0,
+    z: (vector.x * Math.sin(angle) + vector.z * Math.cos(angle)) * step
+  } : { x: 0, y: 0, z: 0 };
   const predicted = { x: position.x + shift.x, y: position.y, z: position.z + shift.z };
-  const forward = moving ? 1 : 0;
+  const inputFlag = Number.isInteger(options.inputFlag) ? options.inputFlag : moving ? 10 : null;
   return {
     pitch,
     yaw: normalYaw(yaw),
     head_yaw: normalYaw(yaw),
     position: predicted,
-    move_vector: { x: 0, z: forward },
+    move_vector: { x: vector.x, z: vector.z },
     // Protocol 2225 represents InputData as a list of enum ordinals, not a bitfield.
-    input_data: moving ? [10] : [],
+    input_data: inputFlag == null ? [] : [inputFlag],
     input_mode: 'touch',
     play_mode: 'normal',
     interaction_model: 1,
     interact_rotation: { x: pitch, z: normalYaw(yaw) },
     tick,
     delta: shift,
-    analogue_move_vector: { x: 0, z: forward },
+    analogue_move_vector: { x: vector.x, z: vector.z },
     // Protocol 2225 requires a world-space unit forward vector, not an
     // all-zero placeholder that cannot represent any look direction.
     camera_orientation: { x: Math.sin(angle)===0?0:
       -Math.sin(angle)*Math.cos(vertical),
       y: Math.sin(vertical)===0?0:-Math.sin(vertical),
       z: Math.cos(angle)*Math.cos(vertical) },
-    raw_move_vector: { x: 0, z: forward }
+    raw_move_vector: { x: vector.x, z: vector.z }
   };
 }
 
@@ -94,6 +108,51 @@ class ExperimentalPlayerInput {
     this.initialPosition = null;
     this.maxDrift = 0;
     this.recentCorrectionCount = 0;
+    this.manualHoldActive = false;
+    this.manualHoldDeadline = 0;
+    this.unconfirmedMovement = false;
+    this.manualAnchor = null;
+    this.manualAnchorWorld = null;
+    this.manualAnchorDimension = null;
+  }
+  /** Update or start one continuous user-held control stream. */
+  runManualHold(world, options = {}) {
+    const mode = options.mode ?? '';
+    const ticks = options.ticks ?? 8;
+    if (!['forward','backward','strafe_left','strafe_right','turn_left','turn_right'].includes(mode) ||
+        !Number.isInteger(ticks) || ticks < 1 || ticks > 8)
+      return {status:'rejected',reason:'unsupported_manual_input'};
+
+    const now = this.clock();
+    if (this.timer && this.manualHoldActive) {
+      if (this.world !== world || now > this.manualHoldDeadline) {
+        this.stop('manual_input_timeout');
+        return {status:'rejected',reason:'manual_hold_expired'};
+      }
+      if (this.capability(world) !== 'experimental')
+        return {status:'rejected',reason:'movement_unavailable'};
+      // Keep the same prediction origin and tick writer while changing
+      // direction. Re-starting every half-second would rewind to an old
+      // server position on worlds that do not echo every accepted input.
+      this.mode = mode;
+      this.remaining = Math.max(this.remaining, 10);
+      this.manualHoldDeadline = now + 1100;
+      return {status:'accepted',reason:'manual_hold_updated'};
+    }
+    if (this.timer) return {status:'rejected',reason:'movement_busy'};
+
+    const initialPosition = this.manualAnchorWorld === world &&
+      this.manualAnchorDimension === world.dimension && finite3(this.manualAnchor)
+        ? { ...this.manualAnchor } : { ...world.position };
+    const started = this.runDiagnostic(world, {
+      mode,ticks:20,manualHold:true,initialPosition
+    });
+    if (started.status === 'accepted') {
+      this.manualHoldActive = true;
+      this.manualHoldDeadline = now + 1100;
+      this.remaining = 20;
+    }
+    return started;
   }
   /** Continuous *neutral* PlayerAuthInput; no client-predicted locomotion. */
   startPresence(world) {
@@ -173,15 +232,19 @@ class ExperimentalPlayerInput {
   runDiagnostic(world, options = {}) {
     const mode = options.mode ?? 'forward';
     const ticks = options.ticks ?? PROBE_TICKS;
-    if (!['forward', 'turn_left', 'turn_right'].includes(mode) ||
-        !Number.isInteger(ticks) || ticks < 1 || ticks > 20)
+    const manualHold = options.manualHold === true;
+    if (!['forward', 'backward', 'strafe_left', 'strafe_right',
+        'turn_left', 'turn_right'].includes(mode) ||
+        !Number.isInteger(ticks) || ticks < 1 || ticks > 20 ||
+        (manualHold && ticks !== 20))
       return { status: 'rejected', reason: 'unsupported_diagnostic' };
     if (this.capability(world) !== 'experimental')
       return { status: 'rejected', reason: 'movement_unavailable' };
     if (this.timer) return { status: 'rejected', reason: 'movement_busy' };
     this.remaining = ticks;
-    this.predicted = { ...world.position };
-    this.initialPosition = { ...world.position };
+    const origin = finite3(options.initialPosition) ? options.initialPosition : world.position;
+    this.predicted = { ...origin };
+    this.initialPosition = { ...origin };
     this.lastServerPosition = { ...world.position };
     this.lastServerPositionAt = world.lastServerPositionAt;
     if(!this.tickClock.seed(world.serverTick,world.serverTickObservedAt??this.clock()))
@@ -202,7 +265,16 @@ class ExperimentalPlayerInput {
     this.lastEndReason = 'in_progress';
     const send = () => {
       if (!this.timer) return;
-      if (this.remaining <= 0) { this.stop('bounded_sequence_complete'); return; }
+      if (this.manualHoldActive) {
+        if (this.clock() > this.manualHoldDeadline) {
+          this.stop('manual_input_timeout');
+          return;
+        }
+        if (this.remaining <= 0) this.remaining = 20;
+      } else if (this.remaining <= 0) {
+        this.stop('bounded_sequence_complete');
+        return;
+      }
       if (this.capability(world) !== 'experimental') {
         this.stop('authority_or_session_lost');
         return;
@@ -213,17 +285,22 @@ class ExperimentalPlayerInput {
       }
       // A stop must not depend on a future user request. The session can
       // be paused or killed by the OS, so guard wall time as well as ticks.
-      if (this.clock() - this.startedAt > Math.max(2500, ticks * this.interval + 500)) {
+      if (!this.manualHoldActive &&
+          this.clock() - this.startedAt > Math.max(2500, ticks * this.interval + 500)) {
         this.stop('deadline_exceeded');
         return;
       }
       try {
         const nextTick = this.tickClock.next();
-        const isMoving = this.mode === 'forward';
+        const movementInput = MANUAL_INPUTS[this.mode];
+        const isMoving = movementInput != null;
         const yaw = this.mode === 'turn_left' ? this.lastYaw - 5
           : this.mode === 'turn_right' ? this.lastYaw + 5 : this.lastYaw;
-        const packet = buildInputPacket(this.predicted, yaw, nextTick, isMoving,
-          {pitch:world.pitch,step:this.predictionStep});
+        const packet = buildInputPacket(this.predicted, yaw, nextTick, isMoving, {
+          pitch:world.pitch, step:this.predictionStep,
+          moveVector:movementInput?.vector ?? {x:0,z:0},
+          inputFlag:movementInput?.flag
+        });
         if(isMoving&&this.requireVerifiedTerrain &&
           !this.verifiedFlatFootprint(world,this.predicted,packet.position)){
           this.stop('unverified_or_blocked_next_step');
@@ -232,6 +309,7 @@ class ExperimentalPlayerInput {
         // No jump, flight or speculative vertical physics. Use decoded
         // walkable AABB footprint for this bounded flat movement segment.
         this.client.queue('player_auth_input', packet);
+        if (isMoving) this.unconfirmedMovement = true;
         this.lastTick = nextTick;
         this.lastYaw = yaw;
         this.predicted = packet.position;
@@ -293,9 +371,15 @@ class ExperimentalPlayerInput {
   }
   /** Only the server's report is an observation, not bot-action confirmation. */
   observeServerPosition(position, observedAt) {
-    if (!this.timer || !finite3(position)) return;
+    if (!finite3(position)) return;
     this.lastServerPosition = { ...position };
     this.lastServerPositionAt = observedAt;
+    this.unconfirmedMovement = false;
+    if (this.manualAnchorWorld &&
+        this.manualAnchorDimension === this.manualAnchorWorld.dimension) {
+      this.manualAnchor = { ...position };
+    }
+    if (!this.timer) return;
     this.serverUpdates++;
     if (finite3(this.predicted)) {
       const drift = Math.hypot(position.x - this.predicted.x, position.y - this.predicted.y,
@@ -312,7 +396,10 @@ class ExperimentalPlayerInput {
     // Reconcile the shared input clock even during neutral presence; previous
     // implementation ignored every correction unless movement was running.
     if(typeof tick==='bigint')this.tickClock.correction(tick);
-    if (!this.timer) return;
+    if (!this.timer) {
+      if (finite3(position)) this.observeServerPosition(position, this.clock());
+      return;
+    }
     this.corrections++;
     if (finite3(position)) {
       // Correction is a stronger input to the next predicted frame.
@@ -325,6 +412,7 @@ class ExperimentalPlayerInput {
   stop(reason = 'user_stopped', opts = {}) {
     this.blockExecutor?.abort?.('movement_stopped');
     const active = this.timer != null;
+    const wasManualHold = this.manualHoldActive;
     if (this.timer) this.clearInterval(this.timer);
     this.timer = null;
     this.remaining = 0;
@@ -335,23 +423,33 @@ class ExperimentalPlayerInput {
         finite3(world.position) && this.predicted && this.lastTick != null) {
       try {
         const neutralTick = this.tickClock.next();
-        // On stopping, never echo a speculative locomotion position back to the
-        // server. Prefer the latest authoritative world position (which may
-        // have been corrected during the diagnostic), then the observed
-        // position from the last server packet. Predicted coordinates are
-        // valid only while the bounded input probe is running.
-        const neutralPosition = finite3(world.position)
-          ? world.position : finite3(this.lastServerPosition)
-            ? this.lastServerPosition : null;
+        // For a user-held manual stream, keep the last predicted input
+        // position when neutralizing. Rewinding to an older server anchor
+        // after a quiet (no-correction) movement session would undo the
+        // position carried by the preceding PlayerAuthInput frames. A server
+        // correction observed during the hold already overwrites predicted.
+        const neutralPosition = wasManualHold && finite3(this.predicted)
+          ? this.predicted : finite3(world.position)
+            ? world.position : finite3(this.lastServerPosition)
+              ? this.lastServerPosition : null;
         if (neutralPosition) this.client.queue('player_auth_input',
           buildInputPacket(neutralPosition, this.lastYaw, neutralTick, false,
             {pitch:world.pitch}));
         this.lastTick = neutralTick;
       } catch { this.errors++; }
     }
+    if (wasManualHold &&
+        ['manual_control_released','manual_input_timeout'].includes(reason) &&
+        world && !world.closed && finite3(this.predicted)) {
+      this.manualAnchor = { ...this.predicted };
+      this.manualAnchorWorld = world;
+      this.manualAnchorDimension = world.dimension;
+    }
     this.predicted = null;
     this.world = null;
     this.mode = null;
+    this.manualHoldActive = false;
+    this.manualHoldDeadline = 0;
     this.requireVerifiedTerrain=false;
     this.predictionStep=PROBE_STEP;
   }
@@ -365,6 +463,10 @@ class ExperimentalPlayerInput {
     this.initialPosition = null;
     this.lastServerPosition = null;
     this.lastServerPositionAt = null;
+    this.unconfirmedMovement = false;
+    this.manualAnchor = null;
+    this.manualAnchorWorld = null;
+    this.manualAnchorDimension = null;
     this.framesSent = 0;
     this.serverUpdates = 0;
     this.corrections = 0;
@@ -385,6 +487,7 @@ class ExperimentalPlayerInput {
       presenceError: this.presenceError,
       active: this.timer != null,
       framesSent: this.framesSent,
+      unconfirmedMovement: this.unconfirmedMovement,
       serverUpdates: this.serverUpdates,
       corrections: this.corrections,
       maxDrift: Math.round(this.maxDrift * 1000) / 1000,

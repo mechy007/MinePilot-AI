@@ -8,6 +8,7 @@ const { test } = require('node:test');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { learningEngineFor, odysseyCapabilityStates } = require('./bedrock-skill-manifest.cjs');
 const { ExperimentalPlayerInput, buildInputPacket } = require('./bedrock-player-input.cjs');
+const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
 
 class Client extends EventEmitter {
   sent = [];
@@ -1376,4 +1377,254 @@ test('bridge mirrors full Bedrock inventory content and incremental slots withou
     worldReady: true, localNavigationReady: false, skills: []
   }).inventory_read.state, 'partial');
   bridge.stop();
+});
+
+
+test('1.26.60 subchunk batches decode center-relative offsets and all-air results', () => {
+  const terrain = new BedrockTerrainCache();
+  terrain.reset(0);
+  terrain.setRegistry(new Map([[0, { name: 'minecraft:air', boundingBox: 'empty' }]]));
+  const payload = Buffer.from([9, 1, 5, 1, 1, 0]);
+  const decoded = terrain.subChunk({
+    dimension: 0,
+    center: { x: 3, y: 4, z: 2 },
+    entries: [{
+      sub_chunk_pos_offset: { x: 1, y: 1, z: 1 },
+      result: 1,
+      payload
+    }, {
+      sub_chunk_pos_offset: { x: 0, y: 2, z: 0 },
+      result: 6
+    }]
+  });
+  assert.equal(decoded, 2);
+  assert.equal(terrain.snapshot().decodedSections, 2);
+  assert.equal(terrain.blockId(0, 64, 80, 48), 0,
+    'center plus relative offset resolves the expected subchunk column');
+  assert.equal(terrain.blockName(0, 64, 80, 48), 'minecraft:air');
+  assert.equal(terrain.blockId(0, 48, 96, 32), 0,
+    'SuccessAllAir uses the registry air runtime ID without an absent payload');
+});
+
+test('the live bridge forwards official subchunk packets into its terrain cache', () => {
+  const client = new Client();
+  const terrain = new BedrockTerrainCache();
+  const bridge = new BedrockGameplayBridge(client, {
+    terrain,
+    registryResolver: () => new Map([[0, { name: 'minecraft:air', boundingBox: 'empty' }]])
+  }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  client.emit('subchunk', {
+    dimension: 0,
+    center: { x: 0, y: 4, z: 0 },
+    entries: [{
+      sub_chunk_pos_offset: { x: 0, y: 0, z: 0 },
+      result: 1,
+      payload: Buffer.from([9, 1, 4, 1, 1, 0])
+    }]
+  });
+  assert.equal(bridge.snapshot().terrain.decodedSections, 1);
+  assert.equal(bridge.snapshot().terrain.collisionClassificationReady, true);
+  bridge.stop();
+});
+
+test('manual D-pad directions serialize independent forward, backward and strafe inputs', () => {
+  const client = new Client();
+  let now = 1000;
+  let pulse = null;
+  const movement = new ExperimentalPlayerInput(client, true, {
+    clock: () => now,
+    setInterval: callback => { pulse = callback; return 1; },
+    clearInterval: () => {}
+  });
+  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
+  initialized(client, bridge);
+  const expected = [
+    ['forward', { x: 0, z: 1 }, 10],
+    ['backward', { x: 0, z: -1 }, 11],
+    ['strafe_left', { x: -1, z: 0 }, 12],
+    ['strafe_right', { x: 1, z: 0 }, 13]
+  ];
+  for (const [mode, vector, flag] of expected) {
+    initialized(client, bridge);
+    const result = bridge.execute({
+      version: 'minepilot.gameplay.v1', requestId: mode,
+      action: 'manual_move', confirmed: true, mode, ticks: 2
+    });
+    assert.equal(result.status, 'accepted', mode);
+    now += 50;
+    pulse();
+    const frame = client.sent.at(-1).value;
+    assert.deepEqual(frame.move_vector, vector, mode);
+    assert.deepEqual(frame.raw_move_vector, vector, mode);
+    assert.deepEqual(frame.input_data, [flag], mode);
+    bridge.execute({
+      version: 'minepilot.gameplay.v1', requestId: mode + '-release',
+      action: 'manual_stop'
+    });
+    assert.equal(movement.snapshot().active, false, mode);
+  }
+  bridge.stop();
+});
+
+test('manual movement is still blocked by missing authority, critical health and the active autonomous agent', () => {
+  const client = new Client();
+  let pulse;
+  const movement = new ExperimentalPlayerInput(client, false, {
+    setInterval: callback => { pulse = callback; return 1; },
+    clearInterval: () => {}
+  });
+  const bridge = new BedrockGameplayBridge(client, {
+    movement,
+    gameplayAgent: { snapshot: () => ({ active: true }), stop() {} }
+  }).start();
+  initialized(client, bridge);
+  const base = {
+    version: 'minepilot.gameplay.v1', requestId: 'manual-test',
+    action: 'manual_move', confirmed: true, mode: 'forward', ticks: 4
+  };
+  assert.equal(bridge.execute(base).reason, 'autonomous_controller_busy');
+  bridge.gameplayAgent = { snapshot: () => ({ active: false }), stop() {} };
+  assert.equal(bridge.execute({ ...base, requestId: 'manual-disabled' }).reason, 'movement_unavailable');
+  bridge.stop();
+});
+
+test('manual look controls rotate camera without translating the bot', () => {
+  const client = new Client();
+  let now = 1000;
+  let pulse = null;
+  const movement = new ExperimentalPlayerInput(client, true, {
+    clock: () => now,
+    setInterval: callback => { pulse = callback; return 1; },
+    clearInterval: () => {}
+  });
+  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
+  initialized(client, bridge);
+  for (const [mode, yaw] of [['turn_left', 355], ['turn_right', 5]]) {
+    initialized(client, bridge);
+    const result = bridge.execute({
+      version: 'minepilot.gameplay.v1', requestId: mode,
+      action: 'manual_move', confirmed: true, mode, ticks: 2
+    });
+    assert.equal(result.status, 'accepted');
+    now += 50;
+    pulse();
+    const frame = client.sent.at(-1).value;
+    assert.deepEqual(frame.move_vector, { x: 0, z: 0 });
+    assert.deepEqual(frame.input_data, []);
+    assert.equal(frame.yaw, yaw);
+    bridge.execute({ version: 'minepilot.gameplay.v1', requestId: mode + '-stop', action: 'manual_stop' });
+  }
+  bridge.stop();
+});
+
+test('vanilla runtime registry refuses hashed IDs but retains known states beside custom definitions', () => {
+  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
+    require('./bedrock-runtime-registry.cjs');
+  clearRuntimeRegistryCache();
+  const load = () => ({ blocks: [
+    { minStateId: 0, maxStateId: 1000, name: 'air', boundingBox: 'empty' }
+  ] });
+  const hashedRegistry = createVanillaRuntimeRegistry({
+    server_version: '1.26.66.1', block_network_ids_are_hashes: true
+  });
+  assert.ok(hashedRegistry instanceof Map);
+  assert.equal(hashedRegistry.get((-2144268767) >>> 0).name, 'minecraft:stone');
+  // This fixture loader is intentionally synthetic. Real production
+  // registries are sourced from the pinned palette and fail closed on custom IDs.
+  const customRegistry = createVanillaRuntimeRegistry({
+    server_version: '1.26.60',
+    block_properties: [{ name: 'custom:example', states: {} }]
+  }, load);
+  assert.equal(customRegistry.size, 1001);
+  assert.equal(customRegistry.get(0).name, 'minecraft:air');
+  assert.equal(customRegistry.get(1001), undefined,
+    'custom states without a verified numeric mapping remain unknown');
+  clearRuntimeRegistryCache();
+});
+
+
+test('idle spawn anchor stays usable only with neutral presence and no unconfirmed movement', () => {
+  let now = 1000;
+  const client = new Client();
+  const motion = {
+    presenceActive: true,
+    presenceFrames: 20,
+    unconfirmedMovement: false
+  };
+  const bridge = new BedrockGameplayBridge(client, {
+    clock: () => now,
+    movement: { snapshot: () => motion }
+  });
+  bridge.spawned = true;
+  bridge.closed = false;
+  bridge.self = '123';
+  bridge.position = { x: 33.25, y: 70.5, z: -17.75 };
+  bridge.dimension = 0;
+  bridge.movementAuthority = 1;
+  bridge.serverTick = 120n;
+  bridge.receivedChunks.set('0:2:-2', now);
+  bridge.lastServerPositionAt = now;
+
+  now += 6 * 60 * 1000;
+  assert.deepEqual(bridge.positionStatus(), {
+    usable: true, mode: 'idle_spawn_anchor', ageMs: 360000
+  }, 'neutral presence preserves the original anchor across long idle periods');
+
+  motion.unconfirmedMovement = true;
+  assert.equal(bridge.positionUsable(), false,
+    'queued non-neutral input invalidates the idle anchor');
+  assert.equal(bridge.positionStatus().mode, 'awaiting_server_position');
+
+  motion.unconfirmedMovement = false;
+  bridge.lastServerPositionAt = now;
+  assert.equal(bridge.positionStatus().mode, 'server_fresh',
+    'a new server position report restores current position freshness');
+
+  now += 31000;
+  motion.presenceFrames = 0;
+  assert.equal(bridge.positionUsable(), false,
+    'stale position without neutral presence cannot be used as an anchor');
+});
+
+test('Bedrock 1.26.60 skeleton chunks trigger a bounded and deduplicated local subchunk request', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  client.emit('start_game', { ...start, player_position: { x: 33.25, y: 70.5, z: -17.75 } });
+  const header = { x: 2, z: -2, dimension: 0, sub_chunk_count: 0xffffffff };
+  client.emit('level_chunk', header);
+  const request = client.sent.find(item => item.packet === 'subchunk_request');
+  assert.ok(request, 'skeleton chunk requests actual block subchunks');
+  assert.equal(request.value.dimension, 0);
+  assert.deepEqual(request.value.origin, { x: 2, y: 4, z: -2 });
+  assert.deepEqual(request.value.requests, [
+    { x: 0, y: -2, z: 0 }, { x: 0, y: -1, z: 0 },
+    { x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 },
+    { x: 0, y: 2, z: 0 }
+  ]);
+  assert.equal(bridge.snapshot().subchunkRequestsSent, 1);
+  client.emit('level_chunk', header);
+  assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 1,
+    'repeated skeleton chunk headers do not flood the server');
+  now += 15001;
+  client.emit('level_chunk', header);
+  assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 2,
+    'a new request can be retried after the cooldown');
+  bridge.stop();
+});
+
+test('subchunk request packet shape is accepted by the pinned Bedrock 1.26.60 serializer', () => {
+  const { createSerializer } = require('bedrock-protocol/src/transforms/serializer');
+  const serializer = createSerializer('1.26.60');
+  const buffer = serializer.createPacketBuffer({
+    name: 'subchunk_request',
+    params: {
+      dimension: 0,
+      requests: [{ x: 0, y: -2, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 }],
+      origin: { x: 2, y: 4, z: -2 }
+    }
+  });
+  assert.ok(Buffer.isBuffer(buffer) && buffer.length > 10);
 });

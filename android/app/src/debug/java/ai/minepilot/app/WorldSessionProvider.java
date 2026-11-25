@@ -131,6 +131,14 @@ public final class WorldSessionProvider extends ContentProvider {
                         }
                     }
                 }
+                result.putInt("subchunk_requests_sent",
+                        Math.max(0, Math.min(100000, gameplay.optInt("subchunkRequestsSent", 0))));
+                result.putInt("subchunk_request_errors",
+                        Math.max(0, Math.min(100000, gameplay.optInt("subchunkRequestErrors", 0))));
+                result.putBoolean("block_network_ids_are_hashes",
+                        gameplay.optBoolean("blockNetworkIdsAreHashes", false));
+                result.putInt("server_custom_block_properties",
+                        Math.max(0, Math.min(1024, gameplay.optInt("serverCustomBlockPropertiesCount", 0))));
                 JSONObject agent = gameplay.optJSONObject("gameplayAgent");
                 if (agent != null) {
                     result.putBoolean("agent_active", agent.optBoolean("active",false));
@@ -261,6 +269,11 @@ public final class WorldSessionProvider extends ContentProvider {
                             intelligence.optInt("decisionCount", 0)));
                     result.putBoolean("brain_world_verified",
                             intelligence.optBoolean("verifiedWorld", false));
+                    String positionMode = intelligence.optString("positionMode", "stale");
+                    if (positionMode.matches("[a-z_]{1,32}"))
+                        result.putString("brain_position_mode", positionMode);
+                    result.putBoolean("brain_position_usable",
+                            intelligence.optBoolean("positionUsable", false));
                     JSONObject outcomes = intelligence.optJSONObject("outcomes");
                     if (outcomes != null) {
                         result.putInt("brain_verified_steps", Math.max(0,
@@ -609,7 +622,8 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"plan_craft_planks".equals(action) && !"plan_workflow".equals(action) &&
                 !"review_checkpoint".equals(action) && !"advisor_mode".equals(action) &&
                 !"advisor_review".equals(action) &&
-                !"stop_movement".equals(action) && !"probe_step".equals(action) &&
+                !"stop_movement".equals(action) && !"manual_move".equals(action) &&
+                !"manual_stop".equals(action) && !"probe_step".equals(action) &&
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
@@ -618,8 +632,9 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action) &&
                 !"odyssey_observe".equals(action) && !"odyssey_execute".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
-        if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
-                "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
+        if (("manual_move".equals(action) || "probe_step".equals(action) ||
+                "motion_diagnostic".equals(action) || "verified_step".equals(action) ||
+                "autonomy_follow".equals(action) || "follow_player".equals(action) ||
                 "agent_start".equals(action) || "learning_start".equals(action) ||
                 "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
                 "odyssey_observe".equals(action) || "odyssey_execute".equals(action) || "experimental_break".equals(action)) && !confirmed) return;
@@ -756,11 +771,21 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (!"suggestions".equals(mode) && !"off".equals(mode)) return;
                 command.put("mode", mode);
             }
+            if ("manual_move".equals(action)) {
+                String mode = extras.getString("motion_mode", "");
+                int ticks = extras.getInt("motion_ticks", -1);
+                if (!"forward".equals(mode) && !"backward".equals(mode) &&
+                    !"strafe_left".equals(mode) && !"strafe_right".equals(mode) &&
+                    !"turn_left".equals(mode) && !"turn_right".equals(mode)) return;
+                if (ticks < 1 || ticks > 8) return;
+                command.put("confirmed", true).put("mode", mode).put("ticks", ticks);
+            }
             if ("motion_diagnostic".equals(action)) {
                 String mode = extras.getString("motion_mode", "");
                 int ticks = extras.getInt("motion_ticks", -1);
-                if (!"forward".equals(mode) && !"turn_left".equals(mode) &&
-                    !"turn_right".equals(mode)) return;
+                if (!"forward".equals(mode) && !"backward".equals(mode) &&
+                    !"strafe_left".equals(mode) && !"strafe_right".equals(mode) &&
+                    !"turn_left".equals(mode) && !"turn_right".equals(mode)) return;
                 if (ticks < 1 || ticks > 20) return;
                 command.put("confirmed", true).put("mode", mode).put("ticks", ticks);
             }

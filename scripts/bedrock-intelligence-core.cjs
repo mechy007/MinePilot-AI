@@ -56,10 +56,16 @@ class MinePilotIntelligence {
     const life=observation.life??{};
     const position=observation.position;
     const freshness=observation.positionAgeMs;
+    const recentPosition=observation.positionUsable !== false &&
+      Number.isFinite(freshness) && freshness>=0 && freshness<=FRESH_POSITION_MS;
+    const idleAnchor=observation.positionUsable===true &&
+      observation.idlePositionAnchor===true;
     const worldReady=observation.spawned===true &&
       Number.isInteger(observation.dimension) && position &&
       ['x','y','z'].every(k=>Number.isFinite(position[k])) &&
-      Number.isFinite(freshness) && freshness>=0 && freshness<=FRESH_POSITION_MS;
+      (recentPosition || idleAnchor);
+    const positionMode=recentPosition?'server_fresh':
+      idleAnchor?'idle_spawn_anchor':'stale';
     const candidates=[];
     if(!observation.spawned || observation.respawnState!=='alive' ||
        life.state==='dead') {
@@ -108,7 +114,7 @@ class MinePilotIntelligence {
     }
     this.totalDecisions++;
     this.last={key,at:now,selection,candidates:candidates.slice(0,4),
-      worldReady:Boolean(worldReady)};
+      worldReady:Boolean(worldReady),positionMode};
     return this.snapshot();
   }
   shouldEmergencyStop() {
@@ -127,7 +133,12 @@ class MinePilotIntelligence {
       reason:this.last?.selection?.reason??'awaiting_observation',
       confidence:this.last?.selection?.confidence??0,
       execution:'recommendation_only',
-      verifiedWorld:this.last?.worldReady??false,
+      // An idle spawn anchor is usable for observation/planning previews,
+      // but must never be described as a server-confirmed current position.
+      verifiedWorld:this.last?.worldReady===true &&
+        this.last?.positionMode==='server_fresh',
+      positionUsable:this.last?.worldReady??false,
+      positionMode:this.last?.positionMode??'stale',
       candidates:this.last?.candidates?.map(x=>({
         action:x.action,priority:x.priority,reason:x.reason,
         confidence:x.confidence,allowed:x.allowed

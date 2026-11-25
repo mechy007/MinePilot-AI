@@ -65,10 +65,12 @@ class BedrockGameplayAgent {
     if(![1,2].includes(world.movementAuthority) ||
        typeof world.serverTick!=='bigint')
       return 'authoritative_movement_unavailable';
-    if(world.lastServerPositionAt==null ||
-       this.clock()-world.lastServerPositionAt<0 ||
-       this.clock()-world.lastServerPositionAt>POSITION_TTL_MS)
-      return 'server_position_stale';
+    const positionUsable = typeof world.positionUsable === 'function'
+      ? world.positionUsable()
+      : world.lastServerPositionAt!=null &&
+        this.clock()-world.lastServerPositionAt>=0 &&
+        this.clock()-world.lastServerPositionAt<=POSITION_TTL_MS;
+    if(!positionUsable)return 'server_position_stale';
     if(!world.terrain?.snapshot?.().collisionClassificationReady ||
        typeof world.terrain.tile!=='function' ||
        typeof world.routePlanner!=='function')
