@@ -1513,3 +1513,45 @@ test('vanilla runtime registry refuses hashed IDs and server custom block defini
   assert.equal(registry.get(0).name, 'minecraft:air');
   clearRuntimeRegistryCache();
 });
+
+
+test('Bedrock 1.26.60 skeleton chunks trigger a bounded and deduplicated local subchunk request', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  client.emit('start_game', { ...start, player_position: { x: 33.25, y: 70.5, z: -17.75 } });
+  const header = { x: 2, z: -2, dimension: 0, sub_chunk_count: 0xffffffff };
+  client.emit('level_chunk', header);
+  const request = client.sent.find(item => item.packet === 'sub_chunk_request');
+  assert.ok(request, 'skeleton chunk requests actual block subchunks');
+  assert.equal(request.value.dimension, 0);
+  assert.deepEqual(request.value.origin, { x: 2, y: 4, z: -2 });
+  assert.deepEqual(request.value.requests, [
+    { x: 0, y: -2, z: 0 }, { x: 0, y: -1, z: 0 },
+    { x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 },
+    { x: 0, y: 2, z: 0 }
+  ]);
+  assert.equal(bridge.snapshot().subchunkRequestsSent, 1);
+  client.emit('level_chunk', header);
+  assert.equal(client.sent.filter(item => item.packet === 'sub_chunk_request').length, 1,
+    'repeated skeleton chunk headers do not flood the server');
+  now += 15001;
+  client.emit('level_chunk', header);
+  assert.equal(client.sent.filter(item => item.packet === 'sub_chunk_request').length, 2,
+    'a new request can be retried after the cooldown');
+  bridge.stop();
+});
+
+test('subchunk request packet shape is accepted by the pinned Bedrock 1.26.60 serializer', () => {
+  const { createSerializer } = require('bedrock-protocol/src/transforms/serializer');
+  const serializer = createSerializer('1.26.60');
+  const buffer = serializer.createPacketBuffer({
+    name: 'sub_chunk_request',
+    params: {
+      dimension: 0,
+      requests: [{ x: 0, y: -2, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 }],
+      origin: { x: 2, y: 4, z: -2 }
+    }
+  });
+  assert.ok(Buffer.isBuffer(buffer) && buffer.length > 10);
+});
