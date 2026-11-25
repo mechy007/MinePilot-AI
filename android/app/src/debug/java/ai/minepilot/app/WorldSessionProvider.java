@@ -176,6 +176,38 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("gameplay_skill_ready",usable);
                     result.putInt("gameplay_skill_limited",preview);
                     result.putInt("gameplay_skill_unsupported",unsupported);
+                    JSONObject nativeLibrary = capabilities.optJSONObject("nativeSkillLibrary");
+                    if (nativeLibrary != null) {
+                        result.putInt("native_skill_total", Math.max(0, Math.min(64,
+                                nativeLibrary.optInt("total", 0))));
+                        result.putInt("native_skill_executable", Math.max(0, Math.min(64,
+                                nativeLibrary.optInt("executable", 0))));
+                        JSONObject nativeCounts = nativeLibrary.optJSONObject("counts");
+                        if (nativeCounts != null) {
+                            result.putInt("native_skill_ready", Math.max(0, Math.min(64, nativeCounts.optInt("ready", 0))));
+                            result.putInt("native_skill_experimental", Math.max(0, Math.min(64, nativeCounts.optInt("experimental", 0))));
+                            result.putInt("native_skill_manual", Math.max(0, Math.min(64, nativeCounts.optInt("manual_experimental", 0))));
+                            result.putInt("native_skill_blocked", Math.max(0, Math.min(64, nativeCounts.optInt("blocked", 0))));
+                        }
+                        org.json.JSONArray nativeEntries = nativeLibrary.optJSONArray("skills");
+                        if (nativeEntries != null) {
+                            java.util.ArrayList<String> ids = new java.util.ArrayList<>();
+                            java.util.ArrayList<String> states = new java.util.ArrayList<>();
+                            for (int i = 0; i < Math.min(32, nativeEntries.length()); i++) {
+                                JSONObject entry = nativeEntries.optJSONObject(i);
+                                if (entry == null) continue;
+                                String id = entry.optString("id", "");
+                                String state = entry.optString("status", "");
+                                if (id.matches("[a-z][a-z0-9_]{2,47}") &&
+                                        state.matches("[a-z_]{2,32}")) {
+                                    ids.add(id);
+                                    states.add(state);
+                                }
+                            }
+                            result.putStringArray("native_skill_ids", ids.toArray(new String[0]));
+                            result.putStringArray("native_skill_states", states.toArray(new String[0]));
+                        }
+                    }
                     JSONObject learning = capabilities.optJSONObject("learning");
                     if (learning != null) {
                         result.putString("learning_version", learning.optString("version", ""));
