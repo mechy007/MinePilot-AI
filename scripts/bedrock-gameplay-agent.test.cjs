@@ -171,20 +171,15 @@ test('observe-plan-move-verify: queued movement is never claimed as server-confi
   assert.equal(f.agent.snapshot().phase,'verified');
   assert.equal(f.sent.length,1);
 });
-test('unconfirmed movement times out twice and stops without uncontrolled retrying',()=>{
+test('unconfirmed movement timeout stops without retrying from a stale server anchor',()=>{
   const f=fixture();
   f.agent.start(f.world,{confirmed:true,goal:'explore'});
   f.tick();f.movementEnds();
   f.advance(4600);f.tick();
-  assert.equal(f.agent.snapshot().failures,1);
-  f.advance(1100);f.world.lastServerPositionAt+=5100;
-  f.tick();
-  assert.equal(f.sent.length,2);
-  f.movementEnds();
-  f.advance(4600);f.tick();
+  assert.equal(f.sent.length,1);
   assert.equal(f.agent.snapshot().active,false);
   assert.equal(f.agent.snapshot().reason,'server_movement_not_confirmed');
-  assert.equal(f.agent.snapshot().failures,2);
+  assert.equal(f.agent.snapshot().failures,1);
 });
 test('unknown terrain, missing food interaction and stale state never emit movement',()=>{
   const f=fixture();
