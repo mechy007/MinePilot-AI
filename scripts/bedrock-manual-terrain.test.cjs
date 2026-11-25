@@ -20,7 +20,6 @@ const start = {
   movement_authority: 1
 };
 
-console.error('[manual-terrain-test] file loaded');
 
 function initialize(client, bridge) {
   client.emit('start_game', start);
@@ -30,7 +29,6 @@ function initialize(client, bridge) {
 }
 
 test('1.26.60 subchunk batches decode center-relative offsets and all-air entries', () => {
-  console.error('[manual-terrain-test:1] 1.26.60 subchunk batches decode center-relative offsets and all-air entries');
   const terrain = new BedrockTerrainCache();
   terrain.reset(0);
   terrain.setRegistry(new Map([[0, { name: 'minecraft:air', boundingBox: 'empty' }]]));
@@ -46,11 +44,9 @@ test('1.26.60 subchunk batches decode center-relative offsets and all-air entrie
   assert.equal(decoded, 2);
   assert.equal(terrain.snapshot().decodedSections, 2);
   assert.equal(terrain.blockName(0, 64, 80, 48), 'minecraft:air');
-  console.error('[manual-terrain-test:1] done');
 });
 
 test('skeleton LevelChunk requests five nearby server subchunks and rate-limits repeats', () => {
-  console.error('[manual-terrain-test:2] skeleton LevelChunk requests five nearby server subchunks and rate-limits repeats');
   let now = 1000;
   const client = new FakeClient();
   const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
@@ -75,11 +71,9 @@ test('skeleton LevelChunk requests five nearby server subchunks and rate-limits 
   assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 2);
   assert.equal(bridge.snapshot().subchunkRequestsSent, 2);
   bridge.stop();
-  console.error('[manual-terrain-test:2] done');
 });
 
 test('manual directional controls send bounded camera-relative vectors and stop cleanly', () => {
-  console.error('[manual-terrain-test:3] manual directional controls send bounded camera-relative vectors and stop cleanly');
   let now = 1000;
   let pulse = null;
   const client = new FakeClient();
@@ -118,11 +112,9 @@ test('manual directional controls send bounded camera-relative vectors and stop 
     initialize(client, bridge);
   }
   bridge.stop();
-  console.error('[manual-terrain-test:3] done');
 });
 
 test('manual hold preserves one predicted position across direction changes and stops on watchdog expiry', () => {
-  console.error('[manual-terrain-test:4] manual hold preserves one predicted position across direction changes and stops on watchdog expiry');
   let now = 1000;
   let pulse = null;
   const client = new FakeClient();
@@ -189,11 +181,9 @@ test('manual hold preserves one predicted position across direction changes and 
   assert.equal(movement.snapshot().active, false);
   assert.equal(movement.snapshot().stoppedReason, 'manual_input_timeout');
   bridge.stop();
-  console.error('[manual-terrain-test:4] done');
 });
 
 test('manual movement remains unavailable while another gameplay controller owns the bot', () => {
-  console.error('[manual-terrain-test:5] manual movement remains unavailable while another gameplay controller owns the bot');
   const client = new FakeClient();
   const movement = new ExperimentalPlayerInput(client, true);
   const bridge = new BedrockGameplayBridge(client, {
@@ -208,13 +198,11 @@ test('manual movement remains unavailable while another gameplay controller owns
   assert.equal(result.status, 'rejected');
   assert.equal(result.reason, 'autonomous_controller_busy');
   bridge.stop();
-  console.error('[manual-terrain-test:5] done');
 });
 
 
 test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes', () => {
-  console.error('[manual-terrain-test:6] hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes');
-  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
+  const { createVanillaRuntimeRegistry, createNumericRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
   clearRuntimeRegistryCache();
   const hashed = createVanillaRuntimeRegistry({
@@ -290,41 +278,32 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
     server_version: '1.26.51.0', block_network_ids_are_hashes: true
   }), null, 'unsupported protocol families cannot select the 2225 palette');
   clearRuntimeRegistryCache();
-  console.error('[manual-terrain-test:6] done');
 });
 
 test('numeric palette is exact-version only and fails closed on custom block registration', () => {
-  console.error('[manual-terrain-test:7] numeric palette is exact-version only and fails closed on custom block registration');
   const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
   clearRuntimeRegistryCache();
   const loader = () => ({
     blocks: [{ minStateId: 0, maxStateId: 1200, name: 'air', boundingBox: 'empty' }]
   });
-  console.error('[manual-terrain-test:7a] loader ready');
   assert.equal(createVanillaRuntimeRegistry({}, loader), null,
     'missing server version cannot safely select a protocol palette');
   assert.equal(createVanillaRuntimeRegistry({ server_version: '1.26.66.1' }, loader), null,
     'captured numeric IDs cannot be reused on another release');
-  assert.equal(createVanillaRuntimeRegistry({
+  assert.equal(createNumericRuntimeRegistry({
     server_version: '1.26.60.6', block_network_ids_are_hashes: true
-  }, loader), null);
-  console.error('[manual-terrain-test:7b] initial rejects done');
+  }, loader), null, 'hashed Bedrock IDs cannot use the numeric palette');
 
-  console.error('[manual-terrain-test:7c] before custom registry');
   const customWorld = createVanillaRuntimeRegistry({
     server_version: '1.26.60.6',
     block_properties: [{ name: 'addon:custom', states: {} }]
   });
-  console.error('[manual-terrain-test:7d] after custom registry');
   assert.equal(customWorld, null,
     'production custom blocks may renumber a non-hashed runtime palette');
 
-  console.error('[manual-terrain-test:7e] before injected registry');
   const map = createVanillaRuntimeRegistry({ server_version: '1.26.60.6' }, loader);
-  console.error('[manual-terrain-test:7f] after injected registry');
   assert.ok(map instanceof Map);
   assert.equal(map.get(0).name, 'minecraft:air');
   clearRuntimeRegistryCache();
-  console.error('[manual-terrain-test:7] done');
 });
