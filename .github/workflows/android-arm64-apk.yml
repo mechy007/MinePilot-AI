@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - test/verify-existing-bedrock-learning-tasks
+      - fix/runtime-terrain-and-manual-controls
   workflow_dispatch:
 jobs:
   build:
@@ -33,6 +34,8 @@ jobs:
         run: node --test scripts/bedrock-inventory-ledger.test.cjs scripts/bedrock-stack-request-manager.test.cjs scripts/bedrock-odyssey-observation-executor.test.cjs
       - name: Install engine build dependencies
         run: npm install --ignore-scripts --omit=optional
+      - name: Test Bedrock terrain decoding and Android manual controls
+        run: node --test scripts/bedrock-gameplay-bridge.test.cjs
       - name: Stage and test the Bedrock SDK bundle
         run: bash scripts/stage-android-bedrock-sdk.sh
       - name: Build ARM64 debug APK with Node and the Bedrock SDK
