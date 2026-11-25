@@ -8,6 +8,7 @@
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const { executeBedrockObservation } = require('./bedrock-odyssey-observation-executor.cjs');
+const { normalizeBedrockBlockId, validateBedrockBlockPosition, isBedrockAirBlock, buildBedrockSetBlockCommand } = require('./bedrock-block-placement.cjs');
 const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.cjs');
 const { BedrockInventoryLedger } = require('./bedrock-inventory-ledger.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
@@ -103,6 +104,10 @@ class BedrockGameplayBridge {
     this.worldGameMode = 'unknown';
     this.difficulty = null;
     this.itemStackNetManager = null;
+    this.commandsEnabled = false;
+    this.permissionLevel = 'visitor';
+    this.pendingBlockPlacement = null;
+    this.lastBlockPlacement = null;
     this.inventoryLedger = options.inventoryLedger ?? new BedrockInventoryLedger({ clock: this.clock });
     this.stackRequests = new BedrockStackRequestManager(this.client, {
       isEnabled: () => this.itemStackNetManager === true, timeoutMs: 5000
@@ -163,9 +168,11 @@ class BedrockGameplayBridge {
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
     });
     this.bind('set_time', p => this.layerFour?.observeTime(p?.time));
+    this.bind('command_output', p => this.onCommandOutput(p));
     this.bind('update_block', p => {
       this.blockBreaker?.observedBlock(p, this.dimension);
       this.terrain?.updateBlock(p, this.dimension);
+      this.observeBlockPlacement(p);
       this.layerThree?.observeBlock(p, this.dimension);
       this.layerFive?.observeBlockUpdate(p, this.dimension);
       this.layerSix?.observeBlock(p, this.dimension);
@@ -194,6 +201,9 @@ class BedrockGameplayBridge {
     if (!packet || typeof packet !== 'object') return;
     stopLocalAutopilot(this, 'new_world_session');
     this.gameplayAgent?.stop('new_world_session');
+    this.cancelPendingBlockPlacement('new_world_session');
+    this.commandsEnabled = packet.enable_commands === true;
+    this.permissionLevel = typeof packet.permission_level === 'string' ? packet.permission_level : 'visitor';
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
     this.selfUnique = ident(packet.entity_id);
     this.position = safePoint(packet.player_position);
@@ -286,6 +296,7 @@ class BedrockGameplayBridge {
   observeHealth(health) {
     if (this.closed || !Number.isFinite(health) || !this.self) return;
     if (health <= 0) {
+      this.cancelPendingBlockPlacement('player_died');
       // Ignore duplicate zero-health updates and initial login fixtures.
       if (!this.spawned || this.respawnRecovery.state !== 'alive') return;
       this.respawnRecovery.state = 'dead_waiting_for_server';
@@ -718,6 +729,7 @@ class BedrockGameplayBridge {
   }
   dimensionChange(packet) {
     if (this.closed) return;
+    this.cancelPendingBlockPlacement('dimension_changed');
     this.gameplayAgent?.stop('dimension_changed');
     this.dimension = validDimension(packet?.dimension);
     this.terrain?.reset(this.dimension);
@@ -838,6 +850,14 @@ class BedrockGameplayBridge {
       subchunkRequestErrors: this.subchunkRequestErrors,
       blockNetworkIdsAreHashes: this.blockNetworkIdsAreHashes,
       serverCustomBlockPropertiesCount: this.serverCustomBlockPropertiesCount,
+      commandPermission: { enabled: this.commandsEnabled, level: this.permissionLevel },
+      blockPlacement: this.pendingBlockPlacement ? {
+        state: 'awaiting_server_confirmation', position: { ...this.pendingBlockPlacement.position },
+        blockId: this.pendingBlockPlacement.blockId,
+        serverAcknowledged: this.pendingBlockPlacement.acknowledged,
+        serverObserved: this.pendingBlockPlacement.observed
+      } : this.lastBlockPlacement ? { ...this.lastBlockPlacement,
+        position: { ...this.lastBlockPlacement.position } } : { state: 'idle' },
       // A chunk header does NOT prove decoded, navigable block/voxel data.
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
@@ -936,6 +956,8 @@ class BedrockGameplayBridge {
       }
       if (['equipAxe','equipHoe','equipPickaxe','equipSword'].includes(raw.primitive))
         return this.selectHotbarTool(raw.primitive);
+      if (raw.primitive === 'placeBlock')
+        return this.startSingleBlockPlacement(raw, args);
       if (raw.primitive === 'mineBlock') {
         const p = args.position;
         if (!p || !['x','y','z'].every(k => Number.isInteger(p[k])))
@@ -1245,6 +1267,120 @@ class BedrockGameplayBridge {
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
+  startSingleBlockPlacement(raw, args = {}) {
+    if (raw?.confirmed !== true)
+      return { status: 'rejected', reason: 'confirmation_required' };
+    if (!this.spawned || !this.position || !this.positionUsable())
+      return { status: 'rejected', reason: 'fresh_server_position_required' };
+    if (this.commandsEnabled !== true || this.permissionLevel !== 'operator')
+      return { status: 'rejected', reason: 'bedrock_operator_command_permission_required' };
+    if (this.pendingBlockPlacement)
+      return { status: 'rejected', reason: 'block_placement_busy' };
+    if (!this.terrain || typeof this.terrain.blockName !== 'function')
+      return { status: 'rejected', reason: 'decoded_block_terrain_required' };
+    if (!this.selfUnique || typeof this.client.queue !== 'function')
+      return { status: 'rejected', reason: 'command_request_identity_unavailable' };
+
+    let position, blockId, command;
+    try {
+      position = validateBedrockBlockPosition(args.position, this.dimension);
+      blockId = normalizeBedrockBlockId(args.blockId);
+      command = buildBedrockSetBlockCommand(position, blockId, this.dimension);
+    } catch (error) {
+      return { status: 'rejected', reason: error?.message || 'invalid_block_placement' };
+    }
+    const current = this.terrain.blockName(this.dimension, position.x, position.y, position.z);
+    if (typeof current !== 'string')
+      return { status: 'rejected', reason: 'target_block_not_observed' };
+    if (!isBedrockAirBlock(current))
+      return { status: 'rejected', reason: 'target_must_be_observed_air' };
+    const distance = Math.hypot(
+      position.x + 0.5 - this.position.x,
+      position.y + 0.5 - this.position.y,
+      position.z + 0.5 - this.position.z
+    );
+    if (!Number.isFinite(distance) || distance > 6)
+      return { status: 'rejected', reason: 'target_out_of_interaction_range' };
+
+    const correlationId = randomUUID();
+    const pending = {
+      requestId: raw.requestId, correlationId, position, dimension: this.dimension,
+      blockId, acknowledged: false, observed: false, startedAt: this.clock(), timer: null
+    };
+    pending.timer = setTimeout(() => {
+      this.finishBlockPlacement('rejected', pending.acknowledged
+        ? 'block_change_not_server_observed' : 'command_acknowledgement_timeout');
+    }, 7000);
+    pending.timer.unref?.();
+    this.pendingBlockPlacement = pending;
+    try {
+      this.client.queue('command_request', {
+        command,
+        origin: {
+          type: 'Player', uuid: randomUUID(), request_id: correlationId,
+          player_entity_id: BigInt(this.selfUnique)
+        },
+        internal: false,
+        version: 'Latest'
+      });
+    } catch {
+      this.finishBlockPlacement('rejected', 'command_request_write_failed');
+      return { status: 'rejected', reason: 'command_request_write_failed' };
+    }
+    return { status: 'accepted', reason: 'bedrock_command_dispatched',
+      awaitingServerConfirmation: true, position, blockId };
+  }
+  onCommandOutput(packet) {
+    const pending = this.pendingBlockPlacement;
+    if (!pending || packet?.origin?.request_id !== pending.correlationId) return false;
+    const successCount = Number.isInteger(packet.success_count) ? packet.success_count : 0;
+    const explicitFailure = Array.isArray(packet.output) &&
+      packet.output.some(output => output?.success === false);
+    if (successCount < 1 || explicitFailure) {
+      this.finishBlockPlacement('rejected', 'bedrock_command_rejected');
+      return true;
+    }
+    pending.acknowledged = true;
+    if (pending.observed) this.finishBlockPlacement('ok', 'block_placed_and_server_observed');
+    return true;
+  }
+  observeBlockPlacement(packet) {
+    const pending = this.pendingBlockPlacement, point = packet?.position;
+    if (!pending || pending.dimension !== this.dimension || !point ||
+        (packet.layer != null && packet.layer !== 0) ||
+        point.x !== pending.position.x || point.y !== pending.position.y ||
+        point.z !== pending.position.z) return false;
+    const name = this.terrain?.blockName?.(this.dimension, point.x, point.y, point.z);
+    if (name !== pending.blockId) return false;
+    pending.observed = true;
+    if (pending.acknowledged) this.finishBlockPlacement('ok', 'block_placed_and_server_observed');
+    return true;
+  }
+  finishBlockPlacement(status, reason) {
+    const pending = this.pendingBlockPlacement;
+    if (!pending) return false;
+    clearTimeout(pending.timer);
+    this.pendingBlockPlacement = null;
+    const detail = {
+      requestId: pending.requestId, status, reason, position: { ...pending.position },
+      blockId: pending.blockId, serverAcknowledged: pending.acknowledged,
+      serverObserved: pending.observed, completedAt: this.clock()
+    };
+    this.lastBlockPlacement = detail;
+    if (this.lastReceipt?.requestId === pending.requestId) {
+      const receipt = { ...this.lastReceipt, status, reason, blockPlacement: detail };
+      this.lastReceipt = receipt;
+      if (this.receiptPath) {
+        try { atomicJson(this.receiptPath, receipt); } catch {}
+      }
+    }
+    return true;
+  }
+  cancelPendingBlockPlacement(reason = 'cancelled') {
+    if (this.pendingBlockPlacement) return this.finishBlockPlacement('rejected', reason);
+    return false;
+  }
+
   tickLearning() {
     // One explicit owner advances the curriculum. Reads of snapshots/manifests
     // never mutate task state. Keep failures visible without crashing the SDK loop.
@@ -1279,12 +1415,15 @@ class BedrockGameplayBridge {
     // All other commands share the normal single 100 ms runtime tick.
     if (command?.action !== 'agent_start') this.tickLearning();
     const result = this.execute(command);
+    const completedPlacement = command?.action === 'odyssey_execute' && command?.primitive === 'placeBlock' &&
+      this.lastBlockPlacement?.requestId === command?.requestId ? this.lastBlockPlacement : null;
     const receipt = {
       version: 'minepilot.gameplay.v1',
       requestId: typeof command?.requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(command.requestId)
         ? command.requestId : '',
-      status: result.status,
-      reason: result.reason,
+      status: completedPlacement?.status ?? result.status,
+      reason: completedPlacement?.reason ?? result.reason,
+      ...(completedPlacement ? { blockPlacement: completedPlacement } : {}),
       ...(command?.action === 'odyssey_execute' ? {
         primitive: command.primitive,
         dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
@@ -1303,6 +1442,7 @@ class BedrockGameplayBridge {
   }
   stop() {
     if (this.closed) return;
+    this.cancelPendingBlockPlacement('session_closed');
     this.closed = true;
     stopLocalAutopilot(this, 'session_closed');
     if (this.watch) clearInterval(this.watch);
