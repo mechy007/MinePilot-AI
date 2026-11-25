@@ -269,6 +269,11 @@ public final class WorldSessionProvider extends ContentProvider {
                             intelligence.optInt("decisionCount", 0)));
                     result.putBoolean("brain_world_verified",
                             intelligence.optBoolean("verifiedWorld", false));
+                    String positionMode = intelligence.optString("positionMode", "stale");
+                    if (positionMode.matches("[a-z_]{1,32}"))
+                        result.putString("brain_position_mode", positionMode);
+                    result.putBoolean("brain_position_usable",
+                            intelligence.optBoolean("positionUsable", false));
                     JSONObject outcomes = intelligence.optJSONObject("outcomes");
                     if (outcomes != null) {
                         result.putInt("brain_verified_steps", Math.max(0,
