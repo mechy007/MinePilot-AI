@@ -50,7 +50,7 @@ function buildInputPacket(position, yaw, tick, moving, options = {}) {
     yaw: normalYaw(yaw),
     head_yaw: normalYaw(yaw),
     position: predicted,
-    move_vector: { x: vector.x, z: vector.z },
+    move_vector: { x: vector.x, y: vector.z },
     // Protocol 2225 represents InputData as a list of enum ordinals, not a bitfield.
     input_data: inputFlag == null ? [] : [inputFlag],
     input_mode: 'touch',
@@ -59,14 +59,14 @@ function buildInputPacket(position, yaw, tick, moving, options = {}) {
     interact_rotation: { x: pitch, z: normalYaw(yaw) },
     tick,
     delta: shift,
-    analogue_move_vector: { x: vector.x, z: vector.z },
+    analogue_move_vector: { x: vector.x, y: vector.z },
     // Protocol 2225 requires a world-space unit forward vector, not an
     // all-zero placeholder that cannot represent any look direction.
     camera_orientation: { x: Math.sin(angle)===0?0:
       -Math.sin(angle)*Math.cos(vertical),
       y: Math.sin(vertical)===0?0:-Math.sin(vertical),
       z: Math.cos(angle)*Math.cos(vertical) },
-    raw_move_vector: { x: vector.x, z: vector.z }
+    raw_move_vector: { x: vector.x, y: vector.z }
   };
 }
 
