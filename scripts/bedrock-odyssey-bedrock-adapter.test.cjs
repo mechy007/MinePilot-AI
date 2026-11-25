@@ -1,0 +1,95 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { CATALOG, planOdysseySkill, validateOdysseyCatalog } = require('./bedrock-odyssey-skill-library.cjs');
+const { PRIMITIVES, evaluatePrimitive, buildBedrockPrimitivePlan, validatePrimitiveCoverage } =
+  require('./bedrock-odyssey-bedrock-adapter.cjs');
+
+test('all 183 ODYSSEY compositions map every referenced primitive to a Bedrock action contract', () => {
+  assert.equal(CATALOG.compositions.length, 183);
+  assert.equal(validatePrimitiveCoverage(CATALOG), true);
+  assert.equal(validateOdysseyCatalog(), true);
+  const referenced = new Set(CATALOG.compositions.flatMap(skill => skill.primitiveCalls));
+  assert.deepEqual([...referenced].sort(), Object.keys(PRIMITIVES).sort());
+});
+
+test('Bedrock primitive evaluation never upgrades unsupported actions to executable', () => {
+  const unsupported = ['craftItem','cookFood','smeltItem','equipArmor',
+    'feedAnimals','killMob','placeItem','plantSeeds'];
+  for (const name of unsupported) {
+    const result = evaluatePrimitive(name, { [PRIMITIVES[name].capability]: 'ready' });
+    assert.equal(result.status, 'blocked', name);
+    assert.equal(result.executable, false, name);
+  }
+});
+
+test('observation and bounded navigation primitives inherit only advertised Bedrock capabilities', () => {
+  assert.equal(evaluatePrimitive('checkBlocksAround',
+    { spatial_observation: { state: 'ready', reason: 'decoded_bedrock_sections' } }).status, 'ready');
+  assert.equal(evaluatePrimitive('goto',
+    { navigation: { state: 'experimental', reason: 'server_verified_movement' } }).status, 'experimental');
+  assert.equal(evaluatePrimitive('goto', {}).status, 'blocked');
+  const partialNavigation = evaluatePrimitive('goto', { navigation: 'partial' });
+  assert.equal(partialNavigation.status, 'partial');
+  assert.equal(partialNavigation.executable, false);
+  assert.equal(evaluatePrimitive('checkBlocksAround', { spatial_observation: 'partial' }).status, 'partial');
+  const partialPlan = buildBedrockPrimitivePlan({ id: 'partial_observer', primitiveCalls: ['checkBlocksAround'] },
+    { spatial_observation: 'partial' });
+  assert.equal(partialPlan.status, 'partial');
+  assert.equal(partialPlan.executable, false);
+  assert.deepEqual(partialPlan.partialActions, ['checkBlocksAround']);
+  assert.equal(evaluatePrimitive('mineBlock',
+    { mine: { state: 'manual_experimental', reason: 'explicit_single_block_confirmation' } }).status, 'manual');
+});
+
+test('Bedrock skill plans preserve primitive requirements and never claim dispatch', () => {
+  const skill = CATALOG.compositions.find(item => item.id === 'craft_wooden_pickaxe') ??
+    CATALOG.compositions.find(item => item.primitiveCalls.includes('craftItem'));
+  assert.ok(skill);
+  const plan = buildBedrockPrimitivePlan(skill, {
+    inventory_read: 'ready', craft: 'ready', navigation: 'experimental'
+  });
+  assert.equal(plan.skillId, skill.id);
+  assert.equal(plan.executable, false);
+  assert.equal(plan.execution, 'bedrock_action_plan_only');
+  assert.ok(plan.blockedActions.includes('craftItem'));
+  const catalogPlan = planOdysseySkill(skill.id, {
+    world_observation: 'ready', spatial_observation: 'ready', inventory_read: 'ready',
+    navigation: 'experimental', craft: 'ready'
+  });
+  assert.ok(catalogPlan.bedrockPlan);
+  assert.equal(catalogPlan.executable, false);
+  assert.equal(catalogPlan.arbitraryCodeExecution, false);
+});
+
+test('invalid skill definitions are rejected without creating actions', () => {
+  assert.deepEqual(buildBedrockPrimitivePlan(null), {
+    status: 'rejected', reason: 'invalid_skill_definition', executable: false, actions: []
+  });
+});
+
+
+test('live primitive executor declarations are explicit and do not promote compositions to executable', () => {
+  assert.equal(evaluatePrimitive('getLogsCount', { inventory_read: 'ready' }).executor, 'odyssey_observe');
+  assert.equal(evaluatePrimitive('findSuitablePosition', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
+  assert.equal(evaluatePrimitive('goto', { navigation: 'experimental' }).executor, 'odyssey_execute');
+  assert.equal(evaluatePrimitive('exploreUntil', { navigation: 'experimental' }).executor, 'odyssey_execute');
+  assert.equal(evaluatePrimitive('mineBlock', { mine: 'manual_experimental' }).executor, 'odyssey_execute');
+  const plan = buildBedrockPrimitivePlan({ id: 'test', primitiveCalls: ['goto'] },
+    { navigation: 'experimental' });
+  assert.equal(plan.executable, false, 'single primitive IPC does not imply composition orchestration');
+});
+
+assert.equal(evaluatePrimitive('checkBlockAbove', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
+assert.equal(evaluatePrimitive('checkBlocksAround', { spatial_observation: 'ready' }).executor, 'odyssey_observe');
+assert.equal(evaluatePrimitive('getPlanksCount', { inventory_read: 'ready' }).executor, 'odyssey_observe');
+test('four tool equip primitives are bounded hotbar-selection executors; armor remains blocked', () => {
+  for (const primitive of ['equipAxe','equipHoe','equipPickaxe','equipSword']) {
+    const result = evaluatePrimitive(primitive, { hotbar_selection: 'experimental' });
+    assert.equal(result.status, 'experimental');
+    assert.equal(result.executor, 'odyssey_execute');
+  }
+  const armor = evaluatePrimitive('equipArmor', { equip_items: 'ready' });
+  assert.equal(armor.status, 'blocked');
+});

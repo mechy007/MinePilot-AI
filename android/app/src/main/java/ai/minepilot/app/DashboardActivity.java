@@ -46,6 +46,12 @@ public final class DashboardActivity extends Activity {
     private Button gameplayAgentStart;
     private Button gameplayAgentStop;
     private TextView gameplayAgentState;
+    private TextView learningState;
+    private Button learningStart;
+    private Button learningStop;
+    private Button learningAutopilot;
+    private boolean learningAutopilotEnabled;
+    private String learningNextTaskId = "";
     private Button experimentalBreak;
     private Button stopMovement;
     private Button inspectWorld;
@@ -530,6 +536,23 @@ public final class DashboardActivity extends Activity {
         intelligencePanel.addView(gameplayAgentState);
         body.addView(intelligencePanel, panelLayout(10));
 
+        LinearLayout learningPanel = card();
+        learningPanel.addView(text("VOYAGER + ODYSSEY LEARNING", 11, GRASS, true));
+        learningState = text("Join a Bedrock world to inspect the learning curriculum.", 13, MUTED, false);
+        learningState.setPadding(0, dp(8), 0, dp(4));
+        learningPanel.addView(learningState);
+        body.addView(learningPanel, panelLayout(8));
+        learningStart = actionButton("Start recommended learning task", true, this::confirmLearningStart);
+        learningStart.setVisibility(View.GONE);
+        body.addView(learningStart, panelLayout(8));
+        learningStop = actionButton("Stop learning task", false,
+                () -> requestGameplay("learning_stop", false));
+        learningStop.setVisibility(View.GONE);
+        body.addView(learningStop, panelLayout(8));
+        learningAutopilot = actionButton("Enable local autopilot", true, this::toggleLocalAutopilot);
+        learningAutopilot.setVisibility(View.GONE);
+        body.addView(learningAutopilot, panelLayout(8));
+
         LinearLayout gameplay = card();
         gameplay.addView(text("GAMEPLAY TELEMETRY", 11, GRASS, true));
         gameplayStatus = text("Waiting for a server-reported position", 13, MUTED, false);
@@ -750,6 +773,66 @@ public final class DashboardActivity extends Activity {
                         + current.getInt("gameplay_skill_limited") + " limited · "
                         + current.getInt("gameplay_skill_unsupported") + " unsupported");
             }
+        }
+        learningNextTaskId = current.getString("learning_next_task_id", "");
+        boolean learningActive = playing && current.getBoolean("learning_active", false);
+        learningAutopilotEnabled = playing && current.getBoolean("learning_autopilot_enabled", false);
+        if (learningState != null) {
+            if (!playing) {
+                learningState.setText("Connect to a Bedrock world to load reusable skills and curriculum.");
+            } else if (learningActive) {
+                learningState.setText("RUNNING · " + current.getString("learning_active_title", "Learning task")
+                        + "\nGoal: " + current.getString("learning_active_goal", "unknown").replace('_', ' ')
+                        + " · Phase: " + current.getString("learning_active_phase", "starting").replace('_', ' ')
+                        + "\nServer-verified steps: " + current.getInt("learning_active_verified")
+                        + "\nStatus: " + current.getString("learning_active_reason", "running").replace('_', ' '));
+            } else if (!learningNextTaskId.isEmpty()) {
+                learningState.setText("Recommended next task · " + current.getString("learning_next_task_title", learningNextTaskId)
+                        + "\nGoal: " + current.getString("learning_next_task_goal", "unknown").replace('_', ' ')
+                        + "\nMastered skills: " + current.getInt("learning_learned")
+                        + " · Verified navigation steps: " + current.getInt("learning_verified_total")
+                        + "\nProposals awaiting review: " + current.getInt("learning_proposed"));
+            } else {
+                learningState.setText("No currently eligible learning task. Mastered skills: "
+                        + current.getInt("learning_learned")
+                        + " · Verified navigation steps: " + current.getInt("learning_verified_total")
+                        + "\nLast result: " + current.getString("learning_last_outcome", "none")
+                        .replace('_', ' ') + " · " + current.getString("learning_last_reason", "no recent run")
+                        .replace('_', ' '));
+            }
+        }
+        if (learningState != null && playing) {
+            String autopilotReason = current.getString("learning_autopilot_reason", "disabled");
+            if (learningAutopilotEnabled && !learningActive) {
+                learningState.setText("AUTOPILOT ARMED · Waiting for a supported task"
+                        + "\nStatus: " + autopilotReason.replace('_', ' ')
+                        + "\nRemaining tasks: " + current.getInt("learning_remaining_tasks")
+                        + " · Blocked by prerequisites: " + current.getInt("learning_blocked_tasks"));
+                String blocker = current.getString("learning_first_blocker", "");
+                String blockedTask = current.getString("learning_first_blocked_task", "");
+                if (!blocker.isEmpty()) {
+                    learningState.append("\nFirst blocker: " + blocker.replace('_', ' ')
+                            + (blockedTask.isEmpty() ? "" : " (" + blockedTask.replace('_', ' ') + ")"));
+                }
+            } else if (learningAutopilotEnabled) {
+                learningState.append("\nAutopilot: running the local curriculum");
+            } else if (!"disabled".equals(autopilotReason) && !learningActive) {
+                learningState.append("\nAutopilot: " + autopilotReason.replace('_', ' '));
+            }
+            learningState.append("\nODYSSEY library: " + current.getInt("odyssey_total")
+                    + " skills · " + current.getInt("odyssey_ready") + " ready · "
+                    + current.getInt("odyssey_partial") + " partial · "
+                    + current.getInt("odyssey_manual") + " manual · "
+                    + current.getInt("odyssey_blocked") + " blocked");
+        }
+        if (learningStart != null) learningStart.setVisibility(
+                playing && !learningActive && !learningNextTaskId.isEmpty() ? View.VISIBLE : View.GONE);
+        if (learningStop != null) learningStop.setVisibility(
+                learningActive ? View.VISIBLE : View.GONE);
+        if (learningAutopilot != null) {
+            learningAutopilot.setVisibility(playing ? View.VISIBLE : View.GONE);
+            learningAutopilot.setText(learningAutopilotEnabled
+                    ? "Stop local autopilot" : "Enable local autopilot");
         }
         if (brainStatus != null) {
             if (!playing || !current.getBoolean("brain_available", false)) {
@@ -1238,8 +1321,46 @@ public final class DashboardActivity extends Activity {
         requestGameplay(action, confirmed, playerName, null, 0);
     }
 
+    private void toggleLocalAutopilot() {
+        if (learningAutopilotEnabled) {
+            requestGameplay("learning_autopilot_stop", false);
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Enable local autopilot")
+                .setMessage("MinePilot will run its built-in Bedrock tasks in sequence using deterministic local rules. No external AI prompt, cloud model or Kaggle GPU is required. It will only use currently supported, verified tasks; unknown terrain, unsafe vitals, failed server confirmation and run limits stop actions. Mining, combat, crafting and building are not enabled by this switch. You can stop autopilot at any time.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Enable", (dialog, which) ->
+                        requestGameplay("learning_autopilot_start", true))
+                .show();
+    }
+
+    private void confirmLearningStart() {
+        String taskId = learningNextTaskId;
+        if (taskId.isEmpty()) {
+            showStatus("No learning task is currently eligible in this Bedrock world.");
+            return;
+        }
+        String title = learningState == null ? taskId : learningState.getText().toString();
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Start MinePilot learning")
+                .setMessage("Run the recommended, bounded Bedrock task?\n\n"
+                        + title + "\n\nMinePilot uses its existing gameplay safety checks. "
+                        + "The task stops on unsafe state, failed server confirmation or its run budget. "
+                        + "You can stop it at any time. It will not execute generated code.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Start task", (dialog, which) ->
+                        requestGameplay("learning_start", true, null, null, 0, taskId))
+                .show();
+    }
+
     private void requestGameplay(String action, boolean confirmed, String playerName,
                                  String itemName, int itemCount) {
+        requestGameplay(action, confirmed, playerName, itemName, itemCount, null);
+    }
+
+    private void requestGameplay(String action, boolean confirmed, String playerName,
+                                 String itemName, int itemCount, String taskId) {
         String session = worldSessionId;
         if (session.isEmpty()) return;
         Bundle extras = new Bundle();
@@ -1254,6 +1375,7 @@ public final class DashboardActivity extends Activity {
             extras.putString("item_name", itemName);
             extras.putInt("item_count", itemCount);
         }
+        if (taskId != null) extras.putString("task_id", taskId);
         int generation = worldViewGeneration;
         worldReader.execute(() -> {
             Bundle receipt = worldRequest("gameplay", session, extras);

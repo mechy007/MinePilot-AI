@@ -6,6 +6,7 @@ const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { test } = require('node:test');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
+const { learningEngineFor, odysseyCapabilityStates } = require('./bedrock-skill-manifest.cjs');
 const { ExperimentalPlayerInput, buildInputPacket } = require('./bedrock-player-input.cjs');
 
 class Client extends EventEmitter {
@@ -822,6 +823,41 @@ test('Bedrock input ticks stay monotonic across separate diagnostic commands and
 });
 
 
+test('Bedrock Dedicated Server zero runtime-id respawn packets are accepted for the local player', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client).start();
+  initialized(client, bridge);
+
+  client.emit('update_attributes', {
+    runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 0 }]
+  });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'dead_waiting_for_server');
+
+  // BDS has been observed sending zero in the Respawn packet runtime-ID field.
+  client.emit('respawn', {
+    runtime_entity_id: 0n, state: 0, position: origin
+  });
+  assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn']);
+  assert.equal(client.sent[0].value.state, 2);
+
+  client.emit('respawn', {
+    runtime_entity_id: '0', state: 1, position: { x: 12.5, y: 70, z: 8.5 }
+  });
+  assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn', 'player_action']);
+  assert.equal(client.sent[1].value.action, 'respawn');
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'respawn_action_sent');
+
+  client.emit('update_attributes', {
+    runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 20 }]
+  });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
+  assert.equal(bridge.snapshot().respawnRecovery.recovered, 1);
+  assert.deepEqual(bridge.snapshot().position, { x: 12.5, y: 70, z: 8.5 });
+  bridge.stop();
+});
+
 test('spawn completes loading gate exactly once and does not claim combat/physics readiness', () => {
   const client=new Client();
   const bridge=new BedrockGameplayBridge(client).start();
@@ -1030,5 +1066,314 @@ test('neutral presence maintains bot input when idle spawn coordinates have no f
   assert.equal(movement.snapshot().presenceFrames,1);
   assert.equal(movement.capability(bridge),'experimental');
   assert.equal(movement.snapshot().movementVerified,false);
+  bridge.stop();
+});
+
+test('ODYSSEY read-only observation results survive the private IPC receipt boundary', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'minepilot-odyssey-observe-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const commandPath = join(dir, 'command.json'), receiptPath = join(dir, 'receipt.json');
+  const layerThree = { reset() {}, snapshot: () => ({}), inventoryItems: () => ({ known: true, observedAt: 10000,
+    counts: { 'minecraft:oak_log': 4 } }) };
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath, layerThree,
+    clock: () => 10000 }).start();
+  t.after(() => bridge.stop());
+  initialized(client, bridge);
+  // Keep the inventory snapshot time aligned with the bridge clock.
+  const command = { version: 'minepilot.gameplay.v1', requestId: 'odyssey-1',
+    action: 'odyssey_observe', confirmed: true, primitive: 'getLogsCount' };
+  writeFileSync(commandPath, JSON.stringify(command));
+  bridge.poll();
+  const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
+  assert.equal(receipt.status, 'ok');
+  assert.equal(receipt.primitive, 'getLogsCount');
+  assert.equal(receipt.result, 4);
+  assert.equal(receipt.verifiedBy, 'server_inventory_content');
+  assert.equal(receipt.readOnly, true);
+  assert.equal(receipt.executed, false);
+  bridge.stop();
+});
+
+
+test('general gameplay start reconciles learning results and generic stop cannot take ownership', () => {
+  const client = new Client();
+  let agent = { active: false, goal: 'none', reason: 'gameplay_run_budget_exhausted', serverVerifiedSteps: 3 };
+  let starts = 0, stops = 0;
+  const gameplayAgent = {
+    snapshot: () => ({ ...agent }),
+    start(_world, options) {
+      starts++;
+      agent = { active: true, goal: options.goal, reason: 'running', serverVerifiedSteps: 0 };
+      return { status: 'accepted', reason: 'started' };
+    },
+    stop(reason) {
+      stops++;
+      agent = { ...agent, active: false, reason };
+      return { status: 'ok', reason };
+    }
+  };
+  const bridge = new BedrockGameplayBridge(client, { gameplayAgent }).start();
+  initialized(client, bridge);
+  agent = { active: false, goal: 'none', reason: 'gameplay_run_budget_exhausted', serverVerifiedSteps: 3 };
+  const engine = learningEngineFor(bridge);
+  engine.activeRun = {
+    taskId: 'safe_exploration', goal: 'explore', title: 'Safe exploration',
+    steps: [], startedAt: 1, sessionId: 'test-session',
+    requestedStop: false, owner: 'manual', seenActive: true
+  };
+  const start = bridge.execute({ version: 'minepilot.gameplay.v1', requestId: 'new-goal',
+    action: 'agent_start', confirmed: true, goal: 'survive' });
+  assert.equal(start.status, 'accepted');
+  assert.equal(engine.activeRun, null);
+  assert.equal(engine.recentRuns.at(-1).taskId, 'safe_exploration');
+  assert.equal(engine.recentRuns.at(-1).outcome, 'verified');
+  assert.equal(starts, 1);
+
+  engine.activeRun = {
+    taskId: 'safe_exploration', goal: 'explore', title: 'Safe exploration',
+    steps: [], startedAt: 2, sessionId: 'test-session',
+    requestedStop: false, owner: 'manual', seenActive: true
+  };
+  const beforeStops = stops;
+  const stop = bridge.execute({ version: 'minepilot.gameplay.v1', requestId: 'wrong-stop',
+    action: 'agent_stop' });
+  assert.equal(stop.status, 'rejected');
+  assert.equal(stop.reason, 'learning_task_owned_use_learning_stop');
+  assert.equal(stops, beforeStops);
+  bridge.stop();
+});
+
+
+test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil and manual mineBlock', () => {
+  const client=new Client();
+  const starts=[];
+  const gameplayAgent={
+    snapshot:()=>({active:false}),
+    start(_world,options){starts.push(options);return {status:'accepted',reason:'started'};},
+    stop(){return {status:'ok'};}
+  };
+  const breaks=[];
+  let autonomyActive = false;
+  const autonomy = {
+    snapshot: () => ({ active: autonomyActive }),
+    stop() { autonomyActive = false; return { status: 'ok' }; }
+  };
+  const blockBreaker={snapshot(){return {};},abort(){},start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
+  const bridge=new BedrockGameplayBridge(client,{gameplayAgent,autonomy,blockBreaker}).start();
+  initialized(client,bridge);
+  // StartGame correctly stops prior autonomy. Simulate a separate, active
+  // Follow run after world initialization for the mutual-exclusion assertion.
+  autonomyActive = true;
+  const call=(primitive,args={},confirmed=true)=>bridge.execute({
+    version:'minepilot.gameplay.v1',requestId:'odyssey-exec',action:'odyssey_execute',
+    primitive,args,confirmed
+  });
+  assert.equal(call('exploreUntil',{},false).reason,'confirmation_required');
+  const explore = call('exploreUntil');
+  assert.equal(explore.status,'accepted');
+  assert.equal(explore.awaitingServerConfirmation,true);
+  assert.deepEqual(starts.at(-1),{confirmed:true,goal:'explore'});
+  const goto = call('goto',{targetPosition:{x:9,y:64,z:10}});
+  assert.equal(goto.status,'accepted');
+  assert.equal(goto.awaitingServerConfirmation,true);
+  assert.deepEqual(starts.at(-1),{confirmed:true,goal:'goto',targetPosition:{x:9,y:64,z:10}});
+  assert.equal(call('goto',{targetPosition:{x:Infinity,y:64,z:10}}).reason,'valid_target_position_required');
+  const blockedMine = call('mineBlock',{position:{x:8,y:63,z:10}});
+  assert.equal(blockedMine.status,'rejected');
+  assert.equal(blockedMine.reason,'autonomy_busy');
+  assert.equal(breaks.length,0,'mining never interrupts active Follow/autonomy');
+  autonomyActive = false;
+  const mine = call('mineBlock',{position:{x:8,y:63,z:10}});
+  assert.equal(mine.status,'accepted');
+  assert.equal(mine.awaitingServerConfirmation,true);
+  assert.deepEqual(breaks.at(-1),{position:{x:8,y:63,z:10},confirmed:true});
+  assert.equal(call('craftItem').reason,'primitive_executor_unavailable');
+  bridge.stop();
+});
+
+
+test('StartGame inventory transaction negotiation is tracked without assuming a mode', () => {
+  const enabledClient = new Client();
+  const enabled = new BedrockGameplayBridge(enabledClient).start();
+  enabledClient.emit('start_game', { ...start, enable_item_stack_net_manager: true });
+  assert.equal(enabled.snapshot().itemStackNetManager, true);
+  assert.equal(enabled.snapshot().inventoryTransactionMode, 'server_authoritative');
+  assert.equal(enabled.snapshot().stackRequests.enabled, true);
+  enabled.stop();
+
+  const legacyClient = new Client();
+  const legacy = new BedrockGameplayBridge(legacyClient).start();
+  legacyClient.emit('start_game', { ...start, enable_item_stack_net_manager: false });
+  assert.equal(legacy.snapshot().itemStackNetManager, false);
+  assert.equal(legacy.snapshot().inventoryTransactionMode, 'legacy');
+  assert.equal(legacy.snapshot().stackRequests.enabled, false);
+  legacy.stop();
+
+  const unknownClient = new Client();
+  const unknown = new BedrockGameplayBridge(unknownClient).start();
+  unknownClient.emit('start_game', start);
+  assert.equal(unknown.snapshot().itemStackNetManager, null);
+  assert.equal(unknown.snapshot().inventoryTransactionMode, 'unknown');
+  assert.equal(unknown.snapshot().stackRequests.enabled, false);
+  unknown.stop();
+});
+
+
+test('tool equip selects only a server-observed hotbar slot and waits for matching mob equipment', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: true, observedAt: now, slots: [
+    { slot: 2, itemName: 'minecraft:iron_axe', count: 1, networkId: 7 },
+    { slot: 5, itemName: 'minecraft:stone', count: 32, networkId: 9 }
+  ] }) };
+  const call = primitive => bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'equip-tool', action: 'odyssey_execute', primitive, args: {}, confirmed: true });
+  const result = call('equipAxe');
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.awaitingServerConfirmation, true);
+  assert.deepEqual(client.sent.at(-1), { packet: 'player_hotbar',
+    value: { selected_slot: 2, window_id: 0, select_slot: true } });
+  assert.equal(bridge.snapshot().hotbarSelection.pending.status, 'awaiting_server_confirmation');
+  client.emit('mob_equipment', { runtime_entity_id: 123n, selected_slot: 2, slot: 2,
+    item: { network_id: 7, count: 1 } });
+  assert.equal(bridge.snapshot().hotbarSelection.pending, null);
+  assert.equal(bridge.snapshot().hotbarSelection.last.status, 'verified');
+  assert.equal(bridge.snapshot().hotbarSelection.last.itemName, 'minecraft:iron_axe');
+
+  // A later server equipment packet contradicting the previously verified tool
+  // must invalidate that verification, even while the inventory snapshot is fresh.
+  client.emit('mob_equipment', { runtime_entity_id: 123n, selected_slot: 2, slot: 2,
+    item: { network_id: 99, count: 1 } });
+  assert.equal(bridge.snapshot().hotbarSelection.last.status, 'invalidated');
+  assert.equal(bridge.snapshot().hotbarSelection.last.reason, 'server_equipment_changed');
+  const retry = call('equipAxe');
+  assert.equal(retry.status, 'accepted');
+  assert.equal(retry.awaitingServerConfirmation, true);
+  assert.equal(bridge.snapshot().hotbarSelection.pending.status, 'awaiting_server_confirmation');
+  bridge.stop();
+});
+
+test('tool equip fails closed without fresh hotbar inventory or a matching tool', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client).start();
+  initialized(client, bridge);
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: false, observedAt: null, slots: [] }) };
+  const call = primitive => bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'equip-tool-blocked', action: 'odyssey_execute', primitive, args: {}, confirmed: true });
+  assert.equal(call('equipPickaxe').reason, 'fresh_hotbar_inventory_required');
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: true, observedAt: Date.now(), slots: [] }) };
+  assert.equal(call('equipPickaxe').reason, 'matching_tool_not_in_hotbar');
+  assert.equal(client.sent.length, 0);
+  bridge.stop();
+});
+
+
+test('hotbar capability is experimental only while a complete server inventory snapshot is fresh', () => {
+  const stale = { clock: () => 12000,
+    layerThree: { hotbarItems: () => ({ known: true, observedAt: 1000, slots: [] }) } };
+  const fresh = { clock: () => 12000,
+    layerThree: { hotbarItems: () => ({ known: true, observedAt: 3000, slots: [] }) } };
+  assert.equal(odysseyCapabilityStates(stale, {}).hotbar_selection.state, 'blocked');
+  assert.equal(odysseyCapabilityStates(fresh, {}).hotbar_selection.state, 'experimental');
+});
+
+
+test('unconfirmed hotbar selection times out and can be retried without claiming success', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  bridge.layerThree = { reset() {}, snapshot: () => ({}), hotbarItems: () => ({ known: true, observedAt: 1000, slots: [
+    { slot: 1, itemName: 'minecraft:stone_sword', count: 1, networkId: 15 }
+  ] }) };
+  const call = () => bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'equip-timeout', action: 'odyssey_execute',
+    primitive: 'equipSword', args: {}, confirmed: true });
+  assert.equal(call().status, 'accepted');
+  now = 6001;
+  assert.equal(bridge.snapshot().hotbarSelection.last.status, 'timed_out');
+  assert.equal(bridge.snapshot().hotbarSelection.pending, null);
+  assert.equal(call().status, 'accepted');
+  assert.equal(client.sent.filter(x => x.packet === 'player_hotbar').length, 2);
+  assert.equal(bridge.snapshot().hotbarSelection.last, null);
+  bridge.stop();
+});
+
+
+test('world snapshots do not run intelligence decisions or update navigation intents', () => {
+  const client = new Client();
+  let decisions = 0;
+  let navigationUpdates = 0;
+  const intelligence = {
+    reset() {},
+    snapshot: () => ({ decisionCount: decisions }),
+    decide() { decisions++; return { decisionCount: decisions }; },
+    shouldEmergencyStop: () => false,
+    noteOutcome() {}
+  };
+  const addonNavigation = {
+    reset() {},
+    snapshot: () => ({ state: 'idle', reason: 'no_live_intent', executed: false }),
+    request() { return { accepted: true }; },
+    release() {},
+    update() {
+      navigationUpdates++;
+      return { state: 'idle', reason: 'no_live_intent', executed: false };
+    }
+  };
+  const bridge = new BedrockGameplayBridge(client, { intelligence, addonNavigation }).start();
+  initialized(client, bridge);
+
+  bridge.snapshot();
+  bridge.snapshot();
+  assert.equal(decisions, 0);
+  assert.equal(navigationUpdates, 0);
+
+  bridge.tickControlPlane();
+  assert.equal(decisions, 1);
+  assert.equal(navigationUpdates, 1);
+  bridge.stop();
+});
+
+
+test('bridge mirrors full Bedrock inventory content and incremental slots without refreshing snapshot age', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  client.emit('item_registry', { itemstates: [
+    { runtime_id: 5, name: 'minecraft:oak_log' },
+    { runtime_id: 8, name: 'minecraft:stick' }
+  ] });
+  const empty = () => ({ network_id: 0, count: 0, metadata: 0,
+    has_stack_id: false, block_runtime_id: 0 });
+  const items = Array.from({ length: 36 }, empty);
+  items[0] = { network_id: 5, count: 4, metadata: 0, has_stack_id: true,
+    stack_id: 22, block_runtime_id: 0 };
+  client.emit('inventory_content', { window_id: 0, input: items,
+    container: { container_id: 'hotbar_and_inventory' }, storage_item: empty() });
+  let snapshot = bridge.snapshot();
+  assert.equal(snapshot.inventory.player.known, true);
+  assert.equal(snapshot.inventory.player.fresh, true);
+  assert.equal(snapshot.inventory.player.items[0].itemName, 'minecraft:oak_log');
+  assert.equal(snapshot.inventory.player.items[0].stackId, 22);
+  assert.equal(odysseyCapabilityStates(bridge, {
+    worldReady: true, localNavigationReady: false, skills: []
+  }).inventory_read.state, 'ready');
+
+  now = 20000;
+  client.emit('inventory_slot', { window_id: 0, slot: 0,
+    item: { network_id: 5, count: 3, metadata: 0, has_stack_id: true,
+      stack_id: 23, block_runtime_id: 0 } });
+  snapshot = bridge.snapshot();
+  assert.equal(snapshot.inventory.player.fresh, false,
+    'an incremental slot update must not renew the complete inventory snapshot');
+  assert.equal(snapshot.inventory.player.items[0].stackId, 23);
+  assert.equal(odysseyCapabilityStates(bridge, {
+    worldReady: true, localNavigationReady: false, skills: []
+  }).inventory_read.state, 'partial');
   bridge.stop();
 });

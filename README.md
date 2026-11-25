@@ -113,7 +113,7 @@ Long-running operation requires lifecycle-safe foreground service behavior, a us
 | **5 — Stability and optimization** | Not started | Long-duration Android tests, battery/memory profiling, reconnection and resource cleanup |
 | **6 — Release and QA** | In progress | Green CI, verified device/world tests, security review and installable signed release |
 
-Read the [detailed roadmap](docs/ROADMAP.md). Features such as automatic mining, building, combat, navigation, friend selection and AI decisions are **goals or partial foundations**, not promises about the current APK.
+Read the [detailed roadmap](docs/ROADMAP.md), the [architecture rebuild and subsystem contracts](docs/ARCHITECTURE_REBUILD.md), and the [runtime function catalog](docs/FUNCTION_CONTRACTS.md). Features such as automatic mining, building, combat, navigation, friend selection and AI decisions are **goals or partial foundations**, not promises about the current APK.
 
 ## Download and install an Android APK
 
@@ -223,6 +223,10 @@ For deeper diagnostics see [Android app test guide](docs/ANDROID-APP-STATUS.md) 
 - [Android ARM64 runtime packaging](docs/ANDROID-RUNTIME-PACKAGING.md)
 - [Desktop friend-world diagnostic](docs/friend-world-live-join.md)
 - [Gameplay planning integration](docs/CRAFTMIND_GAMEPLAY_INTEGRATION.md)
+- [Voyager + ODYSSEY Bedrock-native learning integration](docs/VOYAGER_ODYSSEY_INTEGRATION.md)
+  - Includes an optional, user-enabled local autopilot that sequences supported built-in tasks without external AI prompts or Kaggle.
+- [Complete ODYSSEY skill catalog and Bedrock compatibility](docs/ODYSSEY_SKILL_LIBRARY.md)
+  - Includes the 183-skill metadata catalog, dependency graph, runtime compatibility evaluation and Android telemetry.
 
 ## Contributions and issue reports
 

@@ -136,3 +136,34 @@ test('within range of dropped resources does not imply pickup is executed', () =
   assert.equal(p.preview(world).reason, 'in_range_no_interaction_emitted');
   assert.equal(p.snapshot(world).pickupCorrelations, false);
 });
+
+
+test('hotbar item slots are derived only from full inventory content and fresh slot updates', () => {
+  let now = 1000;
+  const p = new LayerThreePlanner(() => now);
+  p.observeItemRegistry(registry);
+  const items = Array.from({ length: 36 }, () => ({ network_id: 0, count: 0 }));
+  items[0] = { network_id: 5, count: 3 };
+  items[4] = { network_id: 9, count: 1 };
+  p.observeInventory({ window_id: 0, input: items });
+  assert.deepEqual(p.hotbarItems(), {
+    known: true, observedAt: 1000,
+    slots: [
+      { slot: 0, itemName: 'minecraft:oak_log', count: 3, networkId: 5 },
+      { slot: 4, itemName: 'minecraft:stone', count: 1, networkId: 9 }
+    ]
+  });
+  now = 12000;
+  assert.equal(p.observeInventorySlot({ window_id: 0, slot: 0,
+    item: { network_id: 0, count: 0 } }), true);
+  assert.equal(p.hotbarItems().observedAt, 1000,
+    'a single slot update must not refresh the full hotbar snapshot age');
+  assert.deepEqual(p.hotbarItems().slots, [
+    { slot: 4, itemName: 'minecraft:stone', count: 1, networkId: 9 }
+  ]);
+  assert.equal(p.observeInventorySlot({ window_id: 0, slot: 9,
+    item: { network_id: 5, count: 1 } }), false);
+  p.reset();
+  assert.equal(p.hotbarItems().known, false);
+  assert.deepEqual(p.hotbarItems().slots, []);
+});

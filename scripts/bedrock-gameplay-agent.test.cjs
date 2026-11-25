@@ -265,3 +265,25 @@ test('new hostile preempts an unconfirmed move before selecting a verified retre
   assert.equal(f.agent.snapshot().lastPlan.kind,'retreat');
   f.agent.stop();
 });
+
+
+test('goto accepts only a nearby target with a verified route and verifies server progress', () => {
+  const f=fixture();
+  const target={x:10,y:65.62,z:8.5};
+  assert.equal(f.agent.start(f.world,{goal:'goto',targetPosition:target}).reason,'confirmation_required');
+  assert.equal(f.agent.start(f.world,{confirmed:true,goal:'goto',targetPosition:{x:40,y:65.62,z:8.5}}).reason,
+    'goto_target_must_be_within_16_blocks');
+  assert.equal(f.agent.start(f.world,{confirmed:true,goal:'goto',targetPosition:target}).status,'accepted');
+  assert.deepEqual(f.agent.snapshot().targetPosition,target);
+  f.tick();
+  assert.equal(f.sent.length,1);
+  const pending=f.agent.awaiting, from=pending.from, waypoint=pending.target;
+  f.movementEnds();f.advance(200);
+  f.updatePosition({x:from.x+(waypoint.x-from.x)*0.8,y:from.y,
+    z:from.z+(waypoint.z-from.z)*0.8});
+  f.tick();
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,1);
+  assert.equal(f.agent.snapshot().active,true);
+  f.agent.stop();
+  assert.equal(f.agent.snapshot().targetPosition,null);
+});

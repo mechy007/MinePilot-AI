@@ -7,6 +7,14 @@ on:
       - scripts/stage-android-node-smoke.sh
       - 'scripts/stage-android-bedrock-sdk.*'
       - scripts/android-node-bedrock-smoke.cjs
+      - scripts/bedrock-gameplay-bridge.cjs
+      - scripts/bedrock-gameplay-bridge.test.cjs
+      - scripts/bedrock-stack-request-manager.cjs
+      - scripts/bedrock-stack-request-manager.test.cjs
+      - scripts/bedrock-inventory-ledger.cjs
+      - scripts/bedrock-inventory-ledger.test.cjs
+      - scripts/bedrock-odyssey-observation-executor.cjs
+      - scripts/bedrock-odyssey-observation-executor.test.cjs
       - 'scripts/android-xbox-auth-probe*.cjs'
       - 'scripts/android-friend-world-session*.cjs'
       - src/connection/prismarine-world-client.ts
@@ -38,6 +46,8 @@ jobs:
         run: bash scripts/stage-android-node-smoke.sh
       - name: Test Xbox sign-in program with synthetic account responses
         run: node --test scripts/android-xbox-auth-probe.test.cjs
+      - name: Test Bedrock inventory, bridge and stack transaction contracts
+        run: node --test scripts/bedrock-inventory-ledger.test.cjs scripts/bedrock-stack-request-manager.test.cjs scripts/bedrock-odyssey-observation-executor.test.cjs
       - name: Install engine build dependencies
         run: npm install --ignore-scripts --omit=optional
       - name: Stage and test the Bedrock SDK bundle
@@ -63,7 +73,8 @@ jobs:
                   assert apk.getinfo(f"assets/{name}").file_size > 0, name
               with ZipFile(BytesIO(apk.read("assets/bedrock-sdk.zip"))) as sdk:
                   for entry in ("node-smoke.cjs", "xbox-auth-probe.cjs",
-                                "friend-world-session.cjs", "prismarine-world-client.mjs"):
+                                "friend-world-session.cjs", "bedrock-inventory-ledger.cjs",
+                                "prismarine-world-client.mjs"):
                       assert sdk.getinfo(entry).file_size > 0, entry
           PY
       - uses: actions/upload-artifact@v4

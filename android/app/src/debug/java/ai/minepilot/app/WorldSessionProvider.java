@@ -168,6 +168,82 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("gameplay_skill_ready",usable);
                     result.putInt("gameplay_skill_limited",preview);
                     result.putInt("gameplay_skill_unsupported",unsupported);
+                    JSONObject learning = capabilities.optJSONObject("learning");
+                    if (learning != null) {
+                        result.putString("learning_version", learning.optString("version", ""));
+                        result.putInt("learning_learned", Math.max(0, Math.min(128, learning.optInt("learnedSkillCount", 0))));
+                        result.putInt("learning_proposed", Math.max(0, Math.min(64, learning.optInt("proposedSkillCount", 0))));
+                        result.putInt("learning_verified_total", Math.max(0, Math.min(10000000, learning.optInt("totalVerifiedNavigationSteps", 0))));
+                        JSONObject odyssey = capabilities.optJSONObject("odysseyLibrary");
+                        if (odyssey != null) {
+                            result.putInt("odyssey_total", Math.max(0, Math.min(183, odyssey.optInt("total", 0))));
+                            result.putInt("odyssey_ready", Math.max(0, Math.min(183, odyssey.optInt("ready", 0))));
+                            result.putInt("odyssey_partial", Math.max(0, Math.min(183, odyssey.optInt("partial", 0))));
+                            result.putInt("odyssey_manual", Math.max(0, Math.min(183, odyssey.optInt("manual", 0))));
+                            result.putInt("odyssey_blocked", Math.max(0, Math.min(183, odyssey.optInt("blocked", 0))));
+                        }
+                        result.putInt("learning_legacy_records", Math.max(0, Math.min(128, learning.optInt("legacyVoyagerRecordCountMigrated", 0))));
+                        JSONObject localAutopilot = learning.optJSONObject("localAutopilot");
+                        if (localAutopilot != null) {
+                            result.putBoolean("learning_autopilot_enabled", localAutopilot.optBoolean("enabled", false));
+                            String autopilotReason = localAutopilot.optString("reason", "disabled");
+                            if (autopilotReason.matches("[a-z_]{1,64}")) result.putString("learning_autopilot_reason", autopilotReason);
+                        }
+                        JSONObject curriculum = learning.optJSONObject("curriculumReadiness");
+                        if (curriculum != null) {
+                            result.putInt("learning_remaining_tasks", Math.max(0, Math.min(5,
+                                    curriculum.optInt("remainingTaskCount", 0))));
+                            result.putInt("learning_blocked_tasks", Math.max(0, Math.min(5,
+                                    curriculum.optInt("blockedTaskCount", 0))));
+                            JSONObject blocker = curriculum.optJSONObject("firstBlocker");
+                            if (blocker != null) {
+                                String blockerId = blocker.optString("id", "");
+                                String blockerReason = blocker.optString("reason", "");
+                                if (blockerId.matches("[a-z][a-z0-9_]{2,47}"))
+                                    result.putString("learning_first_blocked_task", blockerId);
+                                if (blockerReason.matches("[a-z_]{1,72}"))
+                                    result.putString("learning_first_blocker", blockerReason);
+                            }
+                        }
+                        JSONObject next = learning.optJSONObject("nextCurriculumTask");
+                        if (next != null) {
+                            String taskId = next.optString("id", "");
+                            String goal = next.optString("goal", "");
+                            String title = next.optString("title", "");
+                            if (taskId.matches("[a-z][a-z0-9_]{2,47}")) result.putString("learning_next_task_id", taskId);
+                            if (goal.matches("[a-z_]{1,32}")) result.putString("learning_next_task_goal", goal);
+                            if (title.length() <= 100) result.putString("learning_next_task_title", title);
+                        }
+                        JSONObject activeTask = learning.optJSONObject("activeTask");
+                        if (activeTask != null) {
+                            result.putBoolean("learning_active", activeTask.optBoolean("active", false));
+                            String taskId = activeTask.optString("id", "");
+                            String goal = activeTask.optString("goal", "");
+                            String taskPhase = activeTask.optString("phase", "");
+                            String reason = activeTask.optString("reason", "");
+                            String title = activeTask.optString("title", "");
+                            if (taskId.matches("[a-z][a-z0-9_]{2,47}")) result.putString("learning_active_task_id", taskId);
+                            if (goal.matches("[a-z_]{1,32}")) result.putString("learning_active_goal", goal);
+                            if (taskPhase.matches("[a-z_]{1,32}")) result.putString("learning_active_phase", taskPhase);
+                            if (reason.matches("[a-z_]{1,72}")) result.putString("learning_active_reason", reason);
+                            if (title.length() <= 100) result.putString("learning_active_title", title);
+                            result.putInt("learning_active_verified", Math.max(0, Math.min(40, activeTask.optInt("verifiedSteps", 0))));
+                        } else {
+                            result.putBoolean("learning_active", false);
+                        }
+                        org.json.JSONArray recent = learning.optJSONArray("recentRuns");
+                        if (recent != null && recent.length() > 0) {
+                            JSONObject last = recent.optJSONObject(recent.length() - 1);
+                            if (last != null) {
+                                String outcome = last.optString("outcome", "");
+                                String reason = last.optString("reason", "");
+                                String taskId = last.optString("taskId", "");
+                                if (outcome.matches("[a-z_]{1,24}")) result.putString("learning_last_outcome", outcome);
+                                if (reason.matches("[a-z_]{1,80}")) result.putString("learning_last_reason", reason);
+                                if (taskId.matches("[a-z][a-z0-9_]{2,47}")) result.putString("learning_last_task_id", taskId);
+                            }
+                        }
+                    }
                 }
                 JSONObject intelligence = gameplay.optJSONObject("intelligence");
                 if (intelligence != null) {
@@ -492,6 +568,26 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
                             + ": " + command.optString("reason", ""));
+                    String primitive = command.optString("primitive", "");
+                    if (primitive.matches("getLogsCount|getPlanksCount|checkBlockAbove|checkBlocksAround|findSuitablePosition")) {
+                        result.putString("last_command_primitive", primitive);
+                        Object observed = command.opt("result");
+                        String observedText = observed == null ? "" : observed.toString();
+                        if (observedText.length() > 2048) observedText = observedText.substring(0, 2048);
+                        result.putString("last_command_result", observedText);
+                        result.putBoolean("last_command_read_only", command.optBoolean("readOnly", false));
+                    }
+                    if (primitive.matches("goto|exploreUntil|mineBlock|equipAxe|equipHoe|equipPickaxe|equipSword")) {
+                        result.putString("last_command_primitive", primitive);
+                        result.putBoolean("last_command_dispatch_accepted", command.optBoolean("dispatchAccepted", false));
+                        result.putBoolean("last_command_awaiting_server_confirmation",
+                                command.optBoolean("awaitingServerConfirmation", false));
+                        String itemName = command.optString("itemName", "");
+                        if (!itemName.isEmpty()) result.putString("last_command_item_name", itemName);
+                        int selectedSlot = command.optInt("selectedSlot", -1);
+                        if (selectedSlot >= 0 && selectedSlot <= 8)
+                            result.putInt("last_command_selected_slot", selectedSlot);
+                    }
                 }
             }
         } else if ("failed".equals(phase) || "stopped".equals(phase) || "disconnected".equals(phase)) {
@@ -517,12 +613,16 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
-                !"experimental_break".equals(action)) return;
+                !"experimental_break".equals(action) && !"learning_start".equals(action) &&
+                !"learning_stop".equals(action) && !"learning_propose".equals(action) &&
+                !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action) &&
+                !"odyssey_observe".equals(action) && !"odyssey_execute".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
         if (("probe_step".equals(action) || "motion_diagnostic".equals(action) ||
                 "verified_step".equals(action) || "autonomy_follow".equals(action) || "follow_player".equals(action) ||
-                "agent_start".equals(action) ||
-                "experimental_break".equals(action)) && !confirmed) return;
+                "agent_start".equals(action) || "learning_start".equals(action) ||
+                "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
+                "odyssey_observe".equals(action) || "odyssey_execute".equals(action) || "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
         Path inbox = directory.resolve("gameplay-command.json");
         Path temporary = directory.resolve("gameplay-command-" + requestId + ".tmp");
@@ -536,6 +636,77 @@ public final class WorldSessionProvider extends ContentProvider {
                 String name = extras.getString("player_name", "");
                 if (!name.matches("[a-zA-Z0-9_ #.\\-]{1,32}")) return;
                 command.put("playerName", name);
+            }
+            if ("learning_start".equals(action)) {
+                String taskId = extras.getString("task_id", "");
+                if (!taskId.matches("[a-z][a-z0-9_]{2,47}")) return;
+                command.put("taskId", taskId).put("confirmed", true);
+            }
+            if ("odyssey_observe".equals(action)) {
+                String primitive = extras.getString("primitive", "");
+                if (!"getLogsCount".equals(primitive) && !"getPlanksCount".equals(primitive) &&
+                        !"checkBlockAbove".equals(primitive) && !"checkBlocksAround".equals(primitive) &&
+                        !"findSuitablePosition".equals(primitive)) return;
+                JSONObject args = new JSONObject();
+                String source = extras.getString("block_position", "").trim();
+                if (!source.isEmpty()) {
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    int bx, by, bz;
+                    try {
+                        bx = Integer.parseInt(coordinates[0].trim());
+                        by = Integer.parseInt(coordinates[1].trim());
+                        bz = Integer.parseInt(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (Math.abs((long) bx) > 30000000 || Math.abs((long) bz) > 30000000 ||
+                            by < -256 || by > 512) return;
+                    args.put("position", new JSONObject().put("x", bx).put("y", by).put("z", bz));
+                } else if ("checkBlockAbove".equals(primitive)) {
+                    return; // This primitive needs an explicit block coordinate.
+                }
+                command.put("primitive", primitive).put("args", args).put("confirmed", true);
+            }
+            if ("odyssey_execute".equals(action)) {
+                String primitive = extras.getString("primitive", "");
+                JSONObject args = new JSONObject();
+                if ("goto".equals(primitive)) {
+                    String source = extras.getString("target_position", "").trim();
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    double x, y, z;
+                    try {
+                        x = Double.parseDouble(coordinates[0].trim());
+                        y = Double.parseDouble(coordinates[1].trim());
+                        z = Double.parseDouble(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z) ||
+                            Math.abs(x) > 30000000 || Math.abs(z) > 30000000 || y < -256 || y > 512) return;
+                    args.put("targetPosition", new JSONObject().put("x", x).put("y", y).put("z", z));
+                } else if ("mineBlock".equals(primitive)) {
+                    String source = extras.getString("block_position", "").trim();
+                    String[] coordinates = source.split(",", -1);
+                    if (coordinates.length != 3) return;
+                    int x, y, z;
+                    try {
+                        x = Integer.parseInt(coordinates[0].trim());
+                        y = Integer.parseInt(coordinates[1].trim());
+                        z = Integer.parseInt(coordinates[2].trim());
+                    } catch (NumberFormatException invalid) { return; }
+                    if (Math.abs((long) x) > 30000000 || Math.abs((long) z) > 30000000 ||
+                            y < -256 || y > 512) return;
+                    args.put("position", new JSONObject().put("x", x).put("y", y).put("z", z));
+                } else if (!"exploreUntil".equals(primitive) && !"equipAxe".equals(primitive) &&
+                        !"equipHoe".equals(primitive) && !"equipPickaxe".equals(primitive) &&
+                        !"equipSword".equals(primitive)) {
+                    return;
+                }
+                command.put("primitive", primitive).put("args", args).put("confirmed", true);
+            }
+            if ("learning_propose".equals(action)) {
+                String skillJson = extras.getString("skill_json", "");
+                if (skillJson.length() < 2 || skillJson.length() > 1200) return;
+                JSONObject skill = new JSONObject(skillJson);
+                command.put("skill", skill).put("confirmed", true);
             }
             if ("agent_start".equals(action)) {
                 String goal=extras.getString("agent_goal","");
@@ -609,6 +780,8 @@ public final class WorldSessionProvider extends ContentProvider {
             }
             if ("verified_step".equals(action) || "autonomy_follow".equals(action) ||
                 "follow_player".equals(action) || "agent_start".equals(action) ||
+                "learning_start".equals(action) || "learning_propose".equals(action) ||
+                "learning_autopilot_start".equals(action) || "odyssey_observe".equals(action) ||
                 "experimental_break".equals(action))
                 command.put("confirmed", true);
             if ("probe_step".equals(action)) {

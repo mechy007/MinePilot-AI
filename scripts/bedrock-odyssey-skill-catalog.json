@@ -1,0 +1,4504 @@
+{
+  "schemaVersion": "minepilot.odyssey.skill-catalog.v1",
+  "upstream": {
+    "repository": "https://github.com/zju-vipa/Odyssey",
+    "paper": "https://ijcai.org/proceedings/2025/22",
+    "branch": "master",
+    "commit": "260303c8c0c5afd86d8b50edffb5ffac0de01d4f",
+    "license": "MIT",
+    "integration": "metadata-and-dependency-graph-only; upstream Mineflayer JavaScript is not bundled or executed"
+  },
+  "publishedCounts": {
+    "primitiveSkills": 40,
+    "compositionalSkills": 183
+  },
+  "sourceInventory": {
+    "skillPrimitiveFiles": [
+      "checkAdjacentBlock",
+      "checkBlockAbove",
+      "checkBlocksAround",
+      "checkNearbyBlock",
+      "checkNoAdjacentBlock",
+      "cookFood",
+      "eatFood",
+      "equipArmor",
+      "equipAxe",
+      "equipHoe",
+      "equipPickaxe",
+      "equipShovel",
+      "equipSword",
+      "feedAnimals",
+      "findSuitablePosition",
+      "getAnimal",
+      "getLogsCount",
+      "getPlanksCount",
+      "goto",
+      "killAnimal",
+      "killMonsters",
+      "plantSeeds"
+    ],
+    "controlPrimitiveFiles": [
+      "craftItem",
+      "exploreUntil",
+      "givePlacedItemBack",
+      "killMob",
+      "mineBlock",
+      "placeItem",
+      "shoot",
+      "smeltItem",
+      "useChest",
+      "waitForMobRemoved"
+    ],
+    "comprehensiveLibraryApiModules": [
+      "chestAPIs.js",
+      "collectItem.js",
+      "combatAPIs.js",
+      "equipAPIs.js",
+      "jsonAPIs.js",
+      "obtainItem.js",
+      "primitiveAPIs.js",
+      "spatialAPIs.js"
+    ]
+  },
+  "familyCounts": {
+    "breed": 4,
+    "catch": 1,
+    "collect": 21,
+    "cook": 4,
+    "craft": 94,
+    "deposit": 1,
+    "equip": 8,
+    "hoe": 1,
+    "kill": 17,
+    "make": 3,
+    "mine": 14,
+    "place": 4,
+    "plant": 3,
+    "shear": 1,
+    "smelt": 6,
+    "takeAndMove": 1
+  },
+  "compositions": [
+    {
+      "id": "breed_chicken",
+      "upstreamName": "breedChicken",
+      "family": "breed",
+      "description": "This function checks if the bot has more than 2 wheat seeds in its inventory, equips one of them, and then feeds two wheat seeds to a chicken for breeding purposes.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/breedChicken.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "feedAnimals"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "breed_cow",
+      "upstreamName": "breedCow",
+      "family": "breed",
+      "description": "This function checks if the bot has at least 2 wheat items in its inventory, equips one of them, and then feeds two wheat to a cow for breeding purposes.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/breedCow.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "feedAnimals"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "breed_pig",
+      "upstreamName": "breedPig",
+      "family": "breed",
+      "description": "This function checks if the bot has a sufficient amount of carrots, equips one if available, and then performs an action to feed pigs, likely for breeding purposes.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/breedPig.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "feedAnimals"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "breed_sheep",
+      "upstreamName": "breedSheep",
+      "family": "breed",
+      "description": "This function checks if the bot has at least 2 wheat items in its inventory, equips one of them, and then feeds 2 wheat to sheep entities.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/breedSheep.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "feedAnimals"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "breed_animals",
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "catch_fish",
+      "upstreamName": "catchFish",
+      "family": "catch",
+      "description": "This function catches fish by first checking if the bot has a fishing rod, crafting one if necessary, then finding a nearby water block, moving to an adjacent block, looking at the water block, equipping the fishing rod, and finally fishing.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/catchFish.js",
+      "dependencies": [
+        "craft_fishing_rod"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "fishing",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_bamboo",
+      "upstreamName": "collectBamboo",
+      "family": "collect",
+      "description": "This function equips a sword, searches for and finds 10 bamboo plants within a 32-block radius, breaks them, and then navigates to each plant's location to collect the dropped bamboo items.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectBamboo.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_beetroots",
+      "upstreamName": "collectBeetroots",
+      "family": "collect",
+      "description": "This function searches for beetroots within a 32-block radius, navigates to the first found beetroots, and then digs it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectBeetroots.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_cactus_blocks",
+      "upstreamName": "collectCactusBlocks",
+      "family": "collect",
+      "description": "This function searches for 5 cactus blocks within a 32-block radius, mines them, and then navigates to each block's location to collect the dropped items.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectCactusBlocks.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_carrots",
+      "upstreamName": "collectCarrots",
+      "family": "collect",
+      "description": "This function searches for carrots within a 32-block radius, navigates to the first found carrot, and then digs it up, stopping if no carrots are found.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectCarrots.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_cobblestone",
+      "upstreamName": "collectCobblestone",
+      "family": "collect",
+      "description": "This function equips a pickaxe, searches for and finds 10 cobblestone blocks within a 32-block radius, and then mines them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectCobblestone.js",
+      "dependencies": [
+        "equip_pickaxe_or_craft_one"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_cocoa_beans",
+      "upstreamName": "collectCocoaBeans",
+      "family": "collect",
+      "description": "This function equips an axe, searches for and finds cocoa pods within a 32-block radius, digs them up, and then navigates to each pod's location to collect the beans.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectCocoaBeans.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipAxe",
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_dirt",
+      "upstreamName": "collectDirt",
+      "family": "collect",
+      "description": "This function equips a shovel, searches for 10 dirt blocks within a 32-block radius, and if found, mines them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectDirt.js",
+      "dependencies": [
+        "equip_shovel_or_craft_one"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_flowers",
+      "upstreamName": "collectFlowers",
+      "family": "collect",
+      "description": "This function collects arbitrary types of flowers by exploring a designated area, digging each found flower and collect flowers.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectFlowers.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_lava_with_bucket",
+      "upstreamName": "collectLavaWithBucket",
+      "family": "collect",
+      "description": "This function searches for a lava block within a 32-block radius, and if none is found, it explores the surroundings until one is discovered, then equips a bucket and uses it to collect the lava.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectLavaWithBucket.js",
+      "dependencies": [
+        "craft_bucket"
+      ],
+      "primitiveCalls": [
+        "exploreUntil"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "item_use",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "bucket_use",
+        "equip_items",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_melon",
+      "upstreamName": "collectMelon",
+      "family": "collect",
+      "description": "This function equips an axe, searches for melon blocks within a 32-block radius, and if found, mines one of them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectMelon.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipAxe",
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "hotbar_selection",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_melon_seeds",
+      "upstreamName": "collectMelonSeeds",
+      "family": "collect",
+      "description": "This function searches for a melon slice in the inventory, and if found, crafts one melon seed.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectMelonSeeds.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "collect_milk_with_bucket",
+      "upstreamName": "collectMilkWithBucket",
+      "family": "collect",
+      "description": "This function ensures the bot has a bucket, equips it, finds the nearest cow within 32 blocks, moves to the cow, looks at it, and then uses the bucket on the cow to collect milk.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectMilkWithBucket.js",
+      "dependencies": [
+        "craft_bucket"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "equip_items",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_potatoes",
+      "upstreamName": "collectPotatoes",
+      "family": "collect",
+      "description": "This function searches for potatoes within a 32-block radius, navigates to the first found potato, and then digs it up.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectPotatoes.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_pumpkin",
+      "upstreamName": "collectPumpkin",
+      "family": "collect",
+      "description": "This function equips an axe, searches for pumpkin blocks within a 32-block radius, and if found, mines one of them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectPumpkin.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipAxe",
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "hotbar_selection",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_pumpkin_seeds",
+      "upstreamName": "collectPumpkinSeeds",
+      "family": "collect",
+      "description": "This function searches for a pumpkin in the inventory and if found, crafts pumpkin seeds.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectPumpkinSeeds.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "collect_sand",
+      "upstreamName": "collectSand",
+      "family": "collect",
+      "description": "This function equips a shovel, searches for 10 sand blocks within a 32-block radius, and if found, mines them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectSand.js",
+      "dependencies": [
+        "equip_shovel_or_craft_one"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_sandstone",
+      "upstreamName": "collectSandstone",
+      "family": "collect",
+      "description": "This function collects sandstone blocks by equipping a pickaxe or crafting one, exploring for stone blocks, and then mining 10 of them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectSandstone.js",
+      "dependencies": [
+        "equip_pickaxe_or_craft_one"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_sugar_cane",
+      "upstreamName": "collectSugarCane",
+      "family": "collect",
+      "description": "This function searches for sugar cane plants within a 32-block radius, then digs and navigates to each plant to collect it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectSugarCane.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_water_with_bucket",
+      "upstreamName": "collectWaterWithBucket",
+      "family": "collect",
+      "description": "This function searches for a bucket in the inventory, crafts one if not found, then searches for a nearby water block, explores to find one if not found, navigates to the water block, equips the bucket, looks at the water block, and activates the bucket to collect water.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectWaterWithBucket.js",
+      "dependencies": [
+        "craft_bucket"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "item_use",
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "bucket_use",
+        "equip_items",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_wheat",
+      "upstreamName": "collectWheat",
+      "family": "collect",
+      "description": "This function searches for ripe wheat within a 32-block radius, navigates to the found wheat, and then digs it up.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectWheat.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "collect_wheat_seeds",
+      "upstreamName": "collectWheatSeeds",
+      "family": "collect",
+      "description": "This function searches for grass blocks within a 32-block radius, mines 10 of them, and repeats the process until it collects new wheat seeds, which are then counted and stored in the inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/collectWheatSeeds.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "collect_resources",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "cook_beef",
+      "upstreamName": "cookBeef",
+      "family": "cook",
+      "description": "This function ensures the necessary items are available to cook beef, crafting a furnace and mining coal if needed, and then killing a cow to obtain beef if it's not already in the inventory, before finally cooking the beef.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/cookBeef.js",
+      "dependencies": [
+        "craft_furnace",
+        "kill_one_cow",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "cookFood"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "cook",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "cook_chicken",
+      "upstreamName": "cookChicken",
+      "family": "cook",
+      "description": "This function ensures the necessary items are available to cook chicken, crafting a furnace and mining coal if needed, and then killing a chicken if none is available, before proceeding to cook the chicken.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/cookChicken.js",
+      "dependencies": [
+        "craft_furnace",
+        "kill_one_chicken",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "cookFood"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "cook",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "cook_mutton",
+      "upstreamName": "cookMutton",
+      "family": "cook",
+      "description": "This function ensures the necessary items are available to cook mutton, crafting a furnace and mining coal if needed, and killing a sheep if no mutton is found, before proceeding to cook the mutton.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/cookMutton.js",
+      "dependencies": [
+        "craft_furnace",
+        "kill_one_sheep",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "cookFood"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "cook",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "cook_porkchop",
+      "upstreamName": "cookPorkchop",
+      "family": "cook",
+      "description": "This function ensures the necessary items are available to cook a porkchop by checking for a furnace, coals, and pork in the inventory, and if not, crafts a furnace, kills a pig for the pork, and mines coal ores as needed, before proceeding to cook the porkchop.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/cookPorkchop.js",
+      "dependencies": [
+        "craft_furnace",
+        "kill_one_pig",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "cookFood"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "cook",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_amethyst_block",
+      "upstreamName": "craftAmethystBlock",
+      "family": "craft",
+      "description": "This function ensures the bot has enough amethyst shards by mining more if necessary, then crafts a crafting table if it doesn't have one, places it nearby, and finally uses it to craft an amethyst block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftAmethystBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_amethyst_cluster"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_anvil",
+      "upstreamName": "craftAnvil",
+      "family": "craft",
+      "description": "This function crafts an anvil by smelting iron ores into iron ingots, crafting iron blocks and crafting an anvil using a crafting table, ensuring sufficient iron and crafting table inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftAnvil.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_iron_block",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_arrow",
+      "upstreamName": "craftArrow",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient materials, crafts any missing items, sets up a crafting table, and then uses it to craft a single arrow.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftArrow.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "kill_one_chicken",
+        "mine_flint"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_boat",
+      "upstreamName": "craftBoat",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient planks and a crafting table, then crafts a boat by first crafting planks if needed, obtaining a wooden shovel and crafting table if missing, placing the crafting table, and finally crafting a boat using the available planks.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftBoat.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks",
+        "craft_wooden_shovel"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_bow",
+      "upstreamName": "craftBow",
+      "family": "craft",
+      "description": "This function checks if the bot has enough strings and sticks in its inventory, collects the required items if not, crafts a crafting table if needed, places it near the bot, and then uses it to craft a bow.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftBow.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_bowl",
+      "upstreamName": "craftBowl",
+      "family": "craft",
+      "description": "This function crafts a bowl by first checking if the bot has enough planks, collecting more if necessary, then checking if it has a crafting table, crafting one if needed, placing it near the bot, and finally crafting the bowl using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftBowl.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_bucket",
+      "upstreamName": "craftBucket",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient iron ingots by mining and smelting iron ores if necessary, crafts a crafting table if not already in inventory, places the crafting table near the bot, and then uses it to craft a bucket.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftBucket.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_five_iron_ores",
+        "smelt_five_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_campfire",
+      "upstreamName": "craftCampfire",
+      "family": "craft",
+      "description": "This function crafts a campfire by checking for required items, crafting or mining them if necessary, and then placing a crafting table and crafting the campfire using it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCampfire.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_coal_ore",
+        "mine_wood_log"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getLogsCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_cauldron",
+      "upstreamName": "craftCauldron",
+      "family": "craft",
+      "description": "This function crafts a cauldron by first smelting all raw iron, then crafting a crafting table if necessary, and finally crafting the cauldron itself using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCauldron.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_chest",
+      "upstreamName": "craftChest",
+      "family": "craft",
+      "description": "This function ensures the bot has enough planks by crafting them from logs if necessary, crafts a crafting table if it's not in the inventory, places the crafting table near the bot, and then uses it to craft a chest.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftChest.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_clock",
+      "upstreamName": "craftClock",
+      "family": "craft",
+      "description": "This function crafts a clock in the game Minecraft by smelting gold and redstone ores, checking the inventory for sufficient resources, crafting a crafting table if necessary, and placing it near the bot before crafting the clock.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftClock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_gold_ore",
+        "mine_redstone_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_cobblestone_slab",
+      "upstreamName": "craftCobblestoneSlab",
+      "family": "craft",
+      "description": "This function crafts cobblestone slabs by checking for cobblestones and crafting table in the inventory, collecting more cobblestones if needed, crafting a table if necessary, placing it near the bot, and then crafting the slabs using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCobblestoneSlab.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_cobblestone_stairs",
+      "upstreamName": "craftCobblestoneStairs",
+      "family": "craft",
+      "description": "This function crafts cobblestone stairs by collecting cobblestones if necessary, crafting a crafting table if needed, placing the table near the bot, and then crafting the stairs using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCobblestoneStairs.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_cobblestone_wall",
+      "upstreamName": "craftCobblestoneWall",
+      "family": "craft",
+      "description": "This function crafts a cobblestone wall by collecting cobblestones if needed, crafting a crafting table if not already present, placing the crafting table near the bot, and then crafting the cobblestone wall using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCobblestoneWall.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_compass",
+      "upstreamName": "craftCompass",
+      "family": "craft",
+      "description": "This function crafts a compass by smelting iron ingots, mining redstone ore if necessary, crafting a crafting table if it's not in the inventory, and then crafting the compass itself using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCompass.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "mine_redstone_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_copper_block",
+      "upstreamName": "craftCopperBlock",
+      "family": "craft",
+      "description": "This function automates the process of crafting a copper block by first smelting raw copper, then mining and smelting more copper ore if necessary, crafting a crafting table if not already available, placing the crafting table, and finally crafting the copper block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCopperBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_copper_ore",
+        "smelt_all_raw_copper"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_crafting_table",
+      "upstreamName": "craftCraftingTable",
+      "family": "craft",
+      "description": "This function crafts a crafting table by first checking if there are enough planks in the inventory, and if not, it mines a wooden log and crafts wooden planks before crafting the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCraftingTable.js",
+      "dependencies": [
+        "craft_wooden_planks",
+        "mine_wood_log"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "getPlanksCount"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_cut_sandstone",
+      "upstreamName": "craftCutSandstone",
+      "family": "craft",
+      "description": "This function crafts cut sandstone by collecting sandstone from the player's inventory if necessary, then crafting the item, and finally updating the player's inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCutSandstone.js",
+      "dependencies": [
+        "collect_sandstone"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_cut_sandstone_slab",
+      "upstreamName": "craftCutSandstoneSlab",
+      "family": "craft",
+      "description": "This function crafts sandstone slabs by checking if there are enough sandstones in the inventory, collecting more if necessary, then crafting and placing a crafting table and finally crafting the sandstone slabs using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftCutSandstoneSlab.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_cut_sandstone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_axe",
+      "upstreamName": "craftDiamondAxe",
+      "family": "craft",
+      "description": "This function collects diamonds and sticks, crafts a crafting table if necessary, places it near the bot, and then uses it to craft a diamond axe.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondAxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_block",
+      "upstreamName": "craftDiamondBlock",
+      "family": "craft",
+      "description": "This function ensures the bot has enough diamonds and a crafting table, then places the crafting table and uses it to craft a diamond block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_boots",
+      "upstreamName": "craftDiamondBoots",
+      "family": "craft",
+      "description": "This function collects diamonds if there are not enough in the inventory, crafts a crafting table if not available, places the crafting table near the bot, and then crafts a diamond boots using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondBoots.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_chestplate",
+      "upstreamName": "craftDiamondChestplate",
+      "family": "craft",
+      "description": "This function collects diamonds if there are not enough in the inventory, crafts a crafting table if not available, places the crafting table near the bot, and then crafts a diamond chestplate using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondChestplate.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_helmet",
+      "upstreamName": "craftDiamondHelmet",
+      "family": "craft",
+      "description": "This function collects diamonds if there are not enough in the inventory, crafts a crafting table if needed, places it near the bot, and then uses it to craft a diamond helmet.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondHelmet.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_hoe",
+      "upstreamName": "craftDiamondHoe",
+      "family": "craft",
+      "description": "This function collects diamonds and sticks, crafts a crafting table if necessary, places it near the bot, and then uses it to craft a diamond hoe.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondHoe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_leggings",
+      "upstreamName": "craftDiamondLeggings",
+      "family": "craft",
+      "description": "This function ensures the bot has enough diamonds and a crafting table, then places the crafting table and uses it to craft a single diamond leggings.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondLeggings.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_pickaxe",
+      "upstreamName": "craftDiamondPickaxe",
+      "family": "craft",
+      "description": "This function collects diamonds and sticks, crafts a crafting table if necessary, places it near the bot, and then uses it to craft a diamond pickaxe.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondPickaxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_shovel",
+      "upstreamName": "craftDiamondShovel",
+      "family": "craft",
+      "description": "This function collects diamonds and sticks, crafts a crafting table if necessary, places it near the bot, and then uses it to craft a diamond shovel.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondShovel.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_diamond_sword",
+      "upstreamName": "craftDiamondSword",
+      "family": "craft",
+      "description": "This function collects diamonds and sticks, crafts a crafting table if necessary, places it near the bot, and then uses it to craft a diamond sword.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDiamondSword.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_dropper",
+      "upstreamName": "craftDropper",
+      "family": "craft",
+      "description": "This function crafts a dropper by collecting redstone and cobblestones, then crafting the item, and finally checking the inventory count.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftDropper.js",
+      "dependencies": [
+        "collect_cobblestone",
+        "craft_crafting_table",
+        "mine_redstone_ore"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_emerald_block",
+      "upstreamName": "craftEmeraldBlock",
+      "family": "craft",
+      "description": "This function ensures the bot has enough emeralds and a crafting table, then places the crafting table and uses it to craft an emerald block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftEmeraldBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_emerald"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_fishing_rod",
+      "upstreamName": "craftFishingRod",
+      "family": "craft",
+      "description": "This function crafts a fishing rod by checking if the bot has enough sticks and strings in its inventory, crafting more sticks if necessary, and then crafting the fishing rod using a crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftFishingRod.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_flint_and_steel",
+      "upstreamName": "craftFlintAndSteel",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient iron ingots and flints by smelting raw iron and mining flint ore if necessary, then crafts a crafting table if not already available, places it nearby, and finally crafts a flint and steel item using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftFlintAndSteel.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_flint",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_furnace",
+      "upstreamName": "craftFurnace",
+      "family": "craft",
+      "description": "This function ensures the bot has enough cobblestones by mining more if necessary, crafts a crafting table if it doesn't have one, places the crafting table near the bot, and then uses it to craft a furnace.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftFurnace.js",
+      "dependencies": [
+        "collect_cobblestone",
+        "craft_crafting_table"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_gold_block",
+      "upstreamName": "craftGoldBlock",
+      "family": "craft",
+      "description": "This function automates the process of crafting a gold block by first smelting raw gold, then mining and smelting more gold ore if necessary, crafting a crafting table if not already available, placing the crafting table, and finally crafting the gold block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_axe",
+      "upstreamName": "craftGoldenAxe",
+      "family": "craft",
+      "description": "This function gathers necessary materials, crafts a crafting table if needed, places it, and then uses it to craft a golden axe, ensuring the bot has sufficient gold ingots and sticks in its inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenAxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_boots",
+      "upstreamName": "craftGoldenBoots",
+      "family": "craft",
+      "description": "This function automates the process of crafting golden boots by first smelting raw gold, then collecting and smelting more gold ore if necessary, crafting a crafting table if not already in inventory, placing the table, and finally using it to craft the golden boots.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenBoots.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_goldenchestplate",
+      "upstreamName": "craftGoldenchestplate",
+      "family": "craft",
+      "description": "This function automates the process of crafting a golden chestplate by first smelting raw gold, then collecting and smelting additional gold ore if necessary, crafting a crafting table if not already in inventory, placing the crafting table, and finally crafting the golden chestplate.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenchestplate.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_helmet",
+      "upstreamName": "craftGoldenHelmet",
+      "family": "craft",
+      "description": "This function automates the process of crafting a golden helmet by first smelting raw gold, then collecting and smelting additional gold ore if necessary, crafting a crafting table if not already in inventory, placing the crafting table, and finally crafting the golden helmet.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenHelmet.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_hoe",
+      "upstreamName": "craftGoldenHoe",
+      "family": "craft",
+      "description": "This function gathers necessary materials, crafts a crafting table if needed, places it, and then uses it to craft a golden hoe, ensuring the bot has sufficient gold ingots and sticks in its inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenHoe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_leggings",
+      "upstreamName": "craftGoldenLeggings",
+      "family": "craft",
+      "description": "This function automates the process of crafting golden leggings by first smelting raw gold, then collecting and smelting more gold ore if necessary, crafting a crafting table if not already in inventory, placing the crafting table, and finally crafting the golden leggings.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenLeggings.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_pick_axe",
+      "upstreamName": "craftGoldenPickAxe",
+      "family": "craft",
+      "description": "This function automates the process of crafting a gold pickaxe by first smelting raw gold, then collecting and smelting additional gold ore and crafting sticks if necessary, followed by crafting a crafting table if not already in inventory, placing it, and finally crafting the gold pickaxe using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenPickAxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_shovel",
+      "upstreamName": "craftGoldenShovel",
+      "family": "craft",
+      "description": "This function automates the process of crafting a golden shovel by first smelting raw gold, then collecting and preparing necessary items like gold ingots and sticks, crafting a crafting table if needed, placing it near the bot, and finally using it to craft the golden shovel.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenShovel.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_golden_sword",
+      "upstreamName": "craftGoldenSword",
+      "family": "craft",
+      "description": "This function gathers necessary materials, crafts a crafting table if needed, places it, and then uses it to craft a golden sword.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftGoldenSword.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_heavy_weighted_pressure_plate",
+      "upstreamName": "craftHeavyWeightedPressurePlate",
+      "family": "craft",
+      "description": "This function crafts a heavy weighted pressure plate by smelting all raw iron, mining and smelting iron ores if necessary, and then crafting the plate.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftHeavyWeightedPressurePlate.js",
+      "dependencies": [
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_hopper",
+      "upstreamName": "craftHopper",
+      "family": "craft",
+      "description": "This function crafts a hopper in the game by first checking if the necessary items are available, crafting them if not, and then using a crafting table to craft the hopper at a suitable position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftHopper.js",
+      "dependencies": [
+        "craft_chest",
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_axe",
+      "upstreamName": "craftIronAxe",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron axe by first smelting raw iron, then collecting required items if necessary, crafting a crafting table if not already available, placing the table, and finally crafting the iron axe using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronAxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_bars",
+      "upstreamName": "craftIronBars",
+      "family": "craft",
+      "description": "This function crafts iron bars by smelting raw iron, mining and smelting iron ores if needed, crafting a crafting table if not already in the inventory, and then crafting the iron bars using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronBars.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_block",
+      "upstreamName": "craftIronBlock",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron block by first smelting raw iron, then mining and smelting more iron ore if necessary, crafting a crafting table if not already available, placing the crafting table, and finally crafting the iron block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_boots",
+      "upstreamName": "craftIronBoots",
+      "family": "craft",
+      "description": "This function automates the process of crafting iron boots by first smelting raw iron, then mining and smelting more iron ore if necessary, crafting a crafting table if not already in inventory, placing the crafting table, and finally crafting the iron boots.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronBoots.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_chestplate",
+      "upstreamName": "craftIronChestplate",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron chestplate by first smelting raw iron into iron ingots, then crafting a crafting table if necessary, placing it near the bot, and finally using it to craft the iron chestplate.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronChestplate.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_door",
+      "upstreamName": "craftIronDoor",
+      "family": "craft",
+      "description": "This function crafts an iron door by smelting raw iron into iron ingots, crafting a crafting table if needed, and then crafting the iron door using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronDoor.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_helmet",
+      "upstreamName": "craftIronHelmet",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron helmet by first smelting raw iron, then mining and smelting more iron ore if necessary, crafting a crafting table if not already available, placing the crafting table, and finally crafting the iron helmet.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronHelmet.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_hoe",
+      "upstreamName": "craftIronHoe",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron hoe by first smelting raw iron, then collecting necessary items like sticks and iron ingots if they are not available, crafting a crafting table if needed, placing it near the bot, and finally crafting the iron hoe using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronHoe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_leggings",
+      "upstreamName": "craftIronLeggings",
+      "family": "craft",
+      "description": "This function automates the process of crafting iron leggings by first smelting raw iron into ingots, then crafting a crafting table if needed, placing it near the bot, and finally using it to craft the iron leggings.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronLeggings.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_nuggets",
+      "upstreamName": "craftIronNuggets",
+      "family": "craft",
+      "description": "This function crafts iron nuggets by smelting all raw iron, then checks if there are enough iron ingots in the inventory; if not, it mines iron ores, smelts them, and then crafts the iron nuggets.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronNuggets.js",
+      "dependencies": [
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_iron_pickaxe",
+      "upstreamName": "craftIronPickaxe",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron pickaxe by first smelting raw iron, collecting required items if necessary, crafting a crafting table if not already in inventory, placing the crafting table, and then using it to craft the iron pickaxe.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronPickaxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_shovel",
+      "upstreamName": "craftIronShovel",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron shovel by first smelting raw iron, then collecting necessary items if they're not in the inventory, crafting a crafting table if needed, placing it near the bot, and finally using it to craft the iron shovel.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronShovel.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_sword",
+      "upstreamName": "craftIronSword",
+      "family": "craft",
+      "description": "This function automates the process of crafting an iron sword by first smelting raw iron, then collecting necessary items like sticks and iron ingots, crafting a crafting table if needed, placing it near the bot, and finally using it to craft the iron sword.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronSword.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_iron_trapdoor",
+      "upstreamName": "craftIronTrapdoor",
+      "family": "craft",
+      "description": "This function crafts an iron trapdoor by first smelting all raw iron, then mining and smelting additional iron ores if necessary to have enough iron ingots, and finally crafting the iron trapdoor using the smelted ingots.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftIronTrapdoor.js",
+      "dependencies": [
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_jukebox",
+      "upstreamName": "craftJukebox",
+      "family": "craft",
+      "description": "This function crafts a jukebox by ensuring the bot has enough planks, diamonds, and a crafting table, then placing the crafting table and crafting the jukebox using it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftJukebox.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks",
+        "mine_diamond"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_ladders",
+      "upstreamName": "craftLadders",
+      "family": "craft",
+      "description": "This function crafts ladders by first ensuring the bot has sufficient sticks, then checking if it has a crafting table, crafting one if necessary, placing it near the bot, and finally crafting the ladders using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftLadders.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_lantern",
+      "upstreamName": "craftLantern",
+      "family": "craft",
+      "description": "This function crafts a lantern by checking if the bot has enough torches and iron nuggets, collecting the required items if necessary, crafting a crafting table if it's not already in the inventory, placing the crafting table near the bot, and then crafting the lantern using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftLantern.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_iron_nuggets"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_lever",
+      "upstreamName": "craftLever",
+      "family": "craft",
+      "description": "This function crafts a lever by checking the inventory for cobblestone, sticks, and a crafting table, collecting the required items if necessary, crafting the table if it's missing, placing the table near the bot, and then crafting the lever using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftLever.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_lightning_rod",
+      "upstreamName": "craftLightningRod",
+      "family": "craft",
+      "description": "This function crafts a lightning rod by first smelting all raw copper, then ensuring it has at least 3 copper ingots, and finally crafting a crafting table and using it to craft the lightning rod.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftLightningRod.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_copper_ore",
+        "smelt_all_raw_copper"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_light_weighted_pressure_plate",
+      "upstreamName": "craftLightWeightedPressurePlate",
+      "family": "craft",
+      "description": "This function crafts a light weighted pressure plate by first smelting all raw gold, then mining and smelting additional gold ores if necessary, and finally crafting the pressure plate using the sufficient gold ingots.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftLightWeightedPressurePlate.js",
+      "dependencies": [
+        "mine_gold_ore",
+        "smelt_all_raw_gold"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_minecart",
+      "upstreamName": "craftMinecart",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient iron ingots and a crafting table, then places the crafting table and uses it to craft a minecart.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftMinecart.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_five_iron_ores",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_note_block",
+      "upstreamName": "craftNoteBlock",
+      "family": "craft",
+      "description": "This function crafts a note block by crafting wooden planks and redstone ore as needed, then places a crafting table near the bot and uses it to craft the note block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftNoteBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks",
+        "mine_redstone_ore"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_piston",
+      "upstreamName": "craftPiston",
+      "family": "craft",
+      "description": "This function crafts a piston by gathering and crafting necessary items, such as redstone, iron ingots, and wooden planks, and then placing a crafting table and crafting the piston using it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftPiston.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks",
+        "mine_cobblestone",
+        "mine_iron_ore",
+        "mine_redstone_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_rails",
+      "upstreamName": "craftRails",
+      "family": "craft",
+      "description": "This function collects and processes iron ores, crafts sticks if needed, crafts a crafting table if not already in inventory, places the crafting table, and then uses it to craft rails.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftRails.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_five_iron_ores",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_raw_copper_block",
+      "upstreamName": "craftRawCopperBlock",
+      "family": "craft",
+      "description": "This function crafts a raw copper block by first ensuring the bot has enough raw copper in its inventory, then crafting a crafting table if necessary, placing the table near the bot, and finally crafting the raw copper block using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftRawCopperBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_copper_ore"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_raw_gold_block",
+      "upstreamName": "craftRawGoldBlock",
+      "family": "craft",
+      "description": "This function crafts a gold block by first ensuring the bot has enough raw gold, then crafting a crafting table if necessary, placing the table, and finally crafting the gold block using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftRawGoldBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_gold_ore"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_raw_iron_block",
+      "upstreamName": "craftRawIronBlock",
+      "family": "craft",
+      "description": "This function crafts a raw iron block by ensuring the bot has enough raw iron, crafting a crafting table if necessary, placing the table, and then crafting the block using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftRawIronBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_iron_ore"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_redstone_block",
+      "upstreamName": "craftRedstoneBlock",
+      "family": "craft",
+      "description": "This function crafts a redstone block by first ensuring the bot has enough redstone in its inventory, then crafting a crafting table if necessary, placing the crafting table near the bot, and finally crafting the redstone block using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftRedstoneBlock.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_redstone_ore"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_redstone_torch",
+      "upstreamName": "craftRedstoneTorch",
+      "family": "craft",
+      "description": "This function crafts a redstone torch by checking if the bot has sufficient redstone and sticks, and if not, it mines redstone ore and crafts sticks before crafting the torch.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftRedstoneTorch.js",
+      "dependencies": [
+        "craft_sticks",
+        "mine_redstone_ore"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_sandstone_stairs",
+      "upstreamName": "craftSandstoneStairs",
+      "family": "craft",
+      "description": "This function crafts sandstone stairs by checking if there are enough sandstones in the inventory, collecting more if necessary, crafting a crafting table if not already available, placing the table near the bot, and then crafting the sandstone stairs using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftSandstoneStairs.js",
+      "dependencies": [
+        "collect_sandstone",
+        "craft_crafting_table"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_scaffolding",
+      "upstreamName": "craftScaffolding",
+      "family": "craft",
+      "description": "This function crafts scaffolding by collecting bamboos and strings, crafting a crafting table if necessary, and then crafting the scaffolding itself, placing it at a suitable position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftScaffolding.js",
+      "dependencies": [
+        "collect_bamboo",
+        "craft_crafting_table"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_shears",
+      "upstreamName": "craftShears",
+      "family": "craft",
+      "description": "This function collects and smelts iron ores if there are not enough iron ingots, crafts a crafting table if it's not in the inventory, places the crafting table near the bot, and then uses it to craft a pair of shears.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftShears.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_five_iron_ores",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_shield",
+      "upstreamName": "craftShield",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient planks and iron ingots by crafting or mining them if necessary, then crafts a crafting table if not already in inventory, places it nearby, and finally crafts a shield using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftShield.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks",
+        "mine_iron_ore",
+        "smelt_all_raw_iron"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_spyglass",
+      "upstreamName": "craftSpyglass",
+      "family": "craft",
+      "description": "This function crafts a spyglass by first smelting all raw copper, then mining and smelting copper ores until it has enough copper ingots, mining an amethyst cluster if necessary, crafting a crafting table if it's not already in the inventory, placing the crafting table near the bot, and finally crafting the spyglass using the crafting table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftSpyglass.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "mine_amethyst_cluster",
+        "mine_copper_ore",
+        "smelt_all_raw_copper"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_sticks",
+      "upstreamName": "craftSticks",
+      "family": "craft",
+      "description": "This function crafts sticks by first checking if there are enough planks in the inventory, and if not, it mines a log or crafts more planks, then crafts the sticks.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftSticks.js",
+      "dependencies": [
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "getPlanksCount"
+      ],
+      "directBotApis": [],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_stone_axe",
+      "upstreamName": "craftStoneAxe",
+      "family": "craft",
+      "description": "This function collects necessary materials, crafts a crafting table if needed, places it, and then uses it to craft a stone axe, ensuring the bot has the required items and tools in its inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftStoneAxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_stone_hoe",
+      "upstreamName": "craftStoneHoe",
+      "family": "craft",
+      "description": "This function collects necessary materials, crafts a crafting table if needed, places it, and then uses it to craft a stone hoe, ensuring the bot has the required items and tools before crafting.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftStoneHoe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_stone_pickaxe",
+      "upstreamName": "craftStonePickaxe",
+      "family": "craft",
+      "description": "This function crafts a stone pickaxe. It collects necessary materials(cobblestones and sticks), crafts a crafting table if needed, places it, and then uses it to craft a stone pickaxe, ensuring the bot has the required items in its inventory before crafting.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftStonePickaxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_stone_shovel",
+      "upstreamName": "craftStoneShovel",
+      "family": "craft",
+      "description": "This function collects necessary materials, crafts a crafting table if needed, places it, and then uses it to craft a stone shovel.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftStoneShovel.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_stone_sword",
+      "upstreamName": "craftStoneSword",
+      "family": "craft",
+      "description": "This function collects necessary materials, crafts a crafting table if needed, places it, and then uses it to craft a stone sword, ensuring the bot has the required items and tools in its inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftStoneSword.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "mine_cobblestone"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_torches",
+      "upstreamName": "craftTorches",
+      "family": "craft",
+      "description": "This function ensures the bot has coal and sticks in its inventory, mining coal ores or crafting sticks if necessary, then crafts a single torch.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftTorches.js",
+      "dependencies": [
+        "craft_sticks",
+        "mine_five_coal_ores"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_white_bed",
+      "upstreamName": "craftWhiteBed",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient planks and wool, crafts them if necessary, obtains a crafting table, places it nearby, and then uses it to craft a bed.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftWhiteBed.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_wooden_planks",
+        "kill_one_sheep"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_wooden_axe",
+      "upstreamName": "craftWoodenAxe",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient sticks and planks in its inventory, crafts them if needed, and then crafts a crafting table if it's not already available, placing it in a suitable position before using it to craft a wooden axe.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftWoodenAxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_wooden_hoe",
+      "upstreamName": "craftWoodenHoe",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient sticks and planks, crafts them if necessary, then crafts a crafting table if it doesn't have one, places the table near the bot, and finally crafts a wooden hoe using the table.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftWoodenHoe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_wooden_pickaxe",
+      "upstreamName": "craftWoodenPickaxe",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient sticks and planks in its inventory, crafts them if needed, and then crafts a crafting table if not already available, placing it nearby and finally using it to craft a wooden pickaxe.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftWoodenPickaxe.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_wooden_planks",
+      "upstreamName": "craftWoodenPlanks",
+      "family": "craft",
+      "description": "This function checks if the bot has any wooden logs in its inventory, and if not, it mines one; then it crafts four wooden planks from the available log and updates the inventory accordingly.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftWoodenPlanks.js",
+      "dependencies": [
+        "mine_wood_log"
+      ],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "craft_wooden_shovel",
+      "upstreamName": "craftWoodenShovel",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient sticks and planks in its inventory, crafts them if needed, and then crafts a crafting table if not already available, before using the crafting table to craft a wooden shovel.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftWoodenShovel.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "craft_wooden_sword",
+      "upstreamName": "craftWoodenSword",
+      "family": "craft",
+      "description": "This function ensures the bot has sufficient sticks and planks in its inventory, crafts them if needed, and then crafts a crafting table if not already available, placing it nearby and finally using it to craft a wooden sword.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/craftWoodenSword.js",
+      "dependencies": [
+        "craft_crafting_table",
+        "craft_sticks",
+        "craft_wooden_planks"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "getPlanksCount",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "deposit_into_chest",
+      "upstreamName": "depositIntoChest",
+      "family": "deposit",
+      "description": "This function deposits non-iron and non-diamond items from the bot's inventory into a chest at a specified position, using a placed chest as a deposit location.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/depositIntoChest.js",
+      "dependencies": [
+        "place_chest"
+      ],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "container_transfer",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_armor",
+      "upstreamName": "equipArmor",
+      "family": "equip",
+      "description": "This function equips the highest tier armor available in the player's inventory, checking for diamond, iron, golden, chainmail, and leather armor, and then equipping it to the corresponding armor slot.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipArmor.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipArmor"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_axe_or_craft_one",
+      "upstreamName": "equipAxeOrCraftOne",
+      "family": "equip",
+      "description": "This function searches for the best available axe in the inventory, prioritizing diamond, iron, stone, and wooden axes, equips the found axe, and if none are available, crafts a wooden axe and equips it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipAxeOrCraftOne.js",
+      "dependencies": [
+        "craft_wooden_axe"
+      ],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_hoe_or_craft_one",
+      "upstreamName": "equipHoeOrCraftOne",
+      "family": "equip",
+      "description": "This function searches for the best available hoe in the inventory, prioritizing diamond, iron, stone, and wooden hoes, and equips it; if no hoe is found, it crafts a wooden hoe and equips it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipHoeOrCraftOne.js",
+      "dependencies": [
+        "craft_wooden_hoe"
+      ],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_iron_armor",
+      "upstreamName": "equipIronArmor",
+      "family": "equip",
+      "description": "This function searches for iron armor items in the inventory and equips them in their corresponding slots if found.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipIronArmor.js",
+      "dependencies": [],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_pickaxe_or_craft_one",
+      "upstreamName": "equipPickaxeOrCraftOne",
+      "family": "equip",
+      "description": "This function searches for the best available pickaxe in the inventory, equips it if found, and if not, crafts a wooden pickaxe and equips it instead.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipPickaxeOrCraftOne.js",
+      "dependencies": [
+        "craft_wooden_pickaxe"
+      ],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_shield",
+      "upstreamName": "equipShield",
+      "family": "equip",
+      "description": "This function searches for a shield in the bot's inventory, and if found, equips it in the off-hand slot, otherwise it doesn't perform any action.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipShield.js",
+      "dependencies": [],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_shovel_or_craft_one",
+      "upstreamName": "equipShovelOrCraftOne",
+      "family": "equip",
+      "description": "This function searches for the best available shovel in the inventory, equips it, and if none are found, crafts a wooden shovel and equips it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipShovelOrCraftOne.js",
+      "dependencies": [
+        "craft_wooden_shovel"
+      ],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "equip_sword_or_craft_one",
+      "upstreamName": "equipSwordOrCraftOne",
+      "family": "equip",
+      "description": "This function searches for the best available sword in the inventory, prioritizing diamond, iron, stone, and wooden swords, equips the found sword, and if none are available, crafts a wooden sword and equips it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/equipSwordOrCraftOne.js",
+      "dependencies": [
+        "craft_wooden_sword"
+      ],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "hoe_farmland",
+      "upstreamName": "hoeFarmland",
+      "family": "hoe",
+      "description": "This function equips a hoe, finds a nearby water source, locates dirt or grass blocks near the water, and then converts them into farmland by activating the hoe on those blocks if there is air above and water nearby.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/hoeFarmland.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "checkBlockAbove",
+        "checkBlocksAround",
+        "equipHoe",
+        "exploreUntil"
+      ],
+      "directBotApis": [
+        "place_block",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "hotbar_selection",
+        "farming",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_bat",
+      "upstreamName": "killOneBat",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest bat within a 32-block radius, kills it, and then collects the dropped items by navigating to the bat's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneBat.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_camel",
+      "upstreamName": "killOneCamel",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest camel within a 32-block radius, kills it, and then collects the dropped items by navigating to the camel's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneCamel.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_chicken",
+      "upstreamName": "killOneChicken",
+      "family": "kill",
+      "description": "Equips a sword, finds and kills the nearest chicken within a 32-block radius, and then collects the dropped items by moving to the chicken's previous position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneChicken.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_cow",
+      "upstreamName": "killOneCow",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest cow within a 32-block radius, kills it, and then collects the dropped items by navigating to the cow's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneCow.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_creeper",
+      "upstreamName": "killOneCreeper",
+      "family": "kill",
+      "description": "Equips a sword, finds and kills the nearest creeper within a 32-block radius, and then collects the dropped items by navigating to the creeper's previous position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneCreeper.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_donkey",
+      "upstreamName": "killOneDonkey",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest Donkey within a 32-block radius, kills it, and then collects the dropped items by navigating to the Donkey's position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneDonkey.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_enderman",
+      "upstreamName": "killOneEnderman",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest enderman within a 32-block radius, kills it, and then collects any dropped items by navigating to the enderman's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneEnderman.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_horse",
+      "upstreamName": "killOneHorse",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest horse within a 32-block radius, kills it, and then collects the dropped items by navigating to the horse's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneHorse.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_mule",
+      "upstreamName": "killOneMule",
+      "family": "kill",
+      "description": "Equips a sword, finds and kills a nearby ule entity within a 32-block radius, and then collects the dropped items by navigating to the ule's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneMule.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_pig",
+      "upstreamName": "killOnePig",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest pig within a 32-block radius, kills it, and then collects the dropped items by navigating to the pig's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOnePig.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_rabbit",
+      "upstreamName": "killOneRabbit",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest rabbit within a 32-block radius, kills it, and then collects the dropped items by navigating to the rabbit's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneRabbit.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_sheep",
+      "upstreamName": "killOneSheep",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest sheep within a 32-block radius, kills it, and then collects the dropped items by navigating to the sheep's position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneSheep.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_skeleton",
+      "upstreamName": "killOneSkeleton",
+      "family": "kill",
+      "description": "Equips a sword, finds and kills the nearest skeleton within a 32-block radius, and then collects the dropped items by moving to the skeleton's previous position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneSkeleton.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_slime",
+      "upstreamName": "killOneSlime",
+      "family": "kill",
+      "description": "This function kills a slime by equipping a sword, finding the nearest slime, killing it with the sword, and then collecting the dropped items.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneSlime.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_spider",
+      "upstreamName": "killOneSpider",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest spider within a 32-block radius, kills it, and then collects the dropped items by navigating to the spider's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneSpider.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_turtle",
+      "upstreamName": "killOneTurtle",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest turtle within a 32-block radius, kills it, and then collects the dropped items by navigating to the turtle's former position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneTurtle.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "kill_one_zombie",
+      "upstreamName": "killOneZombie",
+      "family": "kill",
+      "description": "This function equips a sword, finds the nearest zombie within a 32-block radius, kills it, and then collects any dropped items.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/killOneZombie.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipSword",
+        "exploreUntil",
+        "goto",
+        "killMob"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "combat",
+        "hotbar_selection",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "make_bread",
+      "upstreamName": "makeBread",
+      "family": "make",
+      "description": "This function checks if the bot has enough wheat and a crafting table in its inventory, crafts a crafting table if needed, places it near the bot, and then uses it to craft a single bread item.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/makeBread.js",
+      "dependencies": [
+        "craft_crafting_table"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "make_cookies",
+      "upstreamName": "makeCookies",
+      "family": "make",
+      "description": "This function checks the inventory for wheat and cocoa beans, and if sufficient quantities are present, crafts a crafting table if needed, places it near the bot, and then uses it to craft a cookie.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/makeCookies.js",
+      "dependencies": [
+        "craft_crafting_table"
+      ],
+      "primitiveCalls": [
+        "craftItem",
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "craft",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "make_sugar",
+      "upstreamName": "makeSugar",
+      "family": "make",
+      "description": "This function checks if the bot has sugar cane in its inventory, and if so, crafts one sugar item, otherwise it terminates early.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/makeSugar.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "craftItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "craft",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "mine_amethyst_cluster",
+      "upstreamName": "mineAmethystCluster",
+      "family": "mine",
+      "description": "Equips an iron pickaxe if available, otherwise equips a stone pickaxe or crafts one if neither is available, then explores until an amethyst cluster ore is found within a 32-block radius and mines it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineAmethystCluster.js",
+      "dependencies": [
+        "craft_stone_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_coal_ore",
+      "upstreamName": "mineCoalOre",
+      "family": "mine",
+      "description": "This function equips a pickaxe, searches for a coal ore block within a 32-block radius, and if found, mines it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineCoalOre.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipPickaxe",
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "hotbar_selection",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_cobblestone",
+      "upstreamName": "mineCobblestone",
+      "family": "mine",
+      "description": "This function equips a pickaxe, searches for a cobblestone block within a 32-block radius, and if found, mines one block of cobblestone.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineCobblestone.js",
+      "dependencies": [
+        "equip_pickaxe_or_craft_one"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_copper_ore",
+      "upstreamName": "mineCopperOre",
+      "family": "mine",
+      "description": "Equips an iron pickaxe if available, otherwise crafts and equips a stone pickaxe, then explores the surroundings to find a copper ore block, and finally mines the found block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineCopperOre.js",
+      "dependencies": [
+        "craft_stone_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_diamond",
+      "upstreamName": "mineDiamond",
+      "family": "mine",
+      "description": "This function equips an iron pickaxe, then moves in a specific direction until it finds a diamond ore or deepslate diamond ore within a certain distance, and finally mines the block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineDiamond.js",
+      "dependencies": [
+        "craft_iron_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_emerald",
+      "upstreamName": "mineEmerald",
+      "family": "mine",
+      "description": "This function equips the bot with a diamond or iron pickaxe if available, crafts an iron pickaxe if not, then explores in a specific direction to find an emerald ore block within a certain distance, and finally mines the block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineEmerald.js",
+      "dependencies": [
+        "craft_iron_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_five_coal_ores",
+      "upstreamName": "mineFiveCoalOres",
+      "family": "mine",
+      "description": "This function equips a pickaxe, searches for and finds five coal ore blocks within a 32-block radius, and then mines those blocks.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineFiveCoalOres.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "equipPickaxe",
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "hotbar_selection",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_five_iron_ores",
+      "upstreamName": "mineFiveIronOres",
+      "family": "mine",
+      "description": "Equips an iron pickaxe if available, otherwise equips a stone pickaxe after crafting it if necessary, then searches for and mines five iron ore blocks within a 32-block radius.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineFiveIronOres.js",
+      "dependencies": [
+        "craft_stone_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_flint",
+      "upstreamName": "mineFlint",
+      "family": "mine",
+      "description": "This function equips the best available shovel, explores to find gravel, and mines it until the flint count in the inventory increases by one.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineFlint.js",
+      "dependencies": [
+        "craft_wooden_shovel"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_gold_ore",
+      "upstreamName": "mineGoldOre",
+      "family": "mine",
+      "description": "This function equips an iron pickaxe, searches for a gold ore block within a 32-block radius, and if found, mines it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineGoldOre.js",
+      "dependencies": [
+        "craft_iron_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_iron_ore",
+      "upstreamName": "mineIronOre",
+      "family": "mine",
+      "description": "Equips an iron pickaxe if available, otherwise equips a stone pickaxe if available or crafts one if not, then explores to find an iron ore block within a 32-block radius and mines it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineIronOre.js",
+      "dependencies": [
+        "craft_stone_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_lapis_lazuli_ore",
+      "upstreamName": "mineLapisLazuliOre",
+      "family": "mine",
+      "description": "Equips an iron or stone pickaxe, then explores the surroundings to find a lapis lazuli ore block within a 32-block radius, and finally mines the found ore block.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineLapisLazuliOre.js",
+      "dependencies": [
+        "craft_stone_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_redstone_ore",
+      "upstreamName": "mineRedstoneOre",
+      "family": "mine",
+      "description": "This function equips an iron pickaxe, searches for a nearby redstone ore block, and then mines it if found.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineRedstoneOre.js",
+      "dependencies": [
+        "craft_iron_pickaxe"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "mine_wood_log",
+      "upstreamName": "mineWoodLog",
+      "family": "mine",
+      "description": "This function searches for and mines a wood log block in the player's vicinity, iterating up to a certain distance and checking for blocks with names matching a list of wood log types, then mines the first one found.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/mineWoodLog.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "mineBlock"
+      ],
+      "directBotApis": [
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "mine",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "place_chest",
+      "upstreamName": "placeChest",
+      "family": "place",
+      "description": "This function places a chest in a suitable position, first checking if the bot has a chest in its inventory and crafting one if necessary, then finding a suitable position to place the chest and placing it there.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/placeChest.js",
+      "dependencies": [
+        "craft_chest"
+      ],
+      "primitiveCalls": [
+        "findSuitablePosition",
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "place_minecart_on_rail",
+      "upstreamName": "placeMinecartOnRail",
+      "family": "place",
+      "description": "This function searches for a minecart in the inventory and a rail block within a 32-block radius, then places a minecart at the location of the found rail.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/placeMinecartOnRail.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil"
+      ],
+      "directBotApis": [
+        "inventory",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "navigation",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "place_rail",
+      "upstreamName": "placeRail",
+      "family": "place",
+      "description": "This function searches for rails in the inventory, and if found, places one at the current entity position.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/placeRail.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "placeItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "place_water",
+      "upstreamName": "placeWater",
+      "family": "place",
+      "description": "This function searches for a water bucket in the inventory, equips it, looks at the current position, and activates the item to place water at that location.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/placeWater.js",
+      "dependencies": [],
+      "primitiveCalls": [],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "item_use"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "bucket_use",
+        "equip_items",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "plant_melon_seeds",
+      "upstreamName": "plantMelonSeeds",
+      "family": "plant",
+      "description": "This function ensures the bot has melon seeds in its inventory, collecting them if needed, and then plants them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/plantMelonSeeds.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "plantSeeds"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "farming",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "plant_pumpkin_seeds",
+      "upstreamName": "plantPumpkinSeeds",
+      "family": "plant",
+      "description": "This function ensures the bot has pumpkin seeds in its inventory, collecting them if necessary, and then plants them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/plantPumpkinSeeds.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "plantSeeds"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "farming",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "plant_wheat_seeds",
+      "upstreamName": "plantWheatSeeds",
+      "family": "plant",
+      "description": "This function ensures the bot has wheat seeds in its inventory, collecting them if necessary, and then plants them.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/plantWheatSeeds.js",
+      "dependencies": [
+        "collect_wheat_seeds"
+      ],
+      "primitiveCalls": [
+        "plantSeeds"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "farming",
+        "inventory_read"
+      ]
+    },
+    {
+      "id": "shear_one_sheep",
+      "upstreamName": "shearOneSheep",
+      "family": "shear",
+      "description": "This function equips shears, finds the nearest sheep, moves towards it, uses the shears on the sheep, and then collects the dropped items.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/shearOneSheep.js",
+      "dependencies": [
+        "craft_shears"
+      ],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "equip",
+        "inventory",
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "equip_items",
+        "inventory_read",
+        "navigation",
+        "shear_animals",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "smelt_all_raw_copper",
+      "upstreamName": "smeltAllRawCopper",
+      "family": "smelt",
+      "description": "This function checks for a furnace and coal in the inventory, crafts a furnace if needed, places it near the bot, and then uses the available coal to smelt all raw copper in the inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/smeltAllRawCopper.js",
+      "dependencies": [
+        "craft_furnace",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "findSuitablePosition",
+        "placeItem",
+        "smeltItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "smelt",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "smelt_all_raw_gold",
+      "upstreamName": "smeltAllRawGold",
+      "family": "smelt",
+      "description": "This function checks for a furnace and coal in the inventory, crafts or mines them if necessary, places the furnace, and then uses the available coal to smelt all raw gold in the inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/smeltAllRawGold.js",
+      "dependencies": [
+        "craft_furnace",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "findSuitablePosition",
+        "placeItem",
+        "smeltItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "smelt",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "smelt_all_raw_iron",
+      "upstreamName": "smeltAllRawIron",
+      "family": "smelt",
+      "description": "This function checks for a furnace and coal in the inventory, crafts a furnace if needed, places it near the bot, and then uses the available coal to smelt all raw iron in the inventory.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/smeltAllRawIron.js",
+      "dependencies": [
+        "craft_furnace",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "findSuitablePosition",
+        "placeItem",
+        "smeltItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "smelt",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "smelt_cactus_into_green_dye",
+      "upstreamName": "smeltCactusIntoGreenDye",
+      "family": "smelt",
+      "description": "This function ensures the bot has a furnace, sufficient cactus and coal, then places the furnace and uses it to smelt five cactus into green dye.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/smeltCactusIntoGreenDye.js",
+      "dependencies": [
+        "craft_furnace",
+        "mine_five_coal_ores"
+      ],
+      "primitiveCalls": [
+        "findSuitablePosition",
+        "placeItem",
+        "smeltItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "smelt",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "smelt_five_raw_iron",
+      "upstreamName": "smeltFiveRawIron",
+      "family": "smelt",
+      "description": "This function ensures the bot has a furnace and coal in its inventory, crafts a furnace if needed, places it nearby, mines coal if necessary, and then uses the coal to smelt five raw iron ores.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/smeltFiveRawIron.js",
+      "dependencies": [
+        "craft_furnace",
+        "mine_five_coal_ores"
+      ],
+      "primitiveCalls": [
+        "findSuitablePosition",
+        "placeItem",
+        "smeltItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "smelt",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "smelt_sand_into_glass",
+      "upstreamName": "smeltSandIntoGlass",
+      "family": "smelt",
+      "description": "This function smelts sand into glass by crafting a furnace, collecting sand and coal if necessary, placing the furnace, and then smelting the sand using the available coal as fuel.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/smeltSandIntoGlass.js",
+      "dependencies": [
+        "collect_sand",
+        "craft_furnace",
+        "mine_coal_ore"
+      ],
+      "primitiveCalls": [
+        "findSuitablePosition",
+        "placeItem",
+        "smeltItem"
+      ],
+      "directBotApis": [
+        "inventory"
+      ],
+      "requiredCapabilities": [
+        "block_placement",
+        "inventory_read",
+        "smelt",
+        "spatial_observation"
+      ]
+    },
+    {
+      "id": "take_and_move_minecart",
+      "upstreamName": "takeAndMoveMinecart",
+      "family": "takeAndMove",
+      "description": "This function finds a nearby minecart, navigates to it, activates it, moves it along the rails by adjusting its velocity, and then dismounts from it.",
+      "sourcePath": "Odyssey/skill_library/skill/compositional/takeAndMoveMinecart.js",
+      "dependencies": [],
+      "primitiveCalls": [
+        "exploreUntil",
+        "goto"
+      ],
+      "directBotApis": [
+        "pathfinder",
+        "world_query"
+      ],
+      "requiredCapabilities": [
+        "navigation",
+        "spatial_observation",
+        "vehicle_control"
+      ]
+    }
+  ]
+}

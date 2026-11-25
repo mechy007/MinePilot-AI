@@ -70,6 +70,9 @@ export class LayerThreePlanner {
   private readonly drops = new Map<string, Drop>();
   private readonly blockUpdates = new Map<string, BlockUpdate>();
   private readonly inventory = new Map<number, number>();
+  private readonly hotbar = new Map<number, { networkId: number; count: number }>();
+  private hotbarKnown = false;
+  private hotbarSeenAt: number | null = null;
   private inventoryKnown = false;
   private inventorySeenAt: number | null = null;
   private pendingPickups: PendingPickup[] = [];
@@ -85,6 +88,9 @@ export class LayerThreePlanner {
     this.inventory.clear();
     this.inventoryKnown = false;
     this.inventorySeenAt = null;
+    this.hotbar.clear();
+    this.hotbarKnown = false;
+    this.hotbarSeenAt = null;
   }
   dimensionChanged(): void {
     this.drops.clear();
@@ -93,6 +99,9 @@ export class LayerThreePlanner {
     this.inventory.clear();
     this.inventoryKnown = false;
     this.inventorySeenAt = null;
+    this.hotbar.clear();
+    this.hotbarKnown = false;
+    this.hotbarSeenAt = null;
     this.goal = null;
     this.progressValidated = false;
   }
@@ -188,6 +197,14 @@ export class LayerThreePlanner {
     if (p.window_id !== 0 && p.window_id !== 'inventory') return false;
     if (!Array.isArray(p.input) || p.input.length > 128) return false;
     const totals = new Map<number, number>();
+    const hotbar = new Map<number, { networkId: number; count: number }>();
+    for (let slot = 0; slot < 9; slot++) {
+      const item = p.input[slot];
+      const id = idNumber(item?.network_id);
+      const count = item?.count;
+      if (id != null && typeof count === 'number' && Number.isInteger(count) && count >= 1 && count <= 127)
+        hotbar.set(slot, { networkId: id, count });
+    }
     for (const item of p.input) {
       const id = idNumber(item?.network_id);
       const count = item?.count;
@@ -218,7 +235,40 @@ export class LayerThreePlanner {
     for (const [id, count] of totals) this.inventory.set(id, count);
     this.inventoryKnown = true;
     this.inventorySeenAt = this.now();
+    this.hotbar.clear();
+    for (const [slot, item] of hotbar) this.hotbar.set(slot, item);
+    this.hotbarKnown = p.input.length >= 9;
+    this.hotbarSeenAt = this.hotbarKnown ? this.now() : null;
     return true;
+  }
+
+  /** Apply a single server inventory-slot update to the hotbar mirror. */
+  observeInventorySlot(packet: unknown): boolean {
+    if (!packet || typeof packet !== 'object') return false;
+    const p = packet as { window_id?: unknown; slot?: unknown; item?: { network_id?: unknown; count?: unknown } };
+    if ((p.window_id !== 0 && p.window_id !== 'inventory') ||
+        !Number.isInteger(p.slot) || (p.slot as number) < 0 || (p.slot as number) > 8) return false;
+    const slot = p.slot as number;
+    const id = idNumber(p.item?.network_id);
+    const count = p.item?.count;
+    if (id != null && typeof count === 'number' && Number.isInteger(count) && count > 0 && count <= 127)
+      this.hotbar.set(slot, { networkId: id, count });
+    else this.hotbar.delete(slot);
+    // Incremental slot updates do not refresh the full-snapshot freshness timestamp.
+    return true;
+  }
+
+  /** Sanitized slot-level hotbar view; only populated after a full player inventory snapshot. */
+  hotbarItems(): {
+    known: boolean; observedAt: number | null;
+    slots: Array<{ slot: number; itemName: string; count: number; networkId: number }>;
+  } {
+    const slots = Array.from(this.hotbar.entries()).flatMap(([slot, item]) => {
+      const itemName = this.registry.get(item.networkId);
+      return itemName ? [{ slot, itemName, count: item.count, networkId: item.networkId }] : [];
+    }).sort((a, b) => a.slot - b.slot);
+    return { known: this.inventoryKnown && this.hotbarKnown && this.registry.size > 0,
+      observedAt: this.hotbarSeenAt, slots };
   }
 
   /** Sanitized, server-observed item counts for higher-layer survival/build plans. */

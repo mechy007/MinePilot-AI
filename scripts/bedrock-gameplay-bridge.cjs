@@ -7,13 +7,16 @@
  */
 const { readFileSync, writeFileSync, renameSync, unlinkSync, statSync } = require('node:fs');
 const { randomUUID } = require('node:crypto');
+const { executeBedrockObservation } = require('./bedrock-odyssey-observation-executor.cjs');
+const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.cjs');
+const { BedrockInventoryLedger } = require('./bedrock-inventory-ledger.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
-const { gameplaySkillManifest } = require('./bedrock-skill-manifest.cjs');
+const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -94,12 +97,24 @@ class BedrockGameplayBridge {
     this.playerGameMode = 'unknown';
     this.worldGameMode = 'unknown';
     this.difficulty = null;
+    this.itemStackNetManager = null;
+    this.inventoryLedger = options.inventoryLedger ?? new BedrockInventoryLedger({ clock: this.clock });
+    this.stackRequests = new BedrockStackRequestManager(this.client, {
+      isEnabled: () => this.itemStackNetManager === true, timeoutMs: 5000
+    });
+    this.selectedHotbarSlot = null;
+    this.pendingHotbarSelection = null;
+    this.lastHotbarSelection = null;
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
     this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
       actionRequests: 0, recovered: 0, error: null };
     this.watch = null;
+    this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
+    this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
+    this.lastIntelligenceDecision = null;
+    this.lastAddonNavigationSnapshot = null;
     this.listeners = [];
   }
   bind(event, callback) {
@@ -118,7 +133,12 @@ class BedrockGameplayBridge {
     this.bind('subchunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
+    this.bind('inventory_slot', p => {
+      this.inventoryLedger?.observeSlot(p);
+      this.layerThree?.observeInventorySlot(p);
+    });
     this.bind('inventory_content', p => {
+      this.inventoryLedger?.observeContent(p);
       this.layerOne?.onInventory(p);
       this.layerThree?.observeInventory(p);
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
@@ -126,6 +146,7 @@ class BedrockGameplayBridge {
       this.layerSix?.observeContainer(p);
     });
     this.bind('item_registry', p => {
+      this.inventoryLedger?.observeItemRegistry(p);
       this.layerThree?.observeItemRegistry(p);
       this.layerFour?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
       this.layerFive?.observeInventory(this.layerThree?.inventoryItems() ?? { known: false, observedAt: null, counts: {} });
@@ -150,6 +171,7 @@ class BedrockGameplayBridge {
     this.bind('move_actor_delta', p => this.lifeSenses?.moveEntity(p));
     this.bind('player_list', p => this.playerList(p));
     this.bind('mob_equipment', p => this.equipment(p));
+    this.bind('player_hotbar', p => this.playerHotbar(p));
     this.bind('remove_actor', p => this.removeActor(p));
     this.bind('remove_entity', p => this.removeActor(p));
     this.bind('change_dimension', p => this.dimensionChange(p));
@@ -159,6 +181,7 @@ class BedrockGameplayBridge {
   }
   startGame(packet) {
     if (!packet || typeof packet !== 'object') return;
+    stopLocalAutopilot(this, 'new_world_session');
     this.gameplayAgent?.stop('new_world_session');
     this.self = ident(packet.runtime_entity_id ?? packet.entity_runtime_id);
     this.selfUnique = ident(packet.entity_id);
@@ -169,9 +192,17 @@ class BedrockGameplayBridge {
       Number.isFinite(startRotation?.y) ? startRotation.y : null;
     this.lastServerPositionAt = this.position ? this.clock() : null;
     this.dimension = validDimension(packet.dimension);
+    this.itemStackNetManager = typeof packet.enable_item_stack_net_manager === 'boolean'
+      ? packet.enable_item_stack_net_manager : null;
+    this.inventoryLedger?.reset();
+    this.selectedHotbarSlot = null;
+    this.pendingHotbarSelection = null;
+    this.lastHotbarSelection = null;
     this.terrain?.reset(this.dimension);
     this.intelligence?.reset(this.dimension);
     this.navigationRoute = null;
+    this.lastIntelligenceDecision = null;
+    this.lastAddonNavigationSnapshot = null;
     if (this.registryResolver && this.terrain) {
       try {
         const mapped = this.registryResolver(packet);
@@ -271,7 +302,9 @@ class BedrockGameplayBridge {
   onRespawn(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.state)) return;
     const incomingId = ident(packet.runtime_entity_id);
-    if (incomingId && this.self && incomingId !== this.self) return;
+    // Bedrock Dedicated Server may encode the Respawn packet's runtime ID as
+    // zero. Treat that protocol sentinel as unspecified, not as another player.
+    if (incomingId && incomingId !== '0' && this.self && incomingId !== this.self) return;
     this.spawnTrace.respawnSeen++;
     this.lastRespawnState = packet.state;
     if (!this.self || typeof this.client.queue !== 'function') return;
@@ -453,9 +486,84 @@ class BedrockGameplayBridge {
       this.playerNames.set(uuid, name);
     }
   }
+  playerHotbar(packet) {
+    if (this.closed || (packet?.window_id !== 0 && packet?.window_id !== 'inventory') ||
+        packet?.select_slot !== true || !Number.isInteger(packet?.selected_slot) ||
+        packet.selected_slot < 0 || packet.selected_slot > 8) return;
+    this.selectedHotbarSlot = packet.selected_slot;
+    if (this.pendingHotbarSelection?.slot === packet.selected_slot)
+      this.pendingHotbarSelection.playerHotbarAckAt = this.clock();
+  }
   equipment(packet) {
     if (this.closed || ident(packet?.runtime_entity_id ?? packet?.runtime_id) !== this.self) return;
-    this.layerTwo?.observeEquipment(packet?.slot, packet?.item?.network_id ?? packet?.item?.id ?? null);
+    const selected = packet?.selected_slot;
+    const itemId = packet?.item?.network_id ?? packet?.item?.id ?? null;
+    this.layerTwo?.observeEquipment(selected ?? packet?.slot, itemId);
+    if (!Number.isInteger(selected) || selected < 0 || selected > 8) return;
+    this.selectedHotbarSlot = selected;
+    const verified = this.lastHotbarSelection;
+    if (verified?.status === 'verified' &&
+        (verified.slot !== selected || (itemId != null && Number(itemId) !== verified.networkId))) {
+      this.lastHotbarSelection = { ...verified, status: 'invalidated',
+        reason: 'server_equipment_changed' };
+    }
+    const pending = this.pendingHotbarSelection;
+    if (pending && pending.slot === selected && Number(itemId) === pending.networkId) {
+      this.lastHotbarSelection = { ...pending, status: 'verified',
+        verifiedAt: this.clock(), reason: 'server_mob_equipment_confirmed' };
+      this.pendingHotbarSelection = null;
+    }
+  }
+  hotbarSelectionSnapshot() {
+    const pending = this.pendingHotbarSelection;
+    if (pending && this.clock() - pending.requestedAt > 5000) {
+      this.lastHotbarSelection = { ...pending, status: 'timed_out',
+        reason: 'server_equipment_confirmation_timeout' };
+      this.pendingHotbarSelection = null;
+    }
+    return {
+      selectedSlot: this.selectedHotbarSlot,
+      pending: this.pendingHotbarSelection ? { ...this.pendingHotbarSelection } : null,
+      last: this.lastHotbarSelection ? { ...this.lastHotbarSelection } : null
+    };
+  }
+  selectHotbarTool(primitive) {
+    this.hotbarSelectionSnapshot();
+    const suffix = ({ equipAxe: '_axe', equipHoe: '_hoe',
+      equipPickaxe: '_pickaxe', equipSword: '_sword' })[primitive];
+    if (!suffix) return { status: 'rejected', reason: 'unsupported_hotbar_tool' };
+    const inventory = this.layerThree?.hotbarItems?.();
+    if (!inventory?.known || !Number.isFinite(inventory.observedAt) ||
+        this.clock() - inventory.observedAt < 0 || this.clock() - inventory.observedAt > 10000)
+      return { status: 'rejected', reason: 'fresh_hotbar_inventory_required' };
+    if (this.pendingHotbarSelection && this.clock() - this.pendingHotbarSelection.requestedAt <= 5000)
+      return { status: 'rejected', reason: 'hotbar_selection_pending' };
+    const candidate = inventory.slots.find(item => item.itemName.endsWith(suffix));
+    if (!candidate) return { status: 'rejected', reason: 'matching_tool_not_in_hotbar' };
+    if (this.selectedHotbarSlot === candidate.slot &&
+        this.lastHotbarSelection?.status === 'verified' &&
+        this.lastHotbarSelection?.itemName === candidate.itemName)
+      return { status: 'ok', reason: 'requested_tool_already_server_selected',
+        primitive, itemName: candidate.itemName, selectedSlot: candidate.slot,
+        awaitingServerConfirmation: false };
+    if (typeof this.client.queue !== 'function')
+      return { status: 'rejected', reason: 'bedrock_packet_queue_unavailable' };
+    const pending = { primitive, itemName: candidate.itemName, networkId: candidate.networkId,
+      slot: candidate.slot, requestedAt: this.clock(), playerHotbarAckAt: null,
+      status: 'awaiting_server_confirmation' };
+    this.lastHotbarSelection = null;
+    this.pendingHotbarSelection = pending;
+    try {
+      this.client.queue('player_hotbar', {
+        selected_slot: candidate.slot, window_id: 0, select_slot: true
+      });
+    } catch {
+      this.pendingHotbarSelection = null;
+      return { status: 'rejected', reason: 'hotbar_selection_packet_failed' };
+    }
+    return { status: 'accepted', reason: 'hotbar_selection_sent_waiting_server_equipment',
+      primitive, itemName: candidate.itemName, selectedSlot: candidate.slot,
+      awaitingServerConfirmation: true };
   }
   chunk(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.x) || !Number.isInteger(packet.z)) return;
@@ -579,7 +687,7 @@ class BedrockGameplayBridge {
       this.addonNavigation.release('follow');
     }
     this.navigationRoute=route;
-    return this.addonNavigation.update({
+    this.lastAddonNavigationSnapshot = this.addonNavigation.update({
       position: this.position,
       dimension: this.dimension,
       observedAt: this.lastServerPositionAt ?? -1,
@@ -587,6 +695,7 @@ class BedrockGameplayBridge {
       safetyHold: this.layerFour?.critical === true ||
         this.layerOne?.snapshot()?.safetyHold === true
     });
+    return this.lastAddonNavigationSnapshot;
   }
   intelligenceTick() {
     if (!this.intelligence) return null;
@@ -617,7 +726,20 @@ class BedrockGameplayBridge {
       if(this.autonomy?.snapshot?.()?.active) this.autonomy.stop('intelligence_safety_stop');
       this.movement?.stop?.('intelligence_safety_stop',{silent:true});
     }
+    this.lastIntelligenceDecision = result;
     return result;
+  }
+  tickControlPlane() {
+    if (this.closed) return;
+    try {
+      // The gameplay agent owns its own cadence while active; otherwise keep
+      // safety observations fresh from the bridge's 100 ms control loop.
+      if (!this.gameplayAgent?.snapshot?.()?.active) this.intelligenceTick();
+      if (this.addonNavigation) this.updateAddonNavigation();
+      this.controlTickStatus = { state: 'healthy', reason: 'control_tick_ok' };
+    } catch {
+      this.controlTickStatus = { state: 'error', reason: 'control_tick_failed' };
+    }
   }
   snapshot() {
     const now = this.clock();
@@ -637,8 +759,10 @@ class BedrockGameplayBridge {
       ...(this.gameplayAgent ? { gameplayAgent: this.gameplayAgent.snapshot() } : {}),
       ...(this.blockBreaker ? { blockBreak: this.blockBreaker.snapshot() } : {}),
       firstPerson: buildFirstPersonScene(this),
+      controlRuntime: { ...this.controlTickStatus },
+      learningRuntime: { ...this.learningTickStatus },
       gameplaySkills: gameplaySkillManifest(this),
-      ...(this.intelligence ? { intelligence: this.intelligenceTick() } : {}),
+      ...(this.intelligence ? { intelligence: this.lastIntelligenceDecision ?? this.intelligence.snapshot() } : {}),
       ...(this.lifeSenses ? { life: this.lifeSenses.snapshot({
         position:this.position,dimension:this.dimension,spawned:this.spawned,
         closed:this.closed,respawnState:this.respawnRecovery.state,
@@ -652,6 +776,14 @@ class BedrockGameplayBridge {
       playerGameMode: this.playerGameMode,
       worldGameMode: this.worldGameMode,
       difficulty: this.difficulty,
+      itemStackNetManager: this.itemStackNetManager,
+      stackRequests: this.stackRequests.snapshot(),
+      inventory: this.inventoryLedger?.snapshot() ?? { version: 'minepilot.bedrock-inventory.v1',
+        revision: 0, generation: 0, windows: [], player: { known: false, fresh: false,
+          reason: 'inventory_ledger_unavailable', observedAt: null, slotCount: 0, occupied: 0, items: [] } },
+      hotbarSelection: this.hotbarSelectionSnapshot(),
+      inventoryTransactionMode: this.itemStackNetManager === true ? 'server_authoritative'
+        : this.itemStackNetManager === false ? 'legacy' : 'unknown',
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       respawnRecovery: { ...this.respawnRecovery },
       movement: this.movement?.capability?.(this) ?? 'unavailable',
@@ -664,7 +796,7 @@ class BedrockGameplayBridge {
       ...(this.layerSix ? { layerSix: this.layerSix.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerSeven ? { layerSeven: this.layerSeven.snapshot(this.advisorWorld()) } : {}),
       ...(this.layerEight ? { layerEight: this.layerEight.assess(this.readinessInput()) } : {}),
-      ...(this.addonNavigation ? { addonNavigation: this.updateAddonNavigation() } : {}),
+      ...(this.addonNavigation ? { addonNavigation: this.lastAddonNavigationSnapshot ?? this.addonNavigation.snapshot?.() ?? null } : {}),
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -677,28 +809,90 @@ class BedrockGameplayBridge {
     }
     if (this.closed) return { status: 'rejected', reason: 'session_closed' };
     if (this.gameplayAgent?.snapshot()?.active && ![
-      'status','inspect','agent_stop','autonomy_stop','stop_movement','advisor_review'
+      'status','inspect','agent_stop','autonomy_stop','stop_movement','advisor_review','learning_stop','learning_autopilot_stop','odyssey_observe'
     ].includes(raw.action))
       return {status:'rejected',reason:'gameplay_agent_busy_stop_first'};
     // Layer 8 enforces a fresh authenticated world for *new* plans.
     // Stop, status and disabling suggestions remain possible when stale.
     if (this.layerEight && [
       'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food',
-      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint'
+      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start'
     ].includes(raw.action)) {
       const preflight = this.layerEight.allowPreview(this.readinessInput());
       if (!preflight.allowed)
         return { status: 'rejected', reason: preflight.reason };
     }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if (raw.action === 'odyssey_observe') {
+      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+      if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
+      return executeBedrockObservation(this, raw.primitive, raw.args ?? {});
+    }
+    if (raw.action === 'odyssey_execute') {
+      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+      if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
+      const args = raw.args && typeof raw.args === 'object' && !Array.isArray(raw.args) ? raw.args : {};
+      if (raw.primitive === 'exploreUntil') {
+        const result = this.gameplayAgent?.start(this, { confirmed: true, goal: 'explore' }) ??
+          { status: 'rejected', reason: 'gameplay_agent_unavailable' };
+        return result.status === 'accepted' ? { ...result, primitive: raw.primitive,
+          awaitingServerConfirmation: true } : result;
+      }
+      if (raw.primitive === 'goto') {
+        if (!finitePosition(args.targetPosition))
+          return { status: 'rejected', reason: 'valid_target_position_required' };
+        const result = this.gameplayAgent?.start(this, {
+          confirmed: true, goal: 'goto', targetPosition: args.targetPosition
+        }) ?? { status: 'rejected', reason: 'gameplay_agent_unavailable' };
+        return result.status === 'accepted' ? { ...result, primitive: raw.primitive,
+          awaitingServerConfirmation: true } : result;
+      }
+      if (['equipAxe','equipHoe','equipPickaxe','equipSword'].includes(raw.primitive))
+        return this.selectHotbarTool(raw.primitive);
+      if (raw.primitive === 'mineBlock') {
+        if (this.autonomy?.snapshot()?.active)
+          return { status: 'rejected', reason: 'autonomy_busy' };
+        const p = args.position;
+        if (!p || !['x','y','z'].every(k => Number.isInteger(p[k])))
+          return { status: 'rejected', reason: 'integer_block_position_required' };
+        const result = this.blockBreaker?.start(this, p, true) ??
+          { status: 'rejected', reason: 'block_break_unavailable' };
+        return result.status === 'accepted' ? { ...result, primitive: raw.primitive,
+          awaitingServerConfirmation: true } : result;
+      }
+      return { status: 'rejected', reason: 'primitive_executor_unavailable' };
+    }
     if (raw.action === 'agent_stop') {
+      const learning = gameplaySkillManifest(this).learning;
+      if (learning?.activeTask) return { status: 'rejected', reason: 'learning_task_owned_use_learning_stop' };
       return this.gameplayAgent?.stop('user_stopped') ??
         {status:'rejected',reason:'gameplay_agent_unavailable'};
     }
     if (raw.action === 'agent_start') {
+      // Reconcile a completed learning run before a new goal can replace its snapshot.
+      // Direct command callers get the same explicit lifecycle tick as the IPC loop.
+      this.tickLearning();
+      const learning = gameplaySkillManifest(this).learning;
+      if (learning?.activeTask) return { status: 'rejected', reason: 'learning_task_owned_stop_or_finish_first' };
       return this.gameplayAgent?.start(this,{
         confirmed:raw.confirmed,goal:raw.goal,playerName:raw.playerName
       })??{status:'rejected',reason:'gameplay_agent_unavailable'};
+    }
+    if (raw.action === 'learning_start') {
+      return startLearningTask(this, raw.taskId, { confirmed: raw.confirmed });
+    }
+    if (raw.action === 'learning_stop') {
+      return stopLearningTask(this, 'learning_user_stopped');
+    }
+    if (raw.action === 'learning_autopilot_start') {
+      return startLocalAutopilot(this, { confirmed: raw.confirmed });
+    }
+    if (raw.action === 'learning_autopilot_stop') {
+      return stopLocalAutopilot(this, 'user_disabled_autopilot');
+    }
+    if (raw.action === 'learning_propose') {
+      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
+      return proposeLearningSkill(this, raw.skill);
     }
     if(raw.action === 'experimental_break') {
       if (raw.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
@@ -936,30 +1130,57 @@ class BedrockGameplayBridge {
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
+  tickLearning() {
+    // One explicit owner advances the curriculum. Reads of snapshots/manifests
+    // never mutate task state. Keep failures visible without crashing the SDK loop.
+    try {
+      tickLearningEngine(this);
+      this.learningTickStatus = { state: 'healthy', reason: 'runtime_tick_ok' };
+    } catch {
+      this.learningTickStatus = { state: 'error', reason: 'learning_tick_failed' };
+    }
+  }
   poll() {
     if (this.closed || !this.commandPath || !this.receiptPath) return;
+    this.tickControlPlane();
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
         unlinkSync(this.commandPath);
+        this.tickLearning();
         return;
       }
       data = readFileSync(this.commandPath, 'utf8');
       unlinkSync(this.commandPath);
     } catch (error) {
       if (error.code !== 'ENOENT') this.lastReceipt = { status: 'rejected', reason: 'inbox_error' };
+      this.tickLearning();
       return;
     }
     let command;
     try { command = JSON.parse(data); }
     catch { command = null; }
+    // agent_start performs its own tick before replacing the current task.
+    // All other commands share the normal single 100 ms runtime tick.
+    if (command?.action !== 'agent_start') this.tickLearning();
     const result = this.execute(command);
     const receipt = {
       version: 'minepilot.gameplay.v1',
       requestId: typeof command?.requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(command.requestId)
         ? command.requestId : '',
       status: result.status,
-      reason: result.reason
+      reason: result.reason,
+      ...(command?.action === 'odyssey_execute' ? {
+        primitive: command.primitive,
+        dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
+        ...(typeof result.itemName === 'string' ? { itemName: result.itemName } : {}),
+        ...(Number.isInteger(result.selectedSlot) ? { selectedSlot: result.selectedSlot } : {}),
+        awaitingServerConfirmation: result.awaitingServerConfirmation === true
+      } : {}),
+      ...(command?.action === 'odyssey_observe' && result.status === 'ok' ? {
+        primitive: result.primitive, result: result.result, observedAt: result.observedAt,
+        verifiedBy: result.verifiedBy, readOnly: true, executed: false
+      } : {})
     };
     this.lastReceipt = receipt;
     try { atomicJson(this.receiptPath, receipt); }
@@ -968,9 +1189,14 @@ class BedrockGameplayBridge {
   stop() {
     if (this.closed) return;
     this.closed = true;
+    stopLocalAutopilot(this, 'session_closed');
     if (this.watch) clearInterval(this.watch);
     this.watch = null;
     this.gameplayAgent?.stop('session_closed');
+    this.pendingHotbarSelection = null;
+    this.stackRequests.close('bedrock_session_closed');
+    this.selectedHotbarSlot = null;
+    this.lastHotbarSelection = null;
     this.autonomy?.stop('session_closed');
     this.blockBreaker?.abort('session_closed');
     this.movement?.stopPresence?.('session_closed');
