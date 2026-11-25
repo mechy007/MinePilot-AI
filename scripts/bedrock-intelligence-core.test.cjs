@@ -52,6 +52,20 @@ test('idle spawn anchor is usable for previews but never labeled server-verified
   })).reason,'world_state_stale');
 });
 
+test('movement input invalidates even a numerically recent server position timestamp',()=>{
+  const brain=new MinePilotIntelligence({clock:()=>100});
+  brain.reset(0);
+  const snapshot=brain.decide(obs({
+    positionAgeMs:100,
+    positionUsable:false,
+    idlePositionAnchor:false
+  }));
+  assert.equal(snapshot.positionMode,'stale');
+  assert.equal(snapshot.positionUsable,false);
+  assert.equal(snapshot.verifiedWorld,false);
+  assert.equal(snapshot.reason,'world_state_stale');
+});
+
 test('memory, history, and decisions remain bounded and reset across dimensions',()=>{
   let t=100;
   const brain=new MinePilotIntelligence({clock:()=>t++});
