@@ -12,6 +12,8 @@ export type RuntimeEvidence = Readonly<{
   positionAgeMs: number | null;
   /** True only while the session's original server position remains a safe idle anchor. */
   idlePositionAnchor?: boolean;
+  /** Explicit false invalidates even a numerically recent timestamp after input. */
+  positionUsable?: boolean;
   receivedChunkHeaders: number;
   movementAuthority: number | null;
   blocksDecoded: boolean;
@@ -43,8 +45,9 @@ export class LayerEightReadiness {
     const age = data.positionAgeMs;
     const validNumericAge = age !== null && Number.isFinite(age) && age >= 0 &&
       age <= MAX_AGE_MS;
-    const recentAge = validNumericAge && age <= 7000;
-    const idleAnchor = data.idlePositionAnchor === true && validNumericAge;
+    const recentAge = data.positionUsable !== false && validNumericAge && age <= 7000;
+    const idleAnchor = data.positionUsable === true &&
+      data.idlePositionAnchor === true && validNumericAge;
     const positionMode: ReadinessSnapshot['observed']['positionMode'] =
       recentAge ? 'server_fresh' : idleAnchor ? 'idle_spawn_anchor' : 'stale';
     const validAge = recentAge || idleAnchor;
