@@ -375,7 +375,7 @@ public final class DashboardActivity extends Activity {
     }
 
     private void show(String tab) {
-        if (!"World".equals(tab)) stopManualControl();
+        stopManualControl();
         manualControlButtons.clear();
         manualControlsEnabled = false;
         logRefresh.removeCallbacks(updateLogs);
