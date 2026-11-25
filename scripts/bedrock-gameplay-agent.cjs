@@ -23,6 +23,10 @@ const ACK_MS=4500;
 const POSITION_TTL_MS=7000;
 const MIN_PROGRESS=0.08;
 const GOALS=new Set(['survive','explore','follow','return_home','gather','goto']);
+const GOAL_DIRECTIVES=Object.freeze({
+  survive:'survive_world', explore:'explore', follow:'follow_player',
+  return_home:'return_home', gather:'gather_resources', goto:'go_to_position'
+});
 const FOOD_ITEMS=new Set(['minecraft:apple','minecraft:bread','minecraft:carrot',
   'minecraft:potato','minecraft:baked_potato','minecraft:cooked_beef',
   'minecraft:cooked_porkchop','minecraft:cooked_chicken','minecraft:cooked_mutton',
@@ -57,6 +61,7 @@ class BedrockGameplayAgent {
     this.targetPosition=null;
     this.collected=0;
     this.ignoredDrops=new Map();
+    this.lastIntelligenceDirective=null;
   }
   readiness(world) {
     if(!world||world.closed||!world.spawned||!finite(world.position) ||
@@ -128,6 +133,7 @@ class BedrockGameplayAgent {
     this.awaiting=null;this.lastVerifiedAt=null;this.lastPlan=null;
     this.nextActionAt=0;this.recentCells.clear();
     this.subgoal=null;this.targetPosition=opts.goal==='goto'?copy(opts.targetPosition):null;this.collected=0;this.ignoredDrops.clear();
+    this.lastIntelligenceDirective=null;
     world.intelligence.setGoal(opts.goal);
     this.interval=this.setInterval(()=>this.pulse(),INTERVAL_MS);
     return {status:'accepted',reason:'gameplay_agent_enabled_not_yet_moving'};
@@ -151,6 +157,15 @@ class BedrockGameplayAgent {
     this.phase='paused';
     this.reason=reason;
     this.lastPlan=null;
+  }
+  pauseForIntelligence(reason) {
+    const world=this.world;
+    if(world?.movement?.snapshot?.()?.active)
+      world.movement.stop?.('intelligence_'+reason);
+    // A planner veto invalidates an outstanding movement attempt; it is not a
+    // failed server acknowledgement and must never be counted as progress.
+    this.awaiting=null;
+    this.pause(reason);
   }
   noteFailure(reason) {
     this.failures++;
@@ -338,14 +353,29 @@ class BedrockGameplayAgent {
       closed:world.closed,respawnState:world.respawnRecovery.state,
       terrain:world.terrain
     });
-    // The brain's priority calculations are advisory. This agent only acts
-    // on values observed from the same authenticated server connection.
-    world.intelligenceTick?.();
+    // The intelligence core is the high-level intent arbiter. The gameplay
+    // agent remains the bounded executor and independently verifies every
+    // route, movement pulse and server acknowledgement.
+    const brain=world.intelligenceTick?.() ?? world.intelligence.snapshot?.();
+    if(!brain || typeof brain.action!=='string') {
+      this.pauseForIntelligence('intelligence_decision_unavailable');return;
+    }
+    this.lastIntelligenceDirective={
+      action:brain.action,reason:typeof brain.reason==='string'?brain.reason:'unknown',
+      confidence:Number.isFinite(brain.confidence)?brain.confidence:0
+    };
+    if(brain.action==='await_respawn') {
+      this.stop('intelligence_awaiting_respawn');return;
+    }
+    if(brain.action==='observe' || brain.positionUsable===false || brain.positionMode==='stale') {
+      this.pauseForIntelligence(brain.reason==='world_state_stale'
+        ?'intelligence_world_state_stale':'intelligence_observation_only');return;
+    }
     if(life.state==='dead'||life.health===0) {
       this.stop('player_died');return;
     }
     if(life.health===null||life.health===undefined) {
-      this.pause('health_not_observed');return;
+      this.pauseForIntelligence('intelligence_health_unobserved');return;
     }
     const enemy=life.nearbyEntities?.find(e=>e.hostile===true &&
       Number.isFinite(e.distance)&&e.distance<=8 &&
@@ -353,6 +383,33 @@ class BedrockGameplayAgent {
     const critical=life.health<=6 || (life.air!==null&&life.air<=4);
     const hunger=life.hunger!==null&&life.hunger<=6;
     const movement=world.movement;
+    if(brain.action==='seek_safety') {
+      if(!critical) {
+        this.pauseForIntelligence('intelligence_safety_evidence_mismatch');return;
+      }
+      this.pauseForIntelligence('critical_vitals_wait_for_safe_recovery');return;
+    }
+    if(critical) {
+      this.pauseForIntelligence('intelligence_safety_directive_missing');return;
+    }
+    if(brain.action==='avoid_threat') {
+      if(!enemy) {
+        this.pauseForIntelligence('intelligence_threat_evidence_mismatch');return;
+      }
+    } else if(enemy) {
+      this.pauseForIntelligence('intelligence_threat_directive_missing');return;
+    }
+    if(brain.action==='find_food') {
+      if(!hunger) {
+        this.pauseForIntelligence('intelligence_food_evidence_mismatch');return;
+      }
+    } else if(hunger && !enemy) {
+      this.pauseForIntelligence('intelligence_food_directive_missing');return;
+    }
+    if(brain.action!=='avoid_threat' && brain.action!=='find_food' &&
+       brain.action!==GOAL_DIRECTIVES[this.goal]) {
+      this.pauseForIntelligence('intelligence_goal_directive_mismatch');return;
+    }
     // Inventory delta plus server pickup receipt is stronger evidence of
     // collecting an item than any movement acknowledgement. Treat it as an
     // independent completion, even if walking was still in progress.
@@ -473,6 +530,8 @@ class BedrockGameplayAgent {
       collectedDrops:this.collected,
       currentSubgoal:this.subgoal?{kind:this.subgoal.kind,item:this.subgoal.item}:null,
       targetPosition:this.targetPosition?{...this.targetPosition}:null,
+      intelligenceDirective:this.lastIntelligenceDirective
+        ?{...this.lastIntelligenceDirective}:null,
       autonomousCombat:false,autonomousMining:false,autonomousEating:false,
       serverVerified:this.verified>0};
   }
