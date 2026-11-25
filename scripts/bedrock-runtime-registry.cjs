@@ -70,8 +70,8 @@ function createHashedRuntimeRegistry(startGame) {
 
   // Known captured live-server vectors guard the hash/NBT encoder and file.
   if (map.size !== data.stateCombinationCount ||
-      map.get(-2144268767)?.name !== 'minecraft:stone' ||
-      map.get(-604749536)?.name !== 'minecraft:air' ||
+      map.get((-2144268767) >>> 0)?.name !== 'minecraft:stone' ||
+      map.get((-604749536) >>> 0)?.name !== 'minecraft:air' ||
       map.get(203547508)?.name !== 'minecraft:brown_mushroom_block' ||
       map.get(1659726445)?.name !== 'minecraft:pointed_dripstone') return null;
 
