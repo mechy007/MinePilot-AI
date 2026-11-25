@@ -8,7 +8,9 @@ const {
 
 function fixture() {
   const world = {
-    closed: false, lifeSenses: {}, intelligence: {}, clock: () => 1000,
+    closed: false, spawned: true, position: { x: 8.5, y: 64, z: 10.5 },
+    positionUsable: () => true, commandsEnabled: true, permissionLevel: 'operator',
+    lifeSenses: {}, intelligence: {}, clock: () => 1000,
     inventoryLedger: { playerInventory: () => ({
       known: true, fresh: true, registryKnown: true, unresolvedItemCount: 0
     }) }
@@ -33,7 +35,8 @@ test('catalog is explicitly Bedrock-native and never advertises Java runtime exe
   assert.equal(catalog.source, 'minepilot_native');
   assert.equal(catalog.policy.javaEditionRuntime, false);
   assert.equal(catalog.policy.mineflayerRuntime, false);
-  assert.ok(catalog.skills.length >= 8);
+  assert.ok(catalog.skills.length >= 10);
+  assert.equal(catalog.skills.find(skill => skill.id === 'place_single_block').status, 'manual_experimental');
   assert.ok(catalog.skills.every(skill => skill.edition === 'bedrock'));
   assert.ok(catalog.roadmap.every(skill => skill.status === 'unsupported'));
 });
@@ -88,6 +91,26 @@ test('read-only and experimental skills cannot be routed through composite task 
     'read_only_skill_does_not_start_gameplay_task');
   assert.equal(startBedrockNativeSkill(world, manifest, engine, 'mine_single_block', { confirmed: true }).reason,
     'manual_experimental_executor_requires_dedicated_action_path');
+  assert.equal(startBedrockNativeSkill(world, manifest, engine, 'place_single_block', { confirmed: true }).reason,
+    'manual_experimental_executor_requires_dedicated_action_path');
   assert.equal(startBedrockNativeSkill(world, manifest, engine, 'unknown_skill', { confirmed: true }).reason,
     'unknown_bedrock_native_skill');
+});
+
+
+test('single-block placement is visible only with fresh world and Bedrock operator command permission', () => {
+  const { world, manifest } = fixture();
+  const definition = require('./bedrock-native-skill-system.cjs').DEFINITIONS
+    .find(item => item.id === 'place_single_block');
+  assert.equal(evaluateBedrockSkill(definition, world, manifest).status, 'manual_experimental');
+  world.permissionLevel = 'member';
+  assert.equal(evaluateBedrockSkill(definition, world, manifest).reason,
+    'bedrock_operator_command_permission_required');
+  world.permissionLevel = 'operator';
+  world.commandsEnabled = false;
+  assert.equal(evaluateBedrockSkill(definition, world, manifest).status, 'blocked');
+  world.commandsEnabled = true;
+  world.positionUsable = () => false;
+  assert.equal(evaluateBedrockSkill(definition, world, manifest).reason,
+    'fresh_server_position_required');
 });
