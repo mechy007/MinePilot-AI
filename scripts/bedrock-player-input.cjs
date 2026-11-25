@@ -12,6 +12,12 @@ const { AuthInputTickClock, TICK_MS: INPUT_TICK_MS } = require('./bedrock-auth-i
 const PROBE_TICKS = 6;
 const PROBE_STEP = 0.065; // User-confirmed diagnostic only.
 const VERIFIED_STEP = 0.11; // Conservative flat-ground target, not full Bedrock physics.
+const MANUAL_INPUTS = Object.freeze({
+  forward: { vector: { x: 0, z: 1 }, flag: 10 },
+  backward: { vector: { x: 0, z: -1 }, flag: 11 },
+  strafe_left: { vector: { x: -1, z: 0 }, flag: 12 },
+  strafe_right: { vector: { x: 1, z: 0 }, flag: 13 }
+});
 // A stopped client may receive no periodic self-position echoes. The probe is
 // still explicitly confirmed and only allowed shortly after a real StartGame.
 const MAX_FRESH_MS = 30_000;
@@ -27,32 +33,40 @@ function buildInputPacket(position, yaw, tick, moving, options = {}) {
   const pitch = Number.isFinite(options.pitch) && Math.abs(options.pitch)<=90
     ? options.pitch : 0;
   const vertical = pitch * Math.PI / 180;
-  const shift = moving ? { x: -Math.sin(angle) * step, y: 0, z: Math.cos(angle) * step }
-    : { x: 0, y: 0, z: 0 };
+  const vector = options.moveVector ?? (moving ? { x: 0, z: 1 } : { x: 0, z: 0 });
+  if (!Number.isFinite(vector.x) || !Number.isFinite(vector.z) ||
+      Math.abs(vector.x) > 1 || Math.abs(vector.z) > 1)
+    throw new TypeError('Invalid local movement vector');
+  // Bedrock move_vector is camera-relative: +Z forward, +X right.
+  const shift = moving ? {
+    x: (vector.x * Math.cos(angle) - vector.z * Math.sin(angle)) * step,
+    y: 0,
+    z: (vector.x * Math.sin(angle) + vector.z * Math.cos(angle)) * step
+  } : { x: 0, y: 0, z: 0 };
   const predicted = { x: position.x + shift.x, y: position.y, z: position.z + shift.z };
-  const forward = moving ? 1 : 0;
+  const inputFlag = Number.isInteger(options.inputFlag) ? options.inputFlag : moving ? 10 : null;
   return {
     pitch,
     yaw: normalYaw(yaw),
     head_yaw: normalYaw(yaw),
     position: predicted,
-    move_vector: { x: 0, z: forward },
+    move_vector: { x: vector.x, z: vector.z },
     // Protocol 2225 represents InputData as a list of enum ordinals, not a bitfield.
-    input_data: moving ? [10] : [],
+    input_data: inputFlag == null ? [] : [inputFlag],
     input_mode: 'touch',
     play_mode: 'normal',
     interaction_model: 1,
     interact_rotation: { x: pitch, z: normalYaw(yaw) },
     tick,
     delta: shift,
-    analogue_move_vector: { x: 0, z: forward },
+    analogue_move_vector: { x: vector.x, z: vector.z },
     // Protocol 2225 requires a world-space unit forward vector, not an
     // all-zero placeholder that cannot represent any look direction.
     camera_orientation: { x: Math.sin(angle)===0?0:
       -Math.sin(angle)*Math.cos(vertical),
       y: Math.sin(vertical)===0?0:-Math.sin(vertical),
       z: Math.cos(angle)*Math.cos(vertical) },
-    raw_move_vector: { x: 0, z: forward }
+    raw_move_vector: { x: vector.x, z: vector.z }
   };
 }
 
@@ -173,7 +187,8 @@ class ExperimentalPlayerInput {
   runDiagnostic(world, options = {}) {
     const mode = options.mode ?? 'forward';
     const ticks = options.ticks ?? PROBE_TICKS;
-    if (!['forward', 'turn_left', 'turn_right'].includes(mode) ||
+    if (!['forward', 'backward', 'strafe_left', 'strafe_right',
+        'turn_left', 'turn_right'].includes(mode) ||
         !Number.isInteger(ticks) || ticks < 1 || ticks > 20)
       return { status: 'rejected', reason: 'unsupported_diagnostic' };
     if (this.capability(world) !== 'experimental')
@@ -219,11 +234,15 @@ class ExperimentalPlayerInput {
       }
       try {
         const nextTick = this.tickClock.next();
-        const isMoving = this.mode === 'forward';
+        const movementInput = MANUAL_INPUTS[this.mode];
+        const isMoving = movementInput != null;
         const yaw = this.mode === 'turn_left' ? this.lastYaw - 5
           : this.mode === 'turn_right' ? this.lastYaw + 5 : this.lastYaw;
-        const packet = buildInputPacket(this.predicted, yaw, nextTick, isMoving,
-          {pitch:world.pitch,step:this.predictionStep});
+        const packet = buildInputPacket(this.predicted, yaw, nextTick, isMoving, {
+          pitch:world.pitch, step:this.predictionStep,
+          moveVector:movementInput?.vector ?? {x:0,z:0},
+          inputFlag:movementInput?.flag
+        });
         if(isMoving&&this.requireVerifiedTerrain &&
           !this.verifiedFlatFootprint(world,this.predicted,packet.position)){
           this.stop('unverified_or_blocked_next_step');
