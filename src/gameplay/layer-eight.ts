@@ -36,15 +36,13 @@ export type ReadinessSnapshot = Readonly<{
     positionMode: 'server_fresh' | 'idle_spawn_anchor' | 'stale';
   };
 }>;
-const MAX_AGE_MS = 30_000;
 const MAX_CHUNKS = 128;
 const integer = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 0;
 
 export class LayerEightReadiness {
   assess(data: RuntimeEvidence): ReadinessSnapshot {
     const age = data.positionAgeMs;
-    const validNumericAge = age !== null && Number.isFinite(age) && age >= 0 &&
-      age <= MAX_AGE_MS;
+    const validNumericAge = age !== null && Number.isFinite(age) && age >= 0;
     const recentAge = data.positionUsable !== false && validNumericAge && age <= 7000;
     const idleAnchor = data.positionUsable === true &&
       data.idlePositionAnchor === true && validNumericAge;
