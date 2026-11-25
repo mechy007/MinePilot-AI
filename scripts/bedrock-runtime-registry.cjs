@@ -1,23 +1,22 @@
 'use strict';
 
 /**
- * Bedrock 1.26.60+ block runtime-id lookup.
+ * Bedrock block runtime-id lookup.
  *
- * Hashed worlds use FNV-1a 32 over little-endian NBT {name, states}; the
- * version-pinned reverse map was generated from JSPrismarine's captured
- * v2225 vanilla block-state catalogue. Unrecognized add-on blocks remain
- * unknown: this module never guesses a collision shape.
+ * Hashed IDs are FNV-1a 32 of little-endian NBT {name, states}. The reverse
+ * table is generated from the captured 1.26.60/protocol-2225 vanilla state
+ * catalogue. New or add-on blocks absent from the table remain unknown.
  *
- * Non-hashed worlds use the bundled minecraft-data v1.26.60 numeric palette.
- * A server-provided block name outside that palette invalidates the static
- * numeric ordering, so those worlds fail closed.
+ * The legacy non-hashed numeric palette is accepted only for the exact
+ * captured 1.26.60 family and only when the server declares no unknown
+ * blocks; an add-on can renumber that palette.
  */
 let cachedNumeric = null;
 let cachedHashed = null;
 
-function supportedProtocolFamily(serverVersion) {
+function isProtocol2225(serverVersion) {
   return typeof serverVersion === 'string' &&
-    /^1\\.26\\.(?:60|61|62|65|66)(?:\\.|$)/.test(serverVersion);
+    /^1\.26\.(?:60|61|62|65|66)(?:\.|$)/.test(serverVersion);
 }
 
 function hasOnlyKnownBlocks(startGame, knownNames) {
@@ -31,9 +30,10 @@ function hasOnlyKnownBlocks(startGame, knownNames) {
 
 function createHashedRuntimeRegistry(startGame) {
   const serverVersion = startGame?.server_version ?? startGame?.engine;
-  if (!supportedProtocolFamily(serverVersion) ||
+  if (!isProtocol2225(serverVersion) ||
       startGame?.block_network_ids_are_hashes !== true) return null;
 
+  if (cachedHashed) return cachedHashed;
   let data;
   try {
     data = require('./bedrock-vanilla-12660-hashed-states.json');
@@ -41,42 +41,56 @@ function createHashedRuntimeRegistry(startGame) {
     return null;
   }
   if (data?.protocolVersion !== 2225 ||
-      !['1.26.60'].includes(data.minecraftVersion) ||
+      data.minecraftVersion !== '1.26.60' ||
       !Array.isArray(data.blocks) || data.blocks.length !== 1480 ||
       !Array.isArray(data.runtimeIds) ||
-      data.runtimeIds.length !== data.stateCombinationCount) return null;
+      data.runtimeIds.length !== data.stateCombinationCount ||
+      data.stateCombinationCount !== 23948) return null;
 
-  const knownNames = new Set(data.blocks.map(entry =>
-    Array.isArray(entry) && typeof entry[0] === 'string' ? entry[0] : ''
-  ));
-  if (knownNames.size !== data.blocks.length ||
-      !hasOnlyKnownBlocks(startGame, knownNames)) return null;
-
-  if (!cachedHashed) {
-    const map = new Map();
-    for (const entry of data.runtimeIds) {
-      if (!Array.isArray(entry) || entry.length !== 2 ||
-          !Number.isInteger(entry[0]) || !Number.isInteger(entry[1]) ||
-          entry[1] < 0 || entry[1] >= data.blocks.length || map.has(entry[0])) {
-        return null;
-      }
-      const [name, boundingBox] = data.blocks[entry[1]];
-      if (typeof name !== 'string' ||
-          !['block', 'empty', null].includes(boundingBox)) return null;
-      map.set(entry[0], { name, boundingBox });
-    }
-    if (map.size !== data.stateCombinationCount ||
-        map.get(-2144268767)?.name !== 'minecraft:stone' ||
-        map.get(-604749536)?.name !== 'minecraft:air') return null;
-    cachedHashed = map;
+  const names = new Set();
+  for (const entry of data.blocks) {
+    if (!Array.isArray(entry) || entry.length !== 2 ||
+        typeof entry[0] !== 'string' ||
+        !/^minecraft:[a-z0-9_./-]{1,80}$/.test(entry[0]) ||
+        !['block', 'empty', null].includes(entry[1]) ||
+        names.has(entry[0])) return null;
+    names.add(entry[0]);
   }
-  return cachedHashed;
+
+  const map = new Map();
+  for (const entry of data.runtimeIds) {
+    if (!Array.isArray(entry) || entry.length !== 2 ||
+        !Number.isInteger(entry[0]) ||
+        !Number.isInteger(entry[1]) ||
+        entry[1] < 0 || entry[1] >= data.blocks.length ||
+        map.has(entry[0])) return null;
+    const [name, boundingBox] = data.blocks[entry[1]];
+    map.set(entry[0], { name, boundingBox });
+  }
+
+  // Known captured live-server vectors guard the hash/NBT encoder and file.
+  if (map.size !== data.stateCombinationCount ||
+      map.get(-2144268767)?.name !== 'minecraft:stone' ||
+      map.get(-604749536)?.name !== 'minecraft:air' ||
+      map.get(203547508)?.name !== 'minecraft:brown_mushroom_block' ||
+      map.get(1659726445)?.name !== 'minecraft:pointed_dripstone') return null;
+
+  // Hashed IDs are independent of palette order and add-on registration.
+  // Add-on hashes absent from this vanilla reverse table remain unknown.
+  cachedHashed = map;
+  return map;
 }
 
 function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   const serverVersion = startGame?.server_version ?? startGame?.engine;
-  if (!supportedProtocolFamily(serverVersion) ||
+  if (typeof serverVersion !== 'string' ||
+      !/^1\.26\.60(?:\.|$)/.test(serverVersion) ||
       startGame?.block_network_ids_are_hashes === true) return null;
+
+  if (loadMinecraftData == null && cachedNumeric) {
+    const knownNames = new Set([...cachedNumeric.values()].map(v => v.name));
+    return hasOnlyKnownBlocks(startGame, knownNames) ? cachedNumeric : null;
+  }
 
   let data;
   try {
@@ -95,13 +109,6 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   }
   if (!data || !Array.isArray(data.blocks)) return null;
 
-  const knownNames = new Set(data.blocks
-    .filter(block => block && typeof block.name === 'string')
-    .map(block => 'minecraft:' + block.name));
-  // A non-hashed server builds one combined ordered palette. Any block not
-  // in the captured vanilla set can shift every later runtime ID.
-  if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
-
   const map = new Map();
   for (const block of data.blocks) {
     if (!block || !Number.isInteger(block.minStateId) ||
@@ -116,15 +123,17 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
       map.set(id, { name: 'minecraft:' + block.name, boundingBox: block.boundingBox ?? null });
     }
   }
-  if (map.size < 1000 || ![...map.values()].some(v => v.name === 'minecraft:air')) return null;
+  if (map.size < 1000 ||
+      ![...map.values()].some(v => v.name === 'minecraft:air')) return null;
+
+  const knownNames = new Set([...map.values()].map(v => v.name));
+  if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
+  if (loadMinecraftData == null) cachedNumeric = map;
   return map;
 }
 
 function createVanillaRuntimeRegistry(startGame, loadMinecraftData = null) {
   if (startGame?.block_network_ids_are_hashes === true) {
-    // Hash IDs can be reversed only for the captured 1.26.60 vanilla state
-    // catalogue. Add-on block names not present in that capture disable
-    // terrain classification instead of borrowing an unrelated hash match.
     return createHashedRuntimeRegistry(startGame);
   }
   return createNumericRuntimeRegistry(startGame, loadMinecraftData);
