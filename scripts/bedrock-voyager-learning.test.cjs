@@ -105,6 +105,50 @@ test('actor requires explicit confirmation and starts only an existing Bedrock g
   assert.ok(manifest.openWorldSkills.compositions.length >= 4);
 });
 
+test('all five built-in learning tasks pass their live-world preflight and map to the existing Bedrock goals', () => {
+  for (const task of COMPOSITE_SKILLS) {
+    const { world } = worldFixture();
+    const manifest = gameplaySkillManifest(world);
+    const plan = learningEngineFor(world).buildPlan(world, manifest, task.id);
+    assert.equal(plan.status, 'ready', task.id);
+    assert.equal(plan.goal, task.goal, task.id);
+    assert.equal(plan.execution, 'existing_bedrock_gameplay_agent', task.id);
+    assert.equal(plan.arbitraryCodeExecution, false, task.id);
+
+    const started = startLearningTask(world, task.id, { confirmed: true });
+    assert.equal(started.status, 'accepted', task.id);
+    assert.equal(world.gameplayAgent.snapshot().goal, task.goal, task.id);
+  }
+});
+
+test('learning preflight rejects missing perception or intelligence before actor dispatch', () => {
+  for (const missing of ['lifeSenses', 'intelligence']) {
+    const { world } = worldFixture();
+    world[missing] = null;
+    const result = startLearningTask(world, 'survival_patrol', { confirmed: true });
+    assert.equal(result.status, 'rejected', missing);
+    assert.equal(result.reason, 'perception_or_intelligence_unavailable', missing);
+    assert.equal(world.gameplayAgent.snapshot().active, false, missing);
+  }
+});
+
+test('terminal learning tasks require their exact server-confirmed completion reason', () => {
+  const engine = new BedrockOpenWorldLearningEngine();
+  for (const id of ['return_home', 'escort_selected_player', 'retrieve_selected_drop']) {
+    const task = COMPOSITE_SKILLS.find(item => item.id === id);
+    assert.ok(task, id);
+    const activeRun = { requestedStop: false, sessionId: 'acceptance-session' };
+    const success = engine.critic(task, {
+      reason: task.successReasons[0], serverVerifiedSteps: 0
+    }, activeRun);
+    assert.equal(success.outcome, 'verified', id);
+    const falsePositive = engine.critic(task, {
+      reason: 'gameplay_run_budget_exhausted', serverVerifiedSteps: 999
+    }, activeRun);
+    assert.equal(falsePositive.outcome, 'failed', id);
+  }
+});
+
 test('critic promotes progress only after server-verified success and records failures separately', () => {
   const { world, setAgent } = worldFixture();
   const engine = new BedrockOpenWorldLearningEngine();

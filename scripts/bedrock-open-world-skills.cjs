@@ -105,6 +105,9 @@ function taskPreflight(world, manifest, task) {
   if (!manifest?.worldReady) return 'world_not_ready';
   if (world.gameplayWorld?.().safetyHold) return 'survival_safety_override';
   if (!world.gameplayAgent || typeof world.gameplayAgent.start !== 'function') return 'gameplay_agent_unavailable';
+  // The gameplay agent requires both perception and intelligence for every goal.
+  // Reject here so the learning planner never advertises a plan that its actor must refuse.
+  if (!world.lifeSenses || !world.intelligence) return 'perception_or_intelligence_unavailable';
   if (['explore', 'survive'].includes(task.goal) && !manifest.localNavigationReady)
     return 'verified_navigation_unavailable';
   if (task.goal === 'follow') {
