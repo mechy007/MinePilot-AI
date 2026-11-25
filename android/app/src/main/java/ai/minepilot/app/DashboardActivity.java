@@ -44,10 +44,13 @@ public final class DashboardActivity extends Activity {
             new android.os.Handler(android.os.Looper.getMainLooper());
     private String activeManualMode = "";
     private boolean manualControlsEnabled;
+    private ManualJoystickView manualJoystick;
     private final Runnable repeatManualControl = new Runnable() {
         @Override public void run() {
             if (activeManualMode.isEmpty() || !manualControlsEnabled) return;
-            sendManualMotionPulse(activeManualMode);
+            String mode = activeManualMode.startsWith("joystick:")
+                    ? activeManualMode.substring("joystick:".length()) : activeManualMode;
+            sendManualMotionPulse(mode);
             manualControlHandler.postDelayed(this, 450);
         }
     };
@@ -761,33 +764,40 @@ public final class DashboardActivity extends Activity {
     private void addManualControlPanel() {
         LinearLayout panel = card();
         panel.addView(text("MANUAL BOT CONTROLS", 11, GRASS, true));
-        TextView hint = text("Hold a direction to move. Release to brake. Look buttons rotate the bot. Position echoes only appear when Bedrock sends a correction; zero echoes alone does not mean a move was rejected.", 12, MUTED, false);
+        TextView hint = text("Drag the joystick to move the bot. Release to stop. Hold the look buttons to rotate. Manual control pauses whenever the world or screen is not active.", 12, MUTED, false);
         hint.setPadding(0, dp(7), 0, dp(10));
         panel.addView(hint);
 
-        LinearLayout top = manualControlRow();
-        addManualPadSpacer(top);
-        addManualPadButton(top, "↑", "forward", "Move forward");
-        addManualPadSpacer(top);
-        panel.addView(top);
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout middle = manualControlRow();
-        addManualPadButton(middle, "←", "strafe_left", "Strafe left");
+        manualJoystick = new ManualJoystickView(this);
+        manualJoystick.setListener(this::onManualJoystickDirection);
+        LinearLayout.LayoutParams stickParams = new LinearLayout.LayoutParams(dp(176), dp(176));
+        stickParams.setMargins(0, 0, dp(12), 0);
+        controls.addView(manualJoystick, stickParams);
+
+        LinearLayout look = new LinearLayout(this);
+        look.setOrientation(LinearLayout.VERTICAL);
+        look.setGravity(Gravity.CENTER);
+        look.addView(text("LOOK / CAMERA", 11, GRASS, true));
+        LinearLayout lookRow = manualControlRow();
+        addManualPadButton(lookRow, "LOOK LEFT", "turn_left", "Look left");
+        addManualPadButton(lookRow, "LOOK RIGHT", "turn_right", "Look right");
+        look.addView(lookRow);
         Button stop = actionButton("STOP", true, this::stopManualControl);
         stop.setTextSize(14);
         stop.setContentDescription("Stop all manual movement");
         manualControlButtons.add(stop);
-        addManualPadCell(middle, stop);
-        addManualPadButton(middle, "→", "strafe_right", "Strafe right");
-        panel.addView(middle);
+        look.addView(stop, new LinearLayout.LayoutParams(-1, dp(52)));
+        TextView state = text("Hold to move · release to brake", 11, MUTED, false);
+        state.setPadding(0, dp(8), 0, 0);
+        look.addView(state);
+        controls.addView(look, new LinearLayout.LayoutParams(0, -2, 1f));
+        panel.addView(controls);
 
-        LinearLayout bottom = manualControlRow();
-        addManualPadButton(bottom, "LOOK LEFT", "turn_left", "Look left");
-        addManualPadButton(bottom, "↓", "backward", "Move backward");
-        addManualPadButton(bottom, "LOOK RIGHT", "turn_right", "Look right");
-        panel.addView(bottom);
-
-        TextView footer = text("Experimental Bedrock controls · no jump, sprint, mining or combat is triggered here.", 11, MUTED, false);
+        TextView footer = text("Experimental Bedrock controls · movement is bounded and collision-gated. Jump, sprint, mining and combat are not triggered by this joystick.", 11, MUTED, false);
         footer.setPadding(0, dp(8), 0, 0);
         panel.addView(footer);
         body.addView(panel, panelLayout(10));
@@ -800,20 +810,34 @@ public final class DashboardActivity extends Activity {
         return row;
     }
 
-    private void addManualPadSpacer(LinearLayout row) {
-        View spacer = new View(this);
-        row.addView(spacer, new LinearLayout.LayoutParams(0, dp(54), 1));
-    }
-
     private void addManualPadCell(LinearLayout row, Button button) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(54), 1);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(52), 1);
         params.setMargins(dp(3), dp(3), dp(3), dp(3));
         row.addView(button, params);
     }
 
+    private void onManualJoystickDirection(String mode) {
+        if (mode == null || mode.isEmpty()) {
+            if (activeManualMode.startsWith("joystick:")) stopManualControl();
+            return;
+        }
+        if (!manualControlsEnabled || worldSessionId.isEmpty()) {
+            stopManualControl();
+            showStatus("Connect the bot to a Friend World before using manual movement.");
+            return;
+        }
+        String next = "joystick:" + mode;
+        if (next.equals(activeManualMode)) return;
+        stopManualControl();
+        activeManualMode = next;
+        sendManualMotionPulse(mode);
+        manualControlHandler.removeCallbacks(repeatManualControl);
+        manualControlHandler.postDelayed(repeatManualControl, 450);
+    }
+
     private void addManualPadButton(LinearLayout row, String label, String mode, String description) {
         Button control = actionButton(label, false, () -> {});
-        control.setTextSize(label.length() > 3 ? 11 : 23);
+        control.setTextSize(label.length() > 3 ? 10 : 20);
         control.setContentDescription(description + ". Press and hold.");
         control.setOnTouchListener((view, event) -> {
             int action = event.getActionMasked();
@@ -884,6 +908,7 @@ public final class DashboardActivity extends Activity {
         boolean playing = "spawned".equals(phase);
         manualControlsEnabled = playing;
         for (Button control : manualControlButtons) control.setEnabled(playing);
+        if (manualJoystick != null) manualJoystick.setControlEnabled(playing);
         if (!playing) stopManualControl();
         boolean canStop = (playing || "connecting".equals(phase)) && !worldSessionId.isEmpty();
         String assessment = switch (current.getString("assessment", "")) {
