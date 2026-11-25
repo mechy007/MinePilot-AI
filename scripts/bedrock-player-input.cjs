@@ -110,6 +110,8 @@ class ExperimentalPlayerInput {
     this.recentCorrectionCount = 0;
     this.manualHoldActive = false;
     this.manualHoldDeadline = 0;
+    this.unconfirmedMovement = false;
+    this.unconfirmedMovement = false;
     this.manualAnchor = null;
     this.manualAnchorWorld = null;
     this.manualAnchorDimension = null;
@@ -308,6 +310,7 @@ class ExperimentalPlayerInput {
         // No jump, flight or speculative vertical physics. Use decoded
         // walkable AABB footprint for this bounded flat movement segment.
         this.client.queue('player_auth_input', packet);
+        if (isMoving) this.unconfirmedMovement = true;
         this.lastTick = nextTick;
         this.lastYaw = yaw;
         this.predicted = packet.position;
@@ -372,6 +375,7 @@ class ExperimentalPlayerInput {
     if (!finite3(position)) return;
     this.lastServerPosition = { ...position };
     this.lastServerPositionAt = observedAt;
+    this.unconfirmedMovement = false;
     if (this.manualAnchorWorld &&
         this.manualAnchorDimension === this.manualAnchorWorld.dimension) {
       this.manualAnchor = { ...position };
@@ -483,6 +487,7 @@ class ExperimentalPlayerInput {
       presenceError: this.presenceError,
       active: this.timer != null,
       framesSent: this.framesSent,
+      unconfirmedMovement: this.unconfirmedMovement,
       serverUpdates: this.serverUpdates,
       corrections: this.corrections,
       maxDrift: Math.round(this.maxDrift * 1000) / 1000,
