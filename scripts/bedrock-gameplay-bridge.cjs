@@ -1164,6 +1164,7 @@ class BedrockGameplayBridge {
       return result;
     }
     if (raw.action === 'stop_movement') {
+      this.cancelPendingBlockPlacement('user_stop');
       this.gameplayAgent?.stop('user_stop');
       this.layerOne?.stop();
       this.layerTwo?.cancel();
