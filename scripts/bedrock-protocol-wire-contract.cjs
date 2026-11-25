@@ -36,3 +36,6 @@ const input = serializer.createPacketBuffer({
 });
 assert.ok(Buffer.isBuffer(input));
 assert.ok(input.length > 20, 'manual strafe pulse is serializer-compatible');
+assert.deepEqual(movement.move_vector, { x: 1, y: 0 });
+assert.deepEqual(movement.analogue_move_vector, { x: 1, y: 0 });
+assert.deepEqual(movement.raw_move_vector, { x: 1, y: 0 });
