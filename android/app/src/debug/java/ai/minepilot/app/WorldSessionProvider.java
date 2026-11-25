@@ -131,6 +131,14 @@ public final class WorldSessionProvider extends ContentProvider {
                         }
                     }
                 }
+                result.putInt("subchunk_requests_sent",
+                        Math.max(0, Math.min(100000, gameplay.optInt("subchunkRequestsSent", 0))));
+                result.putInt("subchunk_request_errors",
+                        Math.max(0, Math.min(100000, gameplay.optInt("subchunkRequestErrors", 0))));
+                result.putBoolean("block_network_ids_are_hashes",
+                        gameplay.optBoolean("blockNetworkIdsAreHashes", false));
+                result.putInt("server_custom_block_properties",
+                        Math.max(0, Math.min(1024, gameplay.optInt("serverCustomBlockPropertiesCount", 0))));
                 JSONObject agent = gameplay.optJSONObject("gameplayAgent");
                 if (agent != null) {
                     result.putBoolean("agent_active", agent.optBoolean("active",false));
