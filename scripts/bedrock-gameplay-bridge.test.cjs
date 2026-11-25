@@ -1154,8 +1154,10 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
     stop(){return {status:'ok'};}
   };
   const breaks=[];
+  let autonomyActive = true;
+  const autonomy = { snapshot: () => ({ active: autonomyActive }) };
   const blockBreaker={snapshot(){return {};},abort(){},start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
-  const bridge=new BedrockGameplayBridge(client,{gameplayAgent,blockBreaker}).start();
+  const bridge=new BedrockGameplayBridge(client,{gameplayAgent,autonomy,blockBreaker}).start();
   initialized(client,bridge);
   const call=(primitive,args={},confirmed=true)=>bridge.execute({
     version:'minepilot.gameplay.v1',requestId:'odyssey-exec',action:'odyssey_execute',
@@ -1171,6 +1173,11 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
   assert.equal(goto.awaitingServerConfirmation,true);
   assert.deepEqual(starts.at(-1),{confirmed:true,goal:'goto',targetPosition:{x:9,y:64,z:10}});
   assert.equal(call('goto',{targetPosition:{x:Infinity,y:64,z:10}}).reason,'valid_target_position_required');
+  const blockedMine = call('mineBlock',{position:{x:8,y:63,z:10}});
+  assert.equal(blockedMine.status,'rejected');
+  assert.equal(blockedMine.reason,'autonomy_busy');
+  assert.equal(breaks.length,0,'mining never interrupts active Follow/autonomy');
+  autonomyActive = false;
   const mine = call('mineBlock',{position:{x:8,y:63,z:10}});
   assert.equal(mine.status,'accepted');
   assert.equal(mine.awaitingServerConfirmation,true);
@@ -1229,6 +1236,17 @@ test('tool equip selects only a server-observed hotbar slot and waits for matchi
   assert.equal(bridge.snapshot().hotbarSelection.pending, null);
   assert.equal(bridge.snapshot().hotbarSelection.last.status, 'verified');
   assert.equal(bridge.snapshot().hotbarSelection.last.itemName, 'minecraft:iron_axe');
+
+  // A later server equipment packet contradicting the previously verified tool
+  // must invalidate that verification, even while the inventory snapshot is fresh.
+  client.emit('mob_equipment', { runtime_entity_id: 123n, selected_slot: 2, slot: 2,
+    item: { network_id: 99, count: 1 } });
+  assert.equal(bridge.snapshot().hotbarSelection.last.status, 'invalidated');
+  assert.equal(bridge.snapshot().hotbarSelection.last.reason, 'server_equipment_changed');
+  const retry = call('equipAxe');
+  assert.equal(retry.status, 'accepted');
+  assert.equal(retry.awaitingServerConfirmation, true);
+  assert.equal(bridge.snapshot().hotbarSelection.pending.status, 'awaiting_server_confirmation');
   bridge.stop();
 });
 
