@@ -36,6 +36,19 @@ test('stale or absent player position blocks new plans without breaking existing
   assert.equal(gate.allowPreview({...good,positionAgeMs:30001}).reason,'server_position_stale');
   assert.equal(gate.allowPreview({...good,sessionClosed:true}).reason,'connection_closed');
 });
+test('idle spawn anchor permits limited planning preview without implying server confirmation',()=>{
+  const gate=new LayerEightReadiness();
+  const status=gate.assess({...good,positionAgeMs:12000,idlePositionAnchor:true});
+  assert.equal(status.commandEligible,true);
+  assert.equal(status.commandReason,'idle_spawn_anchor');
+  assert.equal(status.observed.positionMode,'idle_spawn_anchor');
+  assert.equal(status.releaseReady,false);
+  assert.equal(status.liveWalkVerified,false);
+  const invalidated=gate.assess({...good,positionAgeMs:12000,idlePositionAnchor:false});
+  assert.equal(invalidated.commandEligible,false);
+  assert.equal(invalidated.commandReason,'server_position_stale');
+});
+
 test('untrusted codec and block flags never fabricate live device acceptance',()=>{
   const gate=new LayerEightReadiness();
   const evidence=gate.assess({...good,blocksDecoded:true,movementAuthority:1,
