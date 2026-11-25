@@ -209,6 +209,7 @@ cp "$root/scripts/bedrock-auth-input-clock.cjs" "$temp/bedrock-auth-input-clock.
 cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
 cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-12660-states.json"
+cp "$root/scripts/bedrock-vanilla-12660-hashed-states.json" "$temp/bedrock-vanilla-12660-hashed-states.json"
 cp "$root/scripts/bedrock-local-path.cjs" "$temp/bedrock-local-path.cjs"
 cp "$root/scripts/bedrock-autonomy-runner.cjs" "$temp/bedrock-autonomy-runner.cjs"
 cp "$root/scripts/bedrock-block-break.cjs" "$temp/bedrock-block-break.cjs"
@@ -242,6 +243,7 @@ cp "$root/dist/src/connection/prismarine-world-client.js" "$temp/prismarine-worl
 cp "$root/dist/src/core/bot-awareness.js" "$temp/bot-awareness.mjs"
 cp "$root/scripts/android-friend-world-session.test.cjs" "$temp/friend-world-session.test.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.test.cjs" "$temp/bedrock-gameplay-bridge.test.cjs"
+cp "$root/scripts/bedrock-manual-terrain.test.cjs" "$temp/bedrock-manual-terrain.test.cjs"
 cp "$root/scripts/bedrock-stack-request-manager.test.cjs" "$temp/bedrock-stack-request-manager.test.cjs"
 cp "$root/scripts/bedrock-inventory-ledger.test.cjs" "$temp/bedrock-inventory-ledger.test.cjs"
 
@@ -257,7 +259,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs", "bedrock-auth-input-clock.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
-        "bedrock-vanilla-12660-states.json",
+        "bedrock-vanilla-12660-states.json", "bedrock-vanilla-12660-hashed-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
         "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-skill-manifest.cjs", "bedrock-open-world-skills.cjs", "bedrock-odyssey-skill-library.cjs", "bedrock-odyssey-bedrock-adapter.cjs", "bedrock-odyssey-skill-catalog.json", "bedrock-odyssey-observation-executor.cjs", "bedrock-stack-request-manager.cjs", "bedrock-inventory-ledger.cjs", "bedrock-first-person-scene.cjs",
         "prismarine-world-client.mjs", "bot-awareness.mjs",
@@ -291,6 +293,7 @@ console.log('Verified vanilla Bedrock runtime block-state registry in extracted 
 JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
+cp "$temp/bedrock-manual-terrain.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-stack-request-manager.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-inventory-ledger.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-autonomy-runtime.test.cjs" "$temp/verify/"
@@ -306,7 +309,7 @@ cp "$root/scripts/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-auth-input-clock.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-survival-mission.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-first-person-scene.test.cjs" "$temp/verify/"
-timeout --signal=TERM --kill-after=10s 180s node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-auth-input-clock.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs"
+timeout --signal=TERM --kill-after=10s 180s node --test "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-manual-terrain.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-auth-input-clock.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs"
 mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 du -h "$destination/bedrock-sdk.zip"
