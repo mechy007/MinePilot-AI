@@ -202,7 +202,7 @@ test('manual movement remains unavailable while another gameplay controller owns
 
 
 test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes', () => {
-  const { createVanillaRuntimeRegistry, createNumericRuntimeRegistry, clearRuntimeRegistryCache } =
+  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
   clearRuntimeRegistryCache();
   const hashed = createVanillaRuntimeRegistry({
@@ -281,7 +281,7 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
 });
 
 test('numeric palette is exact-version only and fails closed on custom block registration', () => {
-  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
+  const { createVanillaRuntimeRegistry, createNumericRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
   clearRuntimeRegistryCache();
   const loader = () => ({
