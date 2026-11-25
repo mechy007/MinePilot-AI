@@ -96,12 +96,20 @@ test('times out and closes pending requests without claiming success', async () 
   const manager = new BedrockStackRequestManager(client, { isEnabled: () => true, timeoutMs: 100 });
   const actions = [{ type_id: 'take', count: 1,
     source: slot('inventory', 9, 31), destination: slot('hotbar', 0, 0) }];
-  const timed = manager.send(actions);
-  await assert.rejects(timed, error => error.outcome === 'timeout');
-  assert.equal(manager.snapshot().lastOutcome, 'timeout');
-  const closed = manager.send(actions);
-  client.emit('close');
-  await assert.rejects(closed, error => error.outcome === 'closed');
-  assert.equal(manager.snapshot().pending, false);
-  manager.close();
+  // Production deliberately unrefs request timers so they cannot keep an
+  // otherwise-idle Android process alive. Keep this test process alive while
+  // asserting the timeout lifecycle, without changing production behavior.
+  const keepAlive = setTimeout(() => {}, 150);
+  try {
+    const timed = manager.send(actions);
+    await assert.rejects(timed, error => error.outcome === 'timeout');
+    assert.equal(manager.snapshot().lastOutcome, 'timeout');
+    const closed = manager.send(actions);
+    client.emit('close');
+    await assert.rejects(closed, error => error.outcome === 'closed');
+    assert.equal(manager.snapshot().pending, false);
+    manager.close();
+  } finally {
+    clearTimeout(keepAlive);
+  }
 });
