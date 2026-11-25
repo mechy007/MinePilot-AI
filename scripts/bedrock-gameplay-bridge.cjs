@@ -903,7 +903,7 @@ class BedrockGameplayBridge {
     // Stop, status and disabling suggestions remain possible when stale.
     if (this.layerEight && [
       'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food',
-      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start'
+      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start', 'native_skill_start'
     ].includes(raw.action)) {
       const preflight = this.layerEight.allowPreview(this.readinessInput());
       if (!preflight.allowed)
