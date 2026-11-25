@@ -143,13 +143,16 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
   assert.ok(hashed instanceof Map);
   assert.equal(hashed.size, 23948);
   assert.deepEqual(hashed.get((-2144268767) >>> 0), {
-    name: 'minecraft:stone', boundingBox: 'block'
+    name: 'minecraft:stone', boundingBox: 'block', fullCube: true
   });
   assert.deepEqual(hashed.get((-604749536) >>> 0), {
-    name: 'minecraft:air', boundingBox: 'empty'
+    name: 'minecraft:air', boundingBox: 'empty', fullCube: false
   });
   assert.equal(hashed.get(203547508).name, 'minecraft:brown_mushroom_block');
   assert.equal(hashed.get(1659726445).name, 'minecraft:pointed_dripstone');
+  assert.deepEqual(hashed.get(2879325999), {
+    name: 'minecraft:oak_stairs', boundingBox: 'block', fullCube: false
+  }, 'partial stair collision is not a full cube');
   assert.equal(hashed.get(123456789), undefined,
     'unknown add-on hashes never receive an invented block identity');
 
@@ -184,7 +187,15 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
     entries: [{ dx: 0, dy: 0, dz: 0, result: 'success', payload: sectionPayload }]
   }), 1);
   assert.equal(decodedTerrain.blockName(0, 0, 64, 0), 'minecraft:stone');
+  assert.equal(decodedTerrain.kind(0, 0, 64, 0), 'solid');
   assert.equal(decodedTerrain.tile(0, 0, 65, 0), 'blocked');
+
+  const stairsTerrain = new BedrockTerrainCache();
+  stairsTerrain.reset(0);
+  stairsTerrain.setRegistry(hashed);
+  stairsTerrain.store(0, 0, 0, 4, new Uint32Array(4096).fill(2879325999));
+  assert.equal(stairsTerrain.kind(0, 0, 64, 0), null,
+    'partial collision shapes must not be treated as full block supports');
 
   const partialTerrain = new BedrockTerrainCache();
   partialTerrain.reset(0);
