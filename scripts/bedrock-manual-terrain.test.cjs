@@ -128,3 +128,26 @@ test('manual movement remains unavailable while another gameplay controller owns
   assert.equal(result.reason, 'autonomous_controller_busy');
   bridge.stop();
 });
+
+
+test('numeric vanilla registry requires the exact server_version and refuses hashed or custom palettes', () => {
+  const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
+    require('./bedrock-runtime-registry.cjs');
+  clearRuntimeRegistryCache();
+  const loader = () => ({
+    blocks: [{ minStateId: 0, maxStateId: 1200, name: 'air', boundingBox: 'empty' }]
+  });
+  assert.equal(createVanillaRuntimeRegistry({}, loader), null,
+    'missing server version cannot safely select a protocol palette');
+  assert.equal(createVanillaRuntimeRegistry({ server_version: '1.26.51' }, loader), null);
+  assert.equal(createVanillaRuntimeRegistry({
+    server_version: '1.26.60.6', block_network_ids_are_hashes: true
+  }, loader), null);
+  assert.equal(createVanillaRuntimeRegistry({
+    server_version: '1.26.60.6', block_properties: [{ name: 'addon:custom', states: {} }]
+  }, loader), null);
+  const map = createVanillaRuntimeRegistry({ server_version: '1.26.60.6' }, loader);
+  assert.ok(map instanceof Map);
+  assert.equal(map.get(0).name, 'minecraft:air');
+  clearRuntimeRegistryCache();
+});
