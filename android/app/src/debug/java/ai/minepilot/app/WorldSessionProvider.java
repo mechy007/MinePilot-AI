@@ -627,7 +627,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
-                !"experimental_break".equals(action) && !"learning_start".equals(action) &&
+                !"experimental_break".equals(action) && !"learning_start".equals(action) && !"native_skill_start".equals(action) &&
                 !"learning_stop".equals(action) && !"learning_propose".equals(action) &&
                 !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action) &&
                 !"odyssey_observe".equals(action) && !"odyssey_execute".equals(action)) return;
@@ -635,7 +635,7 @@ public final class WorldSessionProvider extends ContentProvider {
         if (("manual_move".equals(action) || "probe_step".equals(action) ||
                 "motion_diagnostic".equals(action) || "verified_step".equals(action) ||
                 "autonomy_follow".equals(action) || "follow_player".equals(action) ||
-                "agent_start".equals(action) || "learning_start".equals(action) ||
+                "agent_start".equals(action) || "learning_start".equals(action) || "native_skill_start".equals(action) ||
                 "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
                 "odyssey_observe".equals(action) || "odyssey_execute".equals(action) || "experimental_break".equals(action)) && !confirmed) return;
         String requestId = UUID.randomUUID().toString();
@@ -656,6 +656,11 @@ public final class WorldSessionProvider extends ContentProvider {
                 String taskId = extras.getString("task_id", "");
                 if (!taskId.matches("[a-z][a-z0-9_]{2,47}")) return;
                 command.put("taskId", taskId).put("confirmed", true);
+            }
+            if ("native_skill_start".equals(action)) {
+                String skillId = extras.getString("skill_id", "");
+                if (!skillId.matches("[a-z][a-z0-9_]{2,47}")) return;
+                command.put("skillId", skillId).put("confirmed", true);
             }
             if ("odyssey_observe".equals(action)) {
                 String primitive = extras.getString("primitive", "");
