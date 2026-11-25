@@ -393,7 +393,10 @@ class ExperimentalPlayerInput {
     // Reconcile the shared input clock even during neutral presence; previous
     // implementation ignored every correction unless movement was running.
     if(typeof tick==='bigint')this.tickClock.correction(tick);
-    if (!this.timer) return;
+    if (!this.timer) {
+      if (finite3(position)) this.observeServerPosition(position, this.clock());
+      return;
+    }
     this.corrections++;
     if (finite3(position)) {
       // Correction is a stronger input to the next predicted frame.
