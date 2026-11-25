@@ -855,7 +855,7 @@ class BedrockGameplayBridge {
     }
     if (this.closed) return { status: 'rejected', reason: 'session_closed' };
     if (this.gameplayAgent?.snapshot()?.active && ![
-      'status','inspect','agent_stop','autonomy_stop','stop_movement','advisor_review','learning_stop','learning_autopilot_stop','odyssey_observe'
+      'status','inspect','agent_stop','autonomy_stop','stop_movement','manual_move','manual_stop','advisor_review','learning_stop','learning_autopilot_stop','odyssey_observe'
     ].includes(raw.action))
       return {status:'rejected',reason:'gameplay_agent_busy_stop_first'};
     // Layer 8 enforces a fresh authenticated world for *new* plans.
