@@ -153,6 +153,39 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
   assert.equal(hashed.get(123456789), undefined,
     'unknown add-on hashes never receive an invented block identity');
 
+  // Subchunk palettes carry hashed runtime IDs as unsigned varuint32 values,
+  // although FNV-1a itself is represented as a signed int32 in the hash code.
+  const stoneWireId = (-2144268767) >>> 0;
+  const encodedVarUint = value => {
+    const bytes = [];
+    let remaining = value >>> 0;
+    while (remaining >= 0x80) {
+      bytes.push((remaining & 0x7f) | 0x80);
+      remaining >>>= 7;
+    }
+    bytes.push(remaining);
+    return bytes;
+  };
+  const { parseStorage } = require('./bedrock-terrain-cache.cjs');
+  const storage = Buffer.from([1, 1, ...encodedVarUint(stoneWireId)]);
+  const decodedStorage = parseStorage(storage, { offset: 0 });
+  assert.equal(decodedStorage[0], stoneWireId);
+
+  const decodedTerrain = new BedrockTerrainCache();
+  decodedTerrain.reset(0);
+  assert.equal(decodedTerrain.setRegistry(hashed), true);
+  const sectionPayload = Buffer.from([
+    9, 1, 4, // version 9, one storage layer, section Y = 4
+    ...storage
+  ]);
+  assert.equal(decodedTerrain.subChunk({
+    dimension: 0,
+    origin: { x: 0, y: 4, z: 0 },
+    entries: [{ dx: 0, dy: 0, dz: 0, result: 'success', payload: sectionPayload }]
+  }), 1);
+  assert.equal(decodedTerrain.blockName(0, 0, 64, 0), 'minecraft:stone');
+  assert.equal(decodedTerrain.tile(0, 0, 65, 0), 'blocked');
+
   const partialTerrain = new BedrockTerrainCache();
   partialTerrain.reset(0);
   partialTerrain.setRegistry(hashed);
