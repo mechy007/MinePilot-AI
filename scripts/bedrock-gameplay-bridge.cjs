@@ -456,9 +456,9 @@ class BedrockGameplayBridge {
     if (age <= 7000)
       return { usable: true, mode: 'server_fresh', ageMs: age };
     // Bedrock may stay silent when the predicted input needs no correction.
-    // Preserve the existing spawn/server anchor only while neutral presence
-    // proves this same connection is still alive and no movement was sent.
-    if (age <= 30000 && motion.presenceActive === true &&
+    // Preserve the original server anchor for this live session while neutral
+    // presence continues and no non-neutral input has been sent.
+    if (motion.presenceActive === true &&
         Number.isInteger(motion.presenceFrames) && motion.presenceFrames > 0)
       return { usable: true, mode: 'idle_spawn_anchor', ageMs: age };
     return { usable: false, mode: 'server_position_stale', ageMs: age };
