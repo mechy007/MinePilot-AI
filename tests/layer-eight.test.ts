@@ -49,6 +49,15 @@ test('idle spawn anchor permits limited planning preview without implying server
   assert.equal(invalidated.commandReason,'server_position_stale');
 });
 
+test('unconfirmed movement invalidates a recent timestamp until server position is reported',()=>{
+  const gate=new LayerEightReadiness();
+  const status=gate.assess({...good,positionAgeMs:100,positionUsable:false});
+  assert.equal(status.commandEligible,false);
+  assert.equal(status.commandReason,'server_position_stale');
+  assert.equal(status.observed.positionMode,'stale');
+  assert.equal(gate.allowPreview({...good,positionAgeMs:100,positionUsable:false}).allowed,false);
+});
+
 test('untrusted codec and block flags never fabricate live device acceptance',()=>{
   const gate=new LayerEightReadiness();
   const evidence=gate.assess({...good,blocksDecoded:true,movementAuthority:1,
