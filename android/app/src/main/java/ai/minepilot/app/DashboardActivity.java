@@ -1106,7 +1106,7 @@ public final class DashboardActivity extends Activity {
                         + "\\nBlock ID mode: " + (current.getBoolean("block_network_ids_are_hashes", false)
                             ? "hashed (hash resolver needed)"
                             : current.getInt("server_custom_block_properties", 0) > 0
-                                ? "custom palette (not mapped)" : "vanilla numeric")
+                                ? "numeric + custom IDs unknown" : "vanilla numeric")
                         + (terrainStatus.isEmpty() ? "" : "\nVerified route: " + terrainStatus
                             + " · " + terrainReason + " · " + current.getInt("terrain_route_length") + " cells")
                         + "\nAutonomous Follow: " + (autonomyActive ? "active" : "stopped")
