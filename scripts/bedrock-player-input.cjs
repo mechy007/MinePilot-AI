@@ -108,6 +108,42 @@ class ExperimentalPlayerInput {
     this.initialPosition = null;
     this.maxDrift = 0;
     this.recentCorrectionCount = 0;
+    this.manualHoldActive = false;
+    this.manualHoldDeadline = 0;
+  }
+  /** Update or start one continuous user-held control stream. */
+  runManualHold(world, options = {}) {
+    const mode = options.mode ?? '';
+    const ticks = options.ticks ?? 8;
+    if (!['forward','backward','strafe_left','strafe_right','turn_left','turn_right'].includes(mode) ||
+        !Number.isInteger(ticks) || ticks < 1 || ticks > 8)
+      return {status:'rejected',reason:'unsupported_manual_input'};
+
+    const now = this.clock();
+    if (this.timer && this.manualHoldActive) {
+      if (this.world !== world || now > this.manualHoldDeadline) {
+        this.stop('manual_input_timeout');
+        return {status:'rejected',reason:'manual_hold_expired'};
+      }
+      if (this.capability(world) !== 'experimental')
+        return {status:'rejected',reason:'movement_unavailable'};
+      // Keep the same prediction origin and tick writer while changing
+      // direction. Re-starting every half-second would rewind to an old
+      // server position on worlds that do not echo every accepted input.
+      this.mode = mode;
+      this.remaining = Math.max(this.remaining, 10);
+      this.manualHoldDeadline = now + 1100;
+      return {status:'accepted',reason:'manual_hold_updated'};
+    }
+    if (this.timer) return {status:'rejected',reason:'movement_busy'};
+
+    const started = this.runDiagnostic(world, {mode,ticks:20,manualHold:true});
+    if (started.status === 'accepted') {
+      this.manualHoldActive = true;
+      this.manualHoldDeadline = now + 1100;
+      this.remaining = 20;
+    }
+    return started;
   }
   /** Continuous *neutral* PlayerAuthInput; no client-predicted locomotion. */
   startPresence(world) {
@@ -187,9 +223,11 @@ class ExperimentalPlayerInput {
   runDiagnostic(world, options = {}) {
     const mode = options.mode ?? 'forward';
     const ticks = options.ticks ?? PROBE_TICKS;
+    const manualHold = options.manualHold === true;
     if (!['forward', 'backward', 'strafe_left', 'strafe_right',
         'turn_left', 'turn_right'].includes(mode) ||
-        !Number.isInteger(ticks) || ticks < 1 || ticks > 20)
+        !Number.isInteger(ticks) || ticks < 1 || ticks > 20 ||
+        (manualHold && ticks !== 20))
       return { status: 'rejected', reason: 'unsupported_diagnostic' };
     if (this.capability(world) !== 'experimental')
       return { status: 'rejected', reason: 'movement_unavailable' };
@@ -217,7 +255,16 @@ class ExperimentalPlayerInput {
     this.lastEndReason = 'in_progress';
     const send = () => {
       if (!this.timer) return;
-      if (this.remaining <= 0) { this.stop('bounded_sequence_complete'); return; }
+      if (this.manualHoldActive) {
+        if (this.clock() > this.manualHoldDeadline) {
+          this.stop('manual_input_timeout');
+          return;
+        }
+        if (this.remaining <= 0) this.remaining = 20;
+      } else if (this.remaining <= 0) {
+        this.stop('bounded_sequence_complete');
+        return;
+      }
       if (this.capability(world) !== 'experimental') {
         this.stop('authority_or_session_lost');
         return;
@@ -228,7 +275,8 @@ class ExperimentalPlayerInput {
       }
       // A stop must not depend on a future user request. The session can
       // be paused or killed by the OS, so guard wall time as well as ticks.
-      if (this.clock() - this.startedAt > Math.max(2500, ticks * this.interval + 500)) {
+      if (!this.manualHoldActive &&
+          this.clock() - this.startedAt > Math.max(2500, ticks * this.interval + 500)) {
         this.stop('deadline_exceeded');
         return;
       }
@@ -371,6 +419,8 @@ class ExperimentalPlayerInput {
     this.predicted = null;
     this.world = null;
     this.mode = null;
+    this.manualHoldActive = false;
+    this.manualHoldDeadline = 0;
     this.requireVerifiedTerrain=false;
     this.predictionStep=PROBE_STEP;
   }
