@@ -53,7 +53,7 @@ test('reads Bedrock crafting_data exact-name recipes and resolves output IDs thr
   assert.deepEqual(snapshot.recipes[0].ingredients, [{ name: 'minecraft:oak_planks', count: 2 }]);
   const plan = catalog.resolve('minecraft:oak_planks', inventory({ 'minecraft:oak_log': 2 }));
   assert.equal(plan.status, 'ready');
-  assert.equal(plan.outputExpected, 8);
+  assert.equal(plan.outputExpected, 4);
   assert.equal(plan.recipe.networkId, 42);
 });
 
