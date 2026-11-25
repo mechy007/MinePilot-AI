@@ -1154,11 +1154,17 @@ test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil a
     stop(){return {status:'ok'};}
   };
   const breaks=[];
-  let autonomyActive = true;
-  const autonomy = { snapshot: () => ({ active: autonomyActive }) };
+  let autonomyActive = false;
+  const autonomy = {
+    snapshot: () => ({ active: autonomyActive }),
+    stop() { autonomyActive = false; return { status: 'ok' }; }
+  };
   const blockBreaker={snapshot(){return {};},abort(){},start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
   const bridge=new BedrockGameplayBridge(client,{gameplayAgent,autonomy,blockBreaker}).start();
   initialized(client,bridge);
+  // StartGame correctly stops prior autonomy. Simulate a separate, active
+  // Follow run after world initialization for the mutual-exclusion assertion.
+  autonomyActive = true;
   const call=(primitive,args={},confirmed=true)=>bridge.execute({
     version:'minepilot.gameplay.v1',requestId:'odyssey-exec',action:'odyssey_execute',
     primitive,args,confirmed
