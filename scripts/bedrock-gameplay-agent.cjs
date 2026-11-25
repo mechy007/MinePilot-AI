@@ -177,7 +177,12 @@ class BedrockGameplayAgent {
     this.reason=reason;
     this.awaiting=null;
     this.nextActionAt=this.clock()+1000;
-    if(this.failures>=MAX_FAILURES){this.stop(reason);return;}
+    // Once non-neutral input has been sent, a missing server update leaves
+    // the prior position unusable. Never retry movement from that stale anchor.
+    if(this.world?.movement?.snapshot?.()?.unconfirmedMovement===true ||
+       this.failures>=MAX_FAILURES) {
+      this.stop(reason);return;
+    }
     this.phase='recovering';
   }
   recordCell(position) {
