@@ -110,6 +110,9 @@ class ExperimentalPlayerInput {
     this.recentCorrectionCount = 0;
     this.manualHoldActive = false;
     this.manualHoldDeadline = 0;
+    this.manualAnchor = null;
+    this.manualAnchorWorld = null;
+    this.manualAnchorDimension = null;
   }
   /** Update or start one continuous user-held control stream. */
   runManualHold(world, options = {}) {
@@ -137,7 +140,12 @@ class ExperimentalPlayerInput {
     }
     if (this.timer) return {status:'rejected',reason:'movement_busy'};
 
-    const started = this.runDiagnostic(world, {mode,ticks:20,manualHold:true});
+    const initialPosition = this.manualAnchorWorld === world &&
+      this.manualAnchorDimension === world.dimension && finite3(this.manualAnchor)
+        ? { ...this.manualAnchor } : { ...world.position };
+    const started = this.runDiagnostic(world, {
+      mode,ticks:20,manualHold:true,initialPosition
+    });
     if (started.status === 'accepted') {
       this.manualHoldActive = true;
       this.manualHoldDeadline = now + 1100;
@@ -233,8 +241,9 @@ class ExperimentalPlayerInput {
       return { status: 'rejected', reason: 'movement_unavailable' };
     if (this.timer) return { status: 'rejected', reason: 'movement_busy' };
     this.remaining = ticks;
-    this.predicted = { ...world.position };
-    this.initialPosition = { ...world.position };
+    const origin = finite3(options.initialPosition) ? options.initialPosition : world.position;
+    this.predicted = { ...origin };
+    this.initialPosition = { ...origin };
     this.lastServerPosition = { ...world.position };
     this.lastServerPositionAt = world.lastServerPositionAt;
     if(!this.tickClock.seed(world.serverTick,world.serverTickObservedAt??this.clock()))
@@ -360,9 +369,14 @@ class ExperimentalPlayerInput {
   }
   /** Only the server's report is an observation, not bot-action confirmation. */
   observeServerPosition(position, observedAt) {
-    if (!this.timer || !finite3(position)) return;
+    if (!finite3(position)) return;
     this.lastServerPosition = { ...position };
     this.lastServerPositionAt = observedAt;
+    if (this.manualAnchorWorld &&
+        this.manualAnchorDimension === this.manualAnchorWorld.dimension) {
+      this.manualAnchor = { ...position };
+    }
+    if (!this.timer) return;
     this.serverUpdates++;
     if (finite3(this.predicted)) {
       const drift = Math.hypot(position.x - this.predicted.x, position.y - this.predicted.y,
@@ -418,6 +432,13 @@ class ExperimentalPlayerInput {
         this.lastTick = neutralTick;
       } catch { this.errors++; }
     }
+    if (wasManualHold &&
+        ['manual_control_released','manual_input_timeout'].includes(reason) &&
+        world && !world.closed && finite3(this.predicted)) {
+      this.manualAnchor = { ...this.predicted };
+      this.manualAnchorWorld = world;
+      this.manualAnchorDimension = world.dimension;
+    }
     this.predicted = null;
     this.world = null;
     this.mode = null;
@@ -436,6 +457,9 @@ class ExperimentalPlayerInput {
     this.initialPosition = null;
     this.lastServerPosition = null;
     this.lastServerPositionAt = null;
+    this.manualAnchor = null;
+    this.manualAnchorWorld = null;
+    this.manualAnchorDimension = null;
     this.framesSent = 0;
     this.serverUpdates = 0;
     this.corrections = 0;
