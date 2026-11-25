@@ -33,6 +33,25 @@ test('intelligence chooses death, stale packet state, low health, threat, hunger
     nearbyEntities:[{hostile:true,distance:3}],localTerrain:{unknown:0,hazard:0,status:'observed'}}})).action,'seek_safety');
   assert.equal(brain.decide(obs({respawnState:'dead_waiting_for_server'})).action,'await_respawn');
 });
+test('idle spawn anchor is usable for previews but never labeled server-verified',()=>{
+  const brain=new MinePilotIntelligence({clock:()=>100});
+  brain.reset(0);
+  const snapshot=brain.decide(obs({
+    positionAgeMs:12000,
+    positionUsable:true,
+    idlePositionAnchor:true
+  }));
+  assert.equal(snapshot.action,'observe');
+  assert.equal(snapshot.positionUsable,true);
+  assert.equal(snapshot.positionMode,'idle_spawn_anchor');
+  assert.equal(snapshot.verifiedWorld,false);
+  assert.equal(brain.decide(obs({
+    positionAgeMs:12000,
+    positionUsable:false,
+    idlePositionAnchor:false
+  })).reason,'world_state_stale');
+});
+
 test('memory, history, and decisions remain bounded and reset across dimensions',()=>{
   let t=100;
   const brain=new MinePilotIntelligence({clock:()=>t++});
