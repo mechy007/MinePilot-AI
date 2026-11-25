@@ -1543,10 +1543,10 @@ test('idle spawn anchor stays usable only with neutral presence and no unconfirm
   bridge.receivedChunks.set('0:2:-2', now);
   bridge.lastServerPositionAt = now;
 
-  now += 12000;
+  now += 6 * 60 * 1000;
   assert.deepEqual(bridge.positionStatus(), {
-    usable: true, mode: 'idle_spawn_anchor', ageMs: 12000
-  });
+    usable: true, mode: 'idle_spawn_anchor', ageMs: 360000
+  }, 'neutral presence preserves the original anchor across long idle periods');
 
   motion.unconfirmedMovement = true;
   assert.equal(bridge.positionUsable(), false,
