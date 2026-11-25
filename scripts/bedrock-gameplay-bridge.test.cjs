@@ -8,6 +8,7 @@ const { test } = require('node:test');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { learningEngineFor, odysseyCapabilityStates } = require('./bedrock-skill-manifest.cjs');
 const { ExperimentalPlayerInput, buildInputPacket } = require('./bedrock-player-input.cjs');
+const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
 
 class Client extends EventEmitter {
   sent = [];
@@ -1351,5 +1352,115 @@ test('bridge mirrors full Bedrock inventory content and incremental slots withou
   assert.equal(odysseyCapabilityStates(bridge, {
     worldReady: true, localNavigationReady: false, skills: []
   }).inventory_read.state, 'partial');
+  bridge.stop();
+});
+
+
+test('1.26.60 subchunk batches decode center-relative offsets and all-air results', () => {
+  const terrain = new BedrockTerrainCache();
+  terrain.reset(0);
+  terrain.setRegistry(new Map([[0, { name: 'minecraft:air', boundingBox: 'empty' }]]));
+  const payload = Buffer.from([9, 1, 5, 1, 1, 0]);
+  const decoded = terrain.subChunk({
+    dimension: 0,
+    center: { x: 3, y: 4, z: 2 },
+    entries: [{
+      sub_chunk_pos_offset: { x: 1, y: 1, z: 1 },
+      result: 1,
+      payload
+    }, {
+      sub_chunk_pos_offset: { x: 0, y: 2, z: 0 },
+      result: 6
+    }]
+  });
+  assert.equal(decoded, 2);
+  assert.equal(terrain.snapshot().decodedSections, 2);
+  assert.equal(terrain.blockId(0, 64, 80, 48), 0,
+    'center plus relative offset resolves the expected subchunk column');
+  assert.equal(terrain.blockName(0, 64, 80, 48), 'minecraft:air');
+  assert.equal(terrain.blockId(0, 48, 96, 32), 0,
+    'SuccessAllAir uses the registry air runtime ID without an absent payload');
+});
+
+test('the live bridge forwards official subchunk packets into its terrain cache', () => {
+  const client = new Client();
+  const terrain = new BedrockTerrainCache();
+  const bridge = new BedrockGameplayBridge(client, {
+    terrain,
+    registryResolver: () => new Map([[0, { name: 'minecraft:air', boundingBox: 'empty' }]])
+  }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  client.emit('subchunk', {
+    dimension: 0,
+    center: { x: 0, y: 4, z: 0 },
+    entries: [{
+      sub_chunk_pos_offset: { x: 0, y: 0, z: 0 },
+      result: 1,
+      payload: Buffer.from([9, 1, 4, 1, 1, 0])
+    }]
+  });
+  assert.equal(bridge.snapshot().terrain.decodedSections, 1);
+  assert.equal(bridge.snapshot().terrain.collisionClassificationReady, true);
+  bridge.stop();
+});
+
+test('manual D-pad directions serialize independent forward, backward and strafe inputs', () => {
+  const client = new Client();
+  let now = 1000;
+  let pulse = null;
+  const movement = new ExperimentalPlayerInput(client, true, {
+    clock: () => now,
+    setInterval: callback => { pulse = callback; return 1; },
+    clearInterval: () => {}
+  });
+  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
+  initialized(client, bridge);
+  const expected = [
+    ['forward', { x: 0, z: 1 }, 10],
+    ['backward', { x: 0, z: -1 }, 11],
+    ['strafe_left', { x: -1, z: 0 }, 12],
+    ['strafe_right', { x: 1, z: 0 }, 13]
+  ];
+  for (const [mode, vector, flag] of expected) {
+    const result = bridge.execute({
+      version: 'minepilot.gameplay.v1', requestId: mode,
+      action: 'manual_move', confirmed: true, mode, ticks: 2
+    });
+    assert.equal(result.status, 'accepted', mode);
+    now += 50;
+    pulse();
+    const frame = client.sent.at(-1).value;
+    assert.deepEqual(frame.move_vector, vector, mode);
+    assert.deepEqual(frame.raw_move_vector, vector, mode);
+    assert.deepEqual(frame.input_data, [flag], mode);
+    bridge.execute({
+      version: 'minepilot.gameplay.v1', requestId: mode + '-release',
+      action: 'manual_stop'
+    });
+    assert.equal(movement.snapshot().active, false, mode);
+  }
+  bridge.stop();
+});
+
+test('manual movement is still blocked by missing authority, critical health and the active autonomous agent', () => {
+  const client = new Client();
+  let pulse;
+  const movement = new ExperimentalPlayerInput(client, false, {
+    setInterval: callback => { pulse = callback; return 1; },
+    clearInterval: () => {}
+  });
+  const bridge = new BedrockGameplayBridge(client, {
+    movement,
+    gameplayAgent: { snapshot: () => ({ active: true }), stop() {} }
+  }).start();
+  initialized(client, bridge);
+  const base = {
+    version: 'minepilot.gameplay.v1', requestId: 'manual-test',
+    action: 'manual_move', confirmed: true, mode: 'forward', ticks: 4
+  };
+  assert.equal(bridge.execute(base).reason, 'autonomous_controller_busy');
+  bridge.gameplayAgent = { snapshot: () => ({ active: false }), stop() {} };
+  assert.equal(bridge.execute({ ...base, requestId: 'manual-disabled' }).reason, 'movement_unavailable');
   bridge.stop();
 });
