@@ -124,6 +124,19 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   }
   if (!data || !Array.isArray(data.blocks)) return null;
 
+  // Add-on blocks can shift the legacy numeric palette. Reject that world
+  // before expanding thousands of captured state IDs into a Map. This keeps
+  // the production path fast while preserving the fail-closed rule.
+  if (loadMinecraftData == null) {
+    const knownNames = new Set();
+    for (const block of data.blocks) {
+      if (Array.isArray(block) && typeof block[2] === 'string' &&
+          /^[a-z0-9_./-]{1,80}$/.test(block[2]))
+        knownNames.add('minecraft:' + block[2]);
+    }
+    if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
+  }
+
   const map = new Map();
   for (const block of data.blocks) {
     if (!block || !Number.isInteger(block.minStateId) ||
@@ -146,11 +159,6 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   if (map.size < 1000 ||
       ![...map.values()].some(v => v.name === 'minecraft:air')) return null;
 
-  const knownNames = new Set([...map.values()].map(v => v.name));
-  // Test-only injected minecraft-data fixtures do not model the full ordered
-  // server palette. Keep their synthetic tests usable; production always uses
-  // the pinned table and fails closed on unrecognized block registrations.
-  if (loadMinecraftData == null && !hasOnlyKnownBlocks(startGame, knownNames)) return null;
   if (loadMinecraftData == null) cachedNumeric = map;
   return map;
 }
