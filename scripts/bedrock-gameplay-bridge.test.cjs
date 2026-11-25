@@ -1521,6 +1521,49 @@ test('vanilla runtime registry refuses hashed IDs but retains known states besid
 });
 
 
+test('idle spawn anchor stays usable only with neutral presence and no unconfirmed movement', () => {
+  let now = 1000;
+  const client = new Client();
+  const motion = {
+    presenceActive: true,
+    presenceFrames: 20,
+    unconfirmedMovement: false
+  };
+  const bridge = new BedrockGameplayBridge(client, {
+    clock: () => now,
+    movement: { snapshot: () => motion }
+  });
+  bridge.spawned = true;
+  bridge.closed = false;
+  bridge.self = '123';
+  bridge.position = { x: 33.25, y: 70.5, z: -17.75 };
+  bridge.dimension = 0;
+  bridge.movementAuthority = 1;
+  bridge.serverTick = 120n;
+  bridge.receivedChunks.set('0:2:-2', now);
+  bridge.lastServerPositionAt = now;
+
+  now += 12000;
+  assert.deepEqual(bridge.positionStatus(), {
+    usable: true, mode: 'idle_spawn_anchor', ageMs: 12000
+  });
+
+  motion.unconfirmedMovement = true;
+  assert.equal(bridge.positionUsable(), false,
+    'queued non-neutral input invalidates the idle anchor');
+  assert.equal(bridge.positionStatus().mode, 'awaiting_server_position');
+
+  motion.unconfirmedMovement = false;
+  bridge.lastServerPositionAt = now;
+  assert.equal(bridge.positionStatus().mode, 'server_fresh',
+    'a new server position report restores current position freshness');
+
+  now += 31000;
+  motion.presenceFrames = 0;
+  assert.equal(bridge.positionUsable(), false,
+    'stale position without neutral presence cannot be used as an anchor');
+});
+
 test('Bedrock 1.26.60 skeleton chunks trigger a bounded and deduplicated local subchunk request', () => {
   let now = 1000;
   const client = new Client();
