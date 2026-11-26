@@ -79,6 +79,8 @@ class BedrockGameplayBridge {
     this.serverCustomBlockPropertiesCount = 0;
     this.autonomy = options.autonomy ?? null;
     this.blockBreaker = options.blockBreaker ?? null;
+    if (typeof this.movement?.setBlockExecutor === 'function')
+      this.movement.setBlockExecutor(this.blockBreaker);
     this.lifeSenses = options.lifeSenses ?? null;
     this.intelligence = options.intelligence ?? null;
     this.gameplayAgent = options.gameplayAgent ?? null;
