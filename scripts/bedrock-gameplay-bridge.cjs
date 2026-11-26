@@ -1237,9 +1237,8 @@ class BedrockGameplayBridge {
       if (!this.movement || this.movement.capability(this) !== 'ready' ||
           typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
-      // Every refresh updates the existing manual hold. The input writer keeps
-      // one prediction origin and one server-tick stream until explicit STOP
-      // or the 1.1s UI keepalive watchdog expires.
+      // Every refresh updates the physics controller. One server-tick stream
+      // carries simulated state until release or the UI keepalive expires.
       return this.movement.runManualHold(this, {
         mode: raw.mode, ticks: raw.ticks,
         vector: Number.isFinite(raw.motionX) && Number.isFinite(raw.motionY)
