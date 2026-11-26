@@ -1175,3 +1175,64 @@ test('Bedrock crafting rejects unsupported recipe, stale inventory and unnegotia
 
   currentInventory = { ...currentInventory, fresh: true, fullSnapshotFresh: true };
 });
+
+
+test('respawn does not resume movement when health arrives before the server spawn position', () => {
+  let now = 1000;
+  let starts = 0;
+  const client = new Client();
+  const movement = {
+    startPresence() { starts++; },
+    stopPresence() {},
+    stop() {}
+  };
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now, movement }).start();
+  initialized(client, bridge);
+  const startsBeforeDeath = starts;
+  client.emit('set_health', { health: 0 });
+  client.emit('respawn', { runtime_entity_id: 0n, state: 0,
+    position: { x: 12.5, y: 70, z: 8.5 } });
+  client.emit('set_health', { health: 20 });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'dead_waiting_for_server');
+  assert.equal(bridge.spawned, false);
+  assert.equal(starts, startsBeforeDeath, 'health alone must not restart movement');
+
+  client.emit('respawn', { runtime_entity_id: 456n, state: 1,
+    position: { x: 18.5, y: 72, z: 4.5 } });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
+  assert.deepEqual(bridge.snapshot().position, { x: 18.5, y: 72, z: 4.5 });
+  assert.equal(bridge.spawned, true);
+  assert.equal(starts, startsBeforeDeath + 1);
+  bridge.stop();
+});
+
+test('server returning to SearchingForSpawn restarts the correct respawn handshake stage', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  client.emit('set_health', { health: 0 });
+  client.emit('respawn', { runtime_entity_id: 0n, state: 0, position: origin });
+  client.emit('respawn', { runtime_entity_id: 0n, state: 1, position: origin });
+  now += 4000;
+  bridge.tickRespawnRecovery();
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 1);
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'respawn_action_sent');
+
+  client.emit('respawn', { runtime_entity_id: 789n, state: 0,
+    position: { x: 14.5, y: 70, z: 11.5 } });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'dead_waiting_for_server');
+  const sentBeforeRetry = client.sent.length;
+  now += 1799;
+  bridge.tickRespawnRecovery();
+  assert.equal(client.sent.length, sentBeforeRetry);
+  now += 1;
+  bridge.tickRespawnRecovery();
+  assert.equal(client.sent.at(-1).packet, 'respawn');
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'client_ready_sent');
+  client.emit('respawn', { runtime_entity_id: 789n, state: 1,
+    position: { x: 14.5, y: 70, z: 11.5 } });
+  assert.equal(client.sent.at(-1).packet, 'player_action');
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 2);
+  bridge.stop();
+});
