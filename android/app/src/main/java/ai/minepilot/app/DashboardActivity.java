@@ -1169,6 +1169,7 @@ public final class DashboardActivity extends Activity {
                         + "\nPhysics movement: " + (movementReady ? "ready" : "waiting for server / terrain")
                         + " · Frames: " + current.getInt("movement_frames")
                         + " · Server corrections: " + current.getInt("movement_corrections")
+                        + " · Awaiting server ack: " + current.getBoolean("movement_unconfirmed", false)
                         + "\nCollision data: " + current.getInt("movement_physics_blocks") + " blocks / "
                         + current.getInt("movement_physics_states") + " states"
                         + " · Terrain: " + (current.getBoolean("movement_terrain_ready", false) ? "observed" : "incomplete")
