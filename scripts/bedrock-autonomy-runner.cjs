@@ -53,8 +53,8 @@ class VerifiedAutonomyRunner {
     if (!world.terrain?.snapshot().collisionClassificationReady)
       return 'block_registry_unavailable';
     if (world.blockBreaker?.snapshot()?.active) return 'block_action_busy';
-    if (world.movement?.capability(world)!=='experimental')
-      return 'experimental_movement_not_enabled';
+    if (world.movement?.capability(world)!=='ready')
+      return 'movement_unavailable';
     return null;
   }
   enable(world,opts={}) {
