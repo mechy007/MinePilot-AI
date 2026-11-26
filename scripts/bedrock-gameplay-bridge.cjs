@@ -1545,7 +1545,7 @@ class BedrockGameplayBridge {
     this.autonomy?.stop('session_closed');
     this.blockBreaker?.abort('session_closed');
     this.movement?.stopPresence?.('session_closed');
-    this.movement?.stop?.();
+    this.movement?.stop?.('session_closed');
     this.layerOne?.stop('session_closed');
     this.layerTwo?.reset();
     this.layerThree?.reset();
