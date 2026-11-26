@@ -47,6 +47,7 @@ class BedrockPhysicsWorld {
     this.dimension = dimension;
     this.unknown = false;
     this.queries = 0;
+    this.hashedIds = false;
   }
   beginTick() {
     this.unknown = false;
@@ -62,13 +63,19 @@ class BedrockPhysicsWorld {
       this.unknown = true;
       return null;
     }
-    const profile = this.collisionData.profilesByHash.get(Number(runtimeId) >>> 0);
-    if (!profile) {
+    const key = this.hashedIds ? (Number(runtimeId) >>> 0) : Number(runtimeId);
+    const profile = this.hashedIds
+      ? this.collisionData.profilesByHash.get(key)
+      : this.collisionData.profilesByStateId.get(key);
+    const registered = this.terrain?.registry?.get(key);
+    const expectedName = profile?.name?.startsWith('minecraft:')
+      ? profile.name : 'minecraft:' + (profile?.name ?? '');
+    if (!profile || !registered || registered.name !== expectedName) {
       this.unknown = true;
       return null;
     }
     const block = {
-      name: profile.name,
+      name: profile.name.replace(/^minecraft:/, ''),
       type: profile.id,
       boundingBox: profile.boundingBox,
       friction: profile.friction,
@@ -154,6 +161,7 @@ class BedrockMovementController {
     this.terrain = world.terrain;
     if (!this.loadPhysics()) return false;
     this.physicsWorld.dimension = world.dimension;
+    this.physicsWorld.hashedIds = world.blockNetworkIdsAreHashes === true;
     this.lastServerPosition = { ...world.position };
     this.lastServerPositionAt = world.lastServerPositionAt ?? Date.now();
     this.lastServerTick = world.serverTick;
