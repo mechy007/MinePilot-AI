@@ -472,6 +472,7 @@ test('respawn restores an active Follow plan only after server health recovery',
   let now = 1000, autonomous = true, replanned = 0, restarted = 0;
   const client = new Client();
   const layerTwo = {
+    reset() {},
     preview() { return { goal: 'follow', targetName: 'Friend' }; },
     cancel() {},
     follow(name) { assert.equal(name, 'Friend'); replanned++; return { status: 'accepted' }; }
