@@ -132,6 +132,18 @@ test('analog diagonal movement combines jump and sprint flags and supports sneak
   controller.stop('session_closed');
 });
 
+test('movement controller applies horizontal and vertical camera look controls', () => {
+  const { controller, world } = movementWorld();
+  controller.startPresence(world);
+  assert.equal(controller.runManualHold(world, { mode: 'turn_left', ticks: 8 }).status, 'accepted');
+  const turned = controller.tick(101n);
+  assert.ok(turned.yaw > 0);
+  assert.equal(controller.runManualHold(world, { mode: 'look_up', ticks: 8 }).status, 'accepted');
+  const looked = controller.tick(102n);
+  assert.ok(looked.pitch < 0);
+  controller.stop('session_closed');
+});
+
 test('movement controller refuses to predict through an unknown terrain cell', () => {
   const { controller, world, terrain } = movementWorld();
   assert.equal(controller.startPresence(world), true);
