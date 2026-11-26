@@ -20,10 +20,19 @@ function loadBedrockCollisionData(directory = path.join(__dirname, 'bedrock-phys
 }
 
 function buildBedrockCollisionData({ blocks, states, collision }, expectedStates = EXPECTED_STATES) {
-  if (!Array.isArray(blocks) || !Array.isArray(states) || states.length !== expectedStates ||
+  if (!Array.isArray(blocks) || !Array.isArray(states) ||
       !collision || !collision.blocks || !collision.shapes) {
-    throw new Error('bedrock_physics_data_invalid');
+    const describe = value => ({
+      type: Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value,
+      length: Array.isArray(value) ? value.length : undefined,
+      keys: value && typeof value === 'object' ? Object.keys(value).slice(0, 8) : []
+    });
+    throw new Error('bedrock_physics_dataset_invalid:' + JSON.stringify({
+      blocks: describe(blocks), states: describe(states), collision: describe(collision)
+    }));
   }
+  if (states.length !== expectedStates)
+    throw new Error('bedrock_physics_state_count_mismatch:' + states.length + ':' + expectedStates);
 
   const blocksByName = Object.create(null);
   const blocksArray = [];
