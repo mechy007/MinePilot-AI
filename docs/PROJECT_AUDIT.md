@@ -36,6 +36,7 @@ Status: active audit on `redesign/full-project-overhaul`.
 6. Archived superseded connection/dashboard/gameplay planning documents under docs/archive/legacy-plans and docs/archive/phase-notes; removed one obsolete Voyager pointer that only redirected to the current guide.
 7. Added a shared Android design-token class and collapsed experimental visualizations behind an optional control.
 8. Removed the overlapping Android ARM64 APK workflow after confirming the Android Node Runtime Probe workflow already stages the SDK, runs the contract suite, builds the same debug APK and verifies 16 KB alignment.
+9. Archived three superseded experimental movement/spawn-probe notes after checking that the current README, roadmap, architecture and runtime-contract docs do not link to them.
 
 ## High-priority redesign work
 
