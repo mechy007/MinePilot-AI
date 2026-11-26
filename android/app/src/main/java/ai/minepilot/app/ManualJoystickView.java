@@ -8,7 +8,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
 
-/** Touch joystick for bounded, cardinal manual bot movement. */
+/** Touch joystick for bounded 360-degree analog manual bot movement. */
 public final class ManualJoystickView extends View {
     public interface Listener {
         void onVectorChanged(float strafe, float forward);
@@ -28,6 +28,7 @@ public final class ManualJoystickView extends View {
     private float radius;
     private float knobRadius;
     private boolean trackingTouch;
+    private int activePointerId = MotionEvent.INVALID_POINTER_ID;
     private boolean controlEnabled;
 
     public ManualJoystickView(Context context) { super(context); init(); }
@@ -57,11 +58,7 @@ public final class ManualJoystickView extends View {
         controlEnabled = enabled;
         // Keep the View touchable so an offline tap can explain what is missing.
         setEnabled(true);
-        if (!enabled && trackingTouch) {
-            disallowParentInterception(false);
-            trackingTouch = false;
-            release();
-        }
+        if (!enabled && trackingTouch) endTracking();
         setAlpha(enabled ? 1f : 0.58f);
         invalidate();
     }
@@ -101,32 +98,48 @@ public final class ManualJoystickView extends View {
                     if (listener != null) listener.onUnavailable();
                     return true;
                 }
+                activePointerId = event.getPointerId(0);
                 trackingTouch = true;
                 // The joystick is inside the dashboard ScrollView. Without this,
                 // a vertical drag is stolen by the parent and arrives here as CANCEL.
                 disallowParentInterception(true);
-                update(event.getX(), event.getY());
+                update(event.getX(0), event.getY(0));
                 return true;
-            case MotionEvent.ACTION_MOVE:
+            case MotionEvent.ACTION_POINTER_DOWN:
+                // A second finger must not steal the joystick from its owner.
+                return trackingTouch;
+            case MotionEvent.ACTION_MOVE: {
                 if (!trackingTouch) return false;
+                int pointerIndex = event.findPointerIndex(activePointerId);
+                if (pointerIndex < 0) {
+                    endTracking();
+                    return true;
+                }
                 disallowParentInterception(true);
-                update(event.getX(), event.getY());
+                update(event.getX(pointerIndex), event.getY(pointerIndex));
+                return true;
+            }
+            case MotionEvent.ACTION_POINTER_UP:
+                if (trackingTouch && event.getPointerId(event.getActionIndex()) == activePointerId)
+                    endTracking();
                 return true;
             case MotionEvent.ACTION_UP:
-                if (!trackingTouch) return false;
-                trackingTouch = false;
-                release();
-                disallowParentInterception(false);
+                if (trackingTouch) endTracking();
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
-                trackingTouch = false;
-                release();
-                disallowParentInterception(false);
+                if (trackingTouch) endTracking();
                 return true;
             default:
-                return true;
+                return trackingTouch;
         }
+    }
+
+    private void endTracking() {
+        trackingTouch = false;
+        activePointerId = MotionEvent.INVALID_POINTER_ID;
+        release();
+        disallowParentInterception(false);
     }
 
     private void disallowParentInterception(boolean disallow) {
@@ -135,11 +148,7 @@ public final class ManualJoystickView extends View {
     }
 
     @Override protected void onDetachedFromWindow() {
-        if (trackingTouch) {
-            trackingTouch = false;
-            release();
-            disallowParentInterception(false);
-        }
+        if (trackingTouch) endTracking();
         super.onDetachedFromWindow();
     }
 
