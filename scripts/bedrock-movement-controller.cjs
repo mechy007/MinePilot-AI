@@ -267,6 +267,7 @@ class BedrockMovementController {
       forward: { x: 0, z: 1 }, backward: { x: 0, z: -1 },
       strafe_left: { x: -1, z: 0 }, strafe_right: { x: 1, z: 0 },
       turn_left: { x: 0, z: 0 }, turn_right: { x: 0, z: 0 },
+      look_up: { x: 0, z: 0 }, look_down: { x: 0, z: 0 },
       jump: { x: 0, z: 0 }, sprint: { x: 0, z: 0 }, sneak: { x: 0, z: 0 }
     };
     const vector = options.vector && Number.isFinite(options.vector.x) && Number.isFinite(options.vector.y)
@@ -276,6 +277,10 @@ class BedrockMovementController {
     if (options.mode === 'turn_left' || options.mode === 'turn_right') {
       const direction = options.mode === 'turn_left' ? -1 : 1;
       if (this.state) this.state.yaw += direction * (5 * Math.PI / 180);
+    } else if (options.mode === 'look_up' || options.mode === 'look_down') {
+      const direction = options.mode === 'look_up' ? 1 : -1;
+      if (this.state) this.state.pitch = clamp(this.state.pitch +
+        direction * (5 * Math.PI / 180), -Math.PI / 2, Math.PI / 2);
     }
     this.manualHoldActive = Math.hypot(vector.x, vector.z) > 0 || options.jump === true ||
       options.sprint === true || options.sneak === true;
