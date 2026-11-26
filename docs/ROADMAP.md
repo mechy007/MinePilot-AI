@@ -48,3 +48,13 @@ Remaining:
 - Audit every workflow, test, dataset, vendor file and documentation link before further deletion.
 - Re-run engine, SDK and Android ARM64 build/test workflows after each meaningful phase.
 - Verify joystick movement on a real friend-hosted world before declaring movement complete.
+
+## Movement reliability closure — 2026-11-26
+
+- [x] Remove the false seven-second manual movement timeout that required a positive acknowledgement Bedrock does not promise.
+- [x] Reconcile normal position changes and corrections separately from rotation-only and teleport/reset packets.
+- [x] Keep collision preflight centered on predicted position and retry missing subchunks with per-column throttling.
+- [x] Surface queued-versus-executed command state and unknown collision coordinates in Android diagnostics.
+- [x] Add bounded-autonomy fallback to locally predicted progress only after a correction grace period, with a hard stop when neither server nor physics reports progress.
+- [x] Restore an interrupted user-started friend-world session when Android performs a sticky foreground-service restart and the saved Xbox account remains available.
+- [ ] Complete the on-device acceptance checklist in [Movement reliability validation](MOVEMENT-RELIABILITY-VALIDATION.md) against Bedrock 1.26.66.1 before marking joystick/background behavior release-verified.
