@@ -126,7 +126,9 @@ class BedrockGameplayBridge {
     this.lastRespawnState = null;
     this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
       actionRequests: 0, recovered: 0, attempts: 0, lastActionAt: 0,
-      position: null, error: null };
+      firstRequestAt: 0, nextActionAt: 0, serverState: null,
+      spawnObserved: false, position: null, resumeTask: null,
+      resumeResult: null, error: null };
     this.watch = null;
     this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
@@ -255,7 +257,10 @@ class BedrockGameplayBridge {
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
     this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
-      actionRequests: 0, recovered: 0, error: null };
+      actionRequests: 0, recovered: 0, attempts: 0, lastActionAt: 0,
+      firstRequestAt: 0, nextActionAt: 0, serverState: null,
+      spawnObserved: false, position: null, resumeTask: null,
+      resumeResult: null, error: null };
     // Protocol 1.26.60 uses server-authoritative movement; the old
     // set_movement_authority packet was deprecated in 1.21.90.
     const authority = packet.movement_authority;
@@ -306,69 +311,59 @@ class BedrockGameplayBridge {
     const next = this.modeName(packet?.gamemode);
     if (next !== 'unknown') this.playerGameMode = next;
   }
-  observeHealth(health) {
-    if (this.closed || !Number.isFinite(health) || !this.self) return;
-    if (health <= 0) {
-      this.cancelPendingBlockPlacement('player_died');
-      if (!this.spawned || this.respawnRecovery.state !== 'alive') return;
-      this.respawnRecovery.state = 'dead_waiting_for_server';
-      this.respawnRecovery.deaths++;
-      this.respawnRecovery.attempts = 0;
-      this.respawnRecovery.lastActionAt = 0;
-      this.respawnRecovery.position = null;
-      this.respawnRecovery.error = null;
-      this.lastRespawnState = null;
-      this.gameplayAgent?.stop('player_died');
-      this.spawned = false;
-      this.autonomy?.stop('player_died');
-      this.blockBreaker?.abort('player_died');
-      this.movement?.stopPresence?.('player_died');
-      this.movement?.stop?.('player_died', {silent:true});
-      this.layerTwo?.cancel?.();
-      this.addonNavigation?.emergencyStop?.();
-      return;
+  respawnRetryDelay(attempt) {
+    const safeAttempt = Number.isInteger(attempt) && attempt > 0 ? attempt : 1;
+    return Math.min(1800 * (2 ** Math.min(safeAttempt - 1, 16)), 10000);
+  }
+  sendClientReadyToSpawn(position, now = this.clock()) {
+    const recovery = this.respawnRecovery;
+    if (!finitePosition(position)) {
+      recovery.error = 'server_respawn_position_unavailable';
+      recovery.lastActionAt = now;
+      recovery.nextActionAt = now + this.respawnRetryDelay(recovery.requests + 1);
+      return false;
     }
-    // Positive health is the confirmation that the server restored the player.
-    if (this.respawnRecovery.state !== 'alive') {
-      const recovering = this.respawnRecovery.state;
-      if (recovering === 'respawn_action_sent' ||
-          recovering === 'client_ready_sent' ||
-          recovering === 'dead_waiting_for_server') {
-        this.respawnRecovery.recovered++;
-        this.respawnRecovery.state = 'alive';
-        this.respawnRecovery.attempts = 0;
-        this.respawnRecovery.lastActionAt = 0;
-        this.respawnRecovery.position = null;
-        this.respawnRecovery.error = null;
-        this.spawned = true;
-        this.movement?.startPresence?.(this);
-      }
+    recovery.requests++;
+    recovery.lastActionAt = now;
+    recovery.nextActionAt = now + this.respawnRetryDelay(recovery.requests);
+    try {
+      this.client.queue('respawn', {
+        state: 2, position: safePoint(position), runtime_entity_id: BigInt(this.self)
+      });
+      recovery.state = 'client_ready_sent';
+      recovery.error = null;
+      this.spawnTrace.respawnAcknowledged++;
+      return true;
+    } catch {
+      this.spawnTrace.handshakeErrors++;
+      recovery.error = 'client_ready_write_failed';
+      return false;
     }
   }
   sendRespawnAction(position) {
     const recovery = this.respawnRecovery;
-    if (recovery.attempts >= 3) {
-      recovery.error = 'respawn_confirmation_timeout';
+    const now = this.clock();
+    if (!finitePosition(position)) {
+      recovery.error = 'server_respawn_position_unavailable';
+      recovery.lastActionAt = now;
+      recovery.nextActionAt = now + this.respawnRetryDelay(recovery.attempts + 1);
       return false;
     }
-    const now = this.clock();
-    const blockPos = {
-      x: Math.floor(position.x), y: Math.floor(position.y), z: Math.floor(position.z)
-    };
+    // Retry indefinitely with capped exponential backoff; never flood a host.
     recovery.attempts++;
     recovery.lastActionAt = now;
+    recovery.nextActionAt = now + this.respawnRetryDelay(recovery.attempts);
     try {
+      const blockPos = {
+        x: Math.floor(position.x), y: Math.floor(position.y), z: Math.floor(position.z)
+      };
       this.client.queue('player_action', {
         runtime_entity_id: BigInt(this.self), action: 'respawn',
         position: blockPos, result_position: blockPos, face: 0
       });
       recovery.actionRequests++;
-      recovery.position = safePoint(position);
       recovery.state = 'respawn_action_sent';
       recovery.error = null;
-      this.spawnTrace.respawnAcknowledged++;
-      this.position = safePoint(position);
-      this.lastServerPositionAt = now;
       return true;
     } catch {
       this.spawnTrace.handshakeErrors++;
@@ -378,124 +373,164 @@ class BedrockGameplayBridge {
   }
   tickRespawnRecovery() {
     const recovery = this.respawnRecovery;
-    if (this.closed) return false;
+    if (this.closed || recovery.state === 'alive') return false;
     const now = this.clock();
-    if (!Number.isFinite(now)) return false;
-    if (recovery.state === 'client_ready_sent' && this.lastRespawnState === 0) {
-      if (now - recovery.lastActionAt < 1800) return false;
-      if (recovery.requests >= 3) {
-        recovery.error = 'respawn_search_timeout';
-        return false;
-      }
-      const position = recovery.position ?? this.position;
-      if (!finitePosition(position)) {
-        recovery.error = 'server_respawn_position_unavailable';
-        return false;
-      }
-      recovery.requests++;
-      recovery.lastActionAt = now;
-      try {
-        this.client.queue('respawn', {
-          state: 2, position, runtime_entity_id: BigInt(this.self)
-        });
-        recovery.error = null;
-        return true;
-      } catch {
-        this.spawnTrace.handshakeErrors++;
-        recovery.error = 'client_ready_write_failed';
-        return false;
-      }
+    if (!Number.isFinite(now) || now < recovery.firstRequestAt) return false;
+    const position = recovery.position ?? this.position;
+    if (recovery.state === 'dead_waiting_for_server') {
+      if (now < recovery.nextActionAt ||
+          (recovery.serverState !== 0 && recovery.serverState !== 1)) return false;
+      const sent = this.sendClientReadyToSpawn(position, now);
+      if (sent && recovery.serverState === 1) return this.sendRespawnAction(position) || sent;
+      return sent;
     }
-    if ((recovery.state === 'respawn_action_sent' ||
-         (recovery.state === 'client_ready_sent' && this.lastRespawnState === 1)) &&
-        now - recovery.lastActionAt >= 1800) {
-      const position = recovery.position ?? this.position;
-      if (!finitePosition(position)) {
-        recovery.error = 'server_respawn_position_unavailable';
-        return false;
-      }
+    if (recovery.state === 'client_ready_sent') {
+      if (recovery.serverState === 1 &&
+          (recovery.attempts === 0 || now >= recovery.nextActionAt))
+        return this.sendRespawnAction(position);
+      if (now < recovery.nextActionAt) return false;
+      if (recovery.serverState === 0) return this.sendClientReadyToSpawn(position, now);
+      return false;
+    }
+    if (recovery.state === 'respawn_action_sent' && now >= recovery.nextActionAt)
       return this.sendRespawnAction(position);
-    }
     return false;
+  }
+  restoreRespawnTask(task) {
+    const recovery = this.respawnRecovery;
+    if (!task) return false;
+    let planned;
+    if (task.goal === 'follow' && typeof task.playerName === 'string' && task.playerName) {
+      planned = this.layerTwo?.follow?.(task.playerName, this.gameplayWorld());
+    } else if (task.goal === 'return') {
+      planned = this.layerTwo?.returnHome?.(this.gameplayWorld());
+    } else {
+      recovery.resumeResult = 'unsupported_resume_goal';
+      return false;
+    }
+    if (planned?.status !== 'accepted') {
+      recovery.resumeResult = planned?.reason ?? 'resume_target_not_valid';
+      return false;
+    }
+    if (task.autonomous === true) {
+      const resumed = this.autonomy?.enable?.(this, { confirmed: true });
+      recovery.resumeResult = resumed?.status === 'accepted'
+        ? 'autonomous_task_resumed' : (resumed?.reason ?? 'resume_movement_not_ready');
+      return resumed?.status === 'accepted';
+    }
+    recovery.resumeResult = 'navigation_plan_restored';
+    return true;
+  }
+  observeHealth(health) {
+    if (this.closed || !Number.isFinite(health) || !this.self) return;
+    if (health <= 0) {
+      this.cancelPendingBlockPlacement('player_died');
+      if (!this.spawned || this.respawnRecovery.state !== 'alive') return;
+      const follow = this.layerTwo?.preview?.(this.gameplayWorld());
+      const autonomous = this.autonomy?.snapshot?.()?.active === true;
+      const resumeTask = follow && ['follow', 'return'].includes(follow.goal)
+        ? { goal: follow.goal, playerName: follow.targetName ?? null, autonomous }
+        : null;
+      const now = this.clock();
+      this.respawnRecovery.state = 'dead_waiting_for_server';
+      this.respawnRecovery.deaths++;
+      this.respawnRecovery.attempts = 0;
+      this.respawnRecovery.requests = 0;
+      this.respawnRecovery.lastActionAt = 0;
+      this.respawnRecovery.firstRequestAt = now + 4000;
+      this.respawnRecovery.nextActionAt = this.respawnRecovery.firstRequestAt;
+      this.respawnRecovery.serverState = null;
+      this.respawnRecovery.spawnObserved = false;
+      this.respawnRecovery.position = null;
+      this.respawnRecovery.resumeTask = resumeTask;
+      this.respawnRecovery.resumeResult = null;
+      this.respawnRecovery.error = null;
+      this.lastRespawnState = null;
+      this.gameplayAgent?.stop('player_died');
+      this.spawned = false;
+      this.autonomy?.stop('player_died');
+      this.blockBreaker?.abort('player_died');
+      this.movement?.stopPresence?.('player_died');
+      this.movement?.stop?.('player_died', { silent: true });
+      this.layerTwo?.cancel?.();
+      this.addonNavigation?.emergencyStop?.();
+      return;
+    }
+    if (this.respawnRecovery.state !== 'alive') {
+      const recovery = this.respawnRecovery;
+      const resumeTask = recovery.resumeTask;
+      const position = finitePosition(recovery.position) ? safePoint(recovery.position) : null;
+      if (position) {
+        this.position = position;
+        this.lastServerPositionAt = this.clock();
+        this.layerOne?.onServerPosition(this.position);
+      }
+      recovery.recovered++;
+      recovery.state = 'alive';
+      recovery.attempts = 0;
+      recovery.requests = 0;
+      recovery.lastActionAt = 0;
+      recovery.firstRequestAt = 0;
+      recovery.nextActionAt = 0;
+      recovery.serverState = null;
+      recovery.spawnObserved = false;
+      recovery.position = null;
+      recovery.resumeTask = null;
+      recovery.error = null;
+      if (position) {
+        this.spawned = true;
+        this.movement?.startPresence?.(this);
+        this.restoreRespawnTask(resumeTask);
+      } else {
+        this.spawned = false;
+        recovery.resumeResult = 'waiting_for_server_respawn_position';
+      }
+    }
   }
   onRespawn(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.state)) return;
     const incomingId = ident(packet.runtime_entity_id);
-    // This is a server-originated local-player packet. A new nonzero runtime
-    // ID replaces the old ID; zero is the BDS "unspecified" sentinel.
     if (incomingId && incomingId !== '0') this.self = incomingId;
     this.spawnTrace.respawnSeen++;
     this.lastRespawnState = packet.state;
     if (!this.self || typeof this.client.queue !== 'function') return;
     const recovery = this.respawnRecovery;
-    const position = finitePosition(packet.position) ? packet.position : this.position;
-    if (!finitePosition(position)) {
-      this.spawnTrace.handshakeErrors++;
-      recovery.error = 'server_respawn_position_unavailable';
-      return;
-    }
-    if (packet.state === 0 && recovery.state === 'dead_waiting_for_server') {
-      // SearchingForSpawn -> client ReadyToSpawn.
-      recovery.requests++;
-      recovery.position = safePoint(position);
-      recovery.state = 'client_ready_sent';
-      recovery.lastActionAt = this.clock();
-      try {
-        this.client.queue('respawn', {
-          state: 2, position, runtime_entity_id: BigInt(this.self)
-        });
-        recovery.error = null;
-      } catch {
-        this.spawnTrace.handshakeErrors++;
-        recovery.error = 'client_ready_write_failed';
+    const position = finitePosition(packet.position) ? safePoint(packet.position) : null;
+    if (recovery.state !== 'alive') {
+      if (packet.state !== 0 && packet.state !== 1) return;
+      recovery.serverState = packet.state;
+      if (position) {
+        recovery.position = position;
+        if (packet.state === 1) {
+          this.position = { ...position };
+          this.lastServerPositionAt = this.clock();
+          this.layerOne?.onServerPosition(this.position);
+        }
+      } else {
+        recovery.error = 'server_respawn_position_unavailable';
       }
-      return;
-    }
-    if (packet.state !== 1) return;
-    if (recovery.state === 'dead_waiting_for_server') {
-      // Some hosts omit SearchingForSpawn: still complete ReadyToSpawn.
-      recovery.requests++;
-      recovery.position = safePoint(position);
-      recovery.state = 'client_ready_sent';
-      recovery.lastActionAt = this.clock();
-      try {
-        this.client.queue('respawn', {
-          state: 2, position, runtime_entity_id: BigInt(this.self)
-        });
-      } catch {
-        this.spawnTrace.handshakeErrors++;
-        recovery.error = 'client_ready_write_failed';
-        return;
-      }
-    }
-    if (recovery.state === 'client_ready_sent') {
-      this.sendRespawnAction(position);
-      return;
-    }
-    if (recovery.state === 'respawn_action_sent') {
       this.tickRespawnRecovery();
       return;
     }
-    if (recovery.state !== 'alive') return;
-    // Initial join / non-death respawn: keep the normal client-ready handshake.
+    // Normal first join / non-death handshake remains unchanged.
+    if (packet.state !== 1 || !position) return;
     try {
       this.client.queue('respawn', {
         state: 2, position, runtime_entity_id: BigInt(this.self)
       });
       this.spawnTrace.respawnAcknowledged++;
-      if (finitePosition(packet.position)) {
-        this.position = safePoint(packet.position);
-        this.lastServerPositionAt = this.clock();
-        this.layerOne?.onServerPosition(this.position);
-      }
+      this.position = { ...position };
+      this.lastServerPositionAt = this.clock();
+      this.layerOne?.onServerPosition(this.position);
     } catch { this.spawnTrace.handshakeErrors++; }
   }
   onSpawn() {
     if (this.closed) return;
+    if (this.respawnRecovery.state !== 'alive') {
+      this.respawnRecovery.spawnObserved = true;
+      return;
+    }
     this.spawned = true;
-    // Player initialization is handled by bedrock-protocol's autoInitPlayer.
-    // Bedrock Dedicated Server 1.26.x can require both loading-screen closure
-    // packets before simulating movement. Send exactly once per dimension.
     if (this.spawnTrace.loadingCompleted || typeof this.client.queue !== 'function') {
       if (this.spawnTrace.loadingCompleted) this.movement?.startPresence?.(this);
       return;
@@ -506,7 +541,6 @@ class BedrockGameplayBridge {
       this.client.queue('serverbound_loading_screen', { type: 2 });
       this.spawnTrace.loadingPacketsSent++;
       this.spawnTrace.loadingCompleted = true;
-      // Loading-screen completion is queued before the neutral input stream.
       this.movement?.startPresence?.(this);
     } catch { this.spawnTrace.handshakeErrors++; }
   }
@@ -1034,7 +1068,8 @@ class BedrockGameplayBridge {
       inventoryTransactionMode: this.itemStackNetManager === true ? 'server_authoritative'
         : this.itemStackNetManager === false ? 'legacy' : 'unknown',
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
-      respawnRecovery: { ...this.respawnRecovery },
+      respawnRecovery: { ...this.respawnRecovery,
+        resumeTask: this.respawnRecovery.resumeTask ? { ...this.respawnRecovery.resumeTask } : null },
       movement: this.movement?.capability?.(this) ?? 'unavailable',
       ...(this.movement?.snapshot ? { movementSystem: this.movement.snapshot() } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
@@ -1348,8 +1383,7 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: 'survival_hold' };
       if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
         return { status: 'rejected', reason: 'autonomous_controller_busy' };
-      if (!this.movement || this.movement.capability(this) !== 'ready' ||
-          typeof this.movement.runManualHold !== 'function')
+      if (!this.movement || typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
       // Every refresh updates the physics controller. One server-tick stream
       // carries simulated state until release or the UI keepalive expires.
