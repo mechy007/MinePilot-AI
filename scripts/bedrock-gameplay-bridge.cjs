@@ -87,6 +87,8 @@ class BedrockGameplayBridge {
     this.intelligence = options.intelligence ?? null;
     this.gameplayAgent = options.gameplayAgent ?? null;
     this.clock = options.clock ?? Date.now;
+    this.setInterval = options.setInterval ?? setInterval;
+    this.clearInterval = options.clearInterval ?? clearInterval;
     this.spawned = false;
     this.closed = false;
     this.self = null;
@@ -215,8 +217,8 @@ class BedrockGameplayBridge {
     if (this.commandPath && this.receiptPath) {
       // Keep file IPC responsive without forcing expensive world/intelligence
       // work at the same frequency. The gameplay safety loop remains separate.
-      this.watch = setInterval(() => this.poll(), this.commandPollMs);
-      this.controlWatch = setInterval(() => {
+      this.watch = this.setInterval(() => this.poll(), this.commandPollMs);
+      this.controlWatch = this.setInterval(() => {
         if (this.closed) return;
         this.tickControlPlane();
         this.tickRespawnRecovery();
@@ -1748,8 +1750,8 @@ class BedrockGameplayBridge {
     this.cancelPendingCraft('session_closed');
     this.closed = true;
     stopLocalAutopilot(this, 'session_closed');
-    if (this.watch) clearInterval(this.watch);
-    if (this.controlWatch) clearInterval(this.controlWatch);
+    if (this.watch) this.clearInterval(this.watch);
+    if (this.controlWatch) this.clearInterval(this.controlWatch);
     this.watch = null;
     this.controlWatch = null;
     this.gameplayAgent?.stop('session_closed');
