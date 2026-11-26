@@ -72,12 +72,13 @@ public final class DashboardShell extends LinearLayout {
         LinearLayout nav = new LinearLayout(context);
         nav.setPadding(dp(5), dp(7), dp(5), dp(5));
         nav.setBackground(MinePilotTheme.surface(context, MinePilotTheme.SURFACE, 16));
-        String[] pages = {"World", "Xbox", "Skills", "Logs", "Settings"};
+        String[] pages = {"World", "Manual", "Xbox", "Skills", "Logs", "Settings"};
         for (String page : pages) {
             boolean selected = page.equals(selectedTab) ||
                     ("Settings".equals(page) && "Diagnostics".equals(selectedTab));
             String title = switch (page) {
-                case "World" -> "Control";
+                case "World" -> "Home";
+                case "Manual" -> "Manual";
                 case "Xbox" -> "Friends";
                 case "Logs" -> "Activity";
                 default -> page;
@@ -85,7 +86,7 @@ public final class DashboardShell extends LinearLayout {
             Button item = new Button(context);
             item.setText(title);
             item.setAllCaps(false);
-            item.setTextSize(11);
+            item.setTextSize(10);
             item.setMinHeight(dp(48));
             item.setPadding(dp(2), 0, dp(2), 0);
             item.setTextColor(selected ? MinePilotTheme.BACKGROUND : MinePilotTheme.TEXT_SECONDARY);

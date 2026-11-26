@@ -51,6 +51,9 @@ public final class DashboardActivity extends Activity {
     private int manualControlGeneration;
     private boolean manualControlsEnabled;
     private ManualControlPanel manualControlPanel;
+    private TextView manualControlStatus;
+    private boolean manualMovementReady;
+    private boolean manualQueueNoticeShown;
     private final Runnable repeatManualControl = new Runnable() {
         @Override public void run() {
             if (activeManualMode.isEmpty() || !manualControlsEnabled) return;
@@ -253,7 +256,7 @@ public final class DashboardActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         dashboardVisible = true;
-        if ("Xbox".equals(currentTab) || "World".equals(currentTab)) show(currentTab);
+        if ("Xbox".equals(currentTab) || "World".equals(currentTab) || "Manual".equals(currentTab)) show(currentTab);
         if ("Logs".equals(currentTab)) {
             logRefresh.removeCallbacks(updateLogs);
             updateLogs.run();
@@ -285,7 +288,7 @@ public final class DashboardActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         String requestedTab = intent.getStringExtra("open_tab");
-        if ("World".equals(requestedTab) || "Xbox".equals(requestedTab) || "Logs".equals(requestedTab)) show(requestedTab);
+        if ("World".equals(requestedTab) || "Manual".equals(requestedTab) || "Xbox".equals(requestedTab) || "Logs".equals(requestedTab)) show(requestedTab);
         showSignInReturnStatus(intent);
     }
 
@@ -389,6 +392,9 @@ public final class DashboardActivity extends Activity {
         if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
         xuidInput = null;
         currentTab = tab;
+        manualControlStatus = null;
+        manualMovementReady = false;
+        manualQueueNoticeShown = false;
         DashboardShell shell = new DashboardShell(this, tab, this::show);
         body = shell.content();
         status = shell.status();
@@ -396,6 +402,9 @@ public final class DashboardActivity extends Activity {
 
         boolean signedIn = BotAccount.saved(this);
         switch (tab) {
+            case "Manual":
+                showManualControlScreen(signedIn);
+                break;
             case "Skills":
                 showSkills();
                 break;
@@ -466,6 +475,37 @@ public final class DashboardActivity extends Activity {
         return card;
     }
 
+    private void showManualControlScreen(boolean signedIn) {
+        hero("DIRECT INPUT", "Manual Control",
+                signedIn ? "Control your connected Minecraft Bedrock player." :
+                        "Sign in with Xbox and join a friend's world to use the controller.");
+
+        LinearLayout session = card();
+        session.addView(text("WORLD SESSION", 11, GRASS, true));
+        worldState = text("Checking world connection…", 22, INK, true);
+        worldState.setPadding(0, dp(6), 0, dp(2));
+        session.addView(worldState);
+        worldDetail = text("Waiting for a Bedrock session", 13, MUTED, false);
+        session.addView(worldDetail);
+        manualControlStatus = text("Checking movement and connection readiness…", 12, MUTED, false);
+        manualControlStatus.setPadding(0, dp(9), 0, 0);
+        session.addView(manualControlStatus);
+        body.addView(session, panelLayout(10));
+
+        LinearLayout vitals = new LinearLayout(this);
+        worldHealth = addVital(vitals, "Health", 8);
+        worldHunger = addVital(vitals, "Hunger", 0);
+        body.addView(vitals, panelLayout(10));
+
+        if (!signedIn) {
+            primaryButton("Sign in with Microsoft", () -> openBotFlow(null, false));
+        } else {
+            button("Find or join a friend's world", () -> show("Xbox"));
+        }
+        addManualControlPanel();
+        refreshCommandCenter();
+    }
+
     private void showCommandCenter(boolean signedIn) {
         hero("BEDROCK · XBOX", "Command Center",
                 signedIn ? "Bot account · " + BotAccount.gamertag(this) : "Connect an Xbox account to join your friends.");
@@ -483,7 +523,7 @@ public final class DashboardActivity extends Activity {
         worldHunger = addVital(vitals, "Hunger", 0);
         body.addView(vitals, panelLayout(10));
 
-        addManualControlPanel();
+        // Manual movement has its own screen so the world overview remains focused.
 
         // Keep experimental visualizations available without letting them
         // dominate the primary movement/control screen.
@@ -680,7 +720,7 @@ public final class DashboardActivity extends Activity {
     }
 
     private void refreshCommandCenter() {
-        if (!dashboardVisible || !"World".equals(currentTab)) return;
+        if (!dashboardVisible || (!"World".equals(currentTab) && !"Manual".equals(currentTab))) return;
         int generation = worldViewGeneration;
         worldReader.execute(() -> {
             Bundle current = worldRuntimeAvailable ? worldRequest("status", null) : null;
@@ -688,11 +728,69 @@ public final class DashboardActivity extends Activity {
             String latest = events.isEmpty() ? "No session events yet" : RuntimeLog.describe(events.getLast());
             runOnUiThread(() -> {
                 if (generation != worldViewGeneration || !dashboardVisible) return;
-                showWorldStatus(current == null ? Bundle.EMPTY : current);
-                lastEvent.setText(latest);
+                Bundle snapshot = current == null ? Bundle.EMPTY : current;
+                if ("Manual".equals(currentTab)) showManualControlStatus(snapshot);
+                else showWorldStatus(snapshot);
+                if (lastEvent != null) lastEvent.setText(latest);
                 if (worldRuntimeAvailable) logRefresh.postDelayed(pollWorld, 1000);
             });
         });
+    }
+
+    private void showManualControlStatus(Bundle current) {
+        String phase = current.getString("phase", "");
+        worldSessionId = current.getString("session_id", "");
+        boolean playing = "spawned".equals(phase);
+        boolean dead = "dead".equalsIgnoreCase(current.getString("life_state", ""));
+        boolean connectedAndAlive = playing && !dead && !worldSessionId.isEmpty();
+        manualMovementReady = playing && current.getBoolean("movement_ready", false);
+        // Keep touch input responsive while terrain is loading. The runtime still
+        // enforces server-authority, collision and survival gates before moving.
+        manualControlsEnabled = connectedAndAlive;
+        if (manualControlPanel != null) manualControlPanel.setControlEnabled(connectedAndAlive);
+        if (!connectedAndAlive) stopManualControl();
+        if (manualMovementReady) manualQueueNoticeShown = false;
+
+        if (worldState != null) {
+            worldState.setText(dead ? "Bot is waiting to respawn" :
+                    playing ? "In your friend's world" :
+                    "connecting".equals(phase) ? "Connecting to world" : "Bot on standby");
+            worldState.setTextColor(playing && !dead ? GRASS : INK);
+        }
+        if (worldDetail != null) {
+            worldDetail.setText(playing
+                    ? (dead ? "Death detected · automatic respawn recovery is active" :
+                        "Connected · " + android.text.format.DateUtils.formatElapsedTime(current.getLong("seconds")) +
+                        " · " + current.getLong("chunks") + " chunks")
+                    : "connecting".equals(phase) ? "Waiting for the Minecraft session" : "No active connection");
+        }
+        if (worldHealth != null) worldHealth.setText(current.getString("health", "—"));
+        if (worldHunger != null) worldHunger.setText(current.getString("hunger", "—"));
+
+        if (manualControlStatus != null) {
+            String capability = current.getString("movement_capability", "unavailable");
+            String reason = current.getString("movement_last_reason", "");
+            String message;
+            if (!playing) {
+                message = "Join a friend-hosted world to activate the controls.";
+            } else if (dead) {
+                message = "Controls pause while the bot is dead. MinePilot is handling respawn automatically.";
+            } else if (manualMovementReady) {
+                message = "Connected · movement physics and observed terrain are ready.";
+            } else {
+                message = "Connected · touch controls are active. Movement will start when server authority, physics and terrain are ready." +
+                        "\nCurrent capability: " + capability.replace('_', ' ');
+            }
+            if (!reason.isEmpty() && !manualMovementReady) {
+                message += "\nMovement gate: " + reason.replace('_', ' ');
+            }
+            String lastStatus = current.getString("last_command_status", "");
+            String lastReason = current.getString("last_command_reason", "");
+            if ("rejected".equals(lastStatus) && !lastReason.isEmpty() && connectedAndAlive) {
+                message += "\nLast command: " + lastReason.replace('_', ' ');
+            }
+            manualControlStatus.setText(message);
+        }
     }
 
     private void addManualControlPanel() {
@@ -794,6 +892,13 @@ public final class DashboardActivity extends Activity {
     private void sendManualMotionPulse(String mode) {
         String session = worldSessionId;
         if (session.isEmpty() || !manualControlsEnabled) return;
+        if (!manualMovementReady) {
+            if (!manualQueueNoticeShown) {
+                manualQueueNoticeShown = true;
+                showStatus("Controls are active, but movement is waiting for verified physics and terrain data.");
+            }
+            return;
+        }
         int generation = manualControlGeneration;
         Bundle extras = new Bundle();
         extras.putString("action", "manual_move");
@@ -813,10 +918,15 @@ public final class DashboardActivity extends Activity {
             Bundle receipt = worldRequest("gameplay", session, extras);
             if (receipt == null || !receipt.getBoolean("accepted")) {
                 runOnUiThread(() -> {
-                    if (generation == manualControlGeneration && !activeManualMode.isEmpty()) {
-                        stopManualControl();
-                        showStatus("Manual movement was rejected. Check world and movement readiness.");
+                    if (generation == manualControlGeneration && !activeManualMode.isEmpty() &&
+                            !manualQueueNoticeShown) {
+                        manualQueueNoticeShown = true;
+                        showStatus("Manual input is waiting for the runtime command queue. It will retry while you hold the control.");
                     }
+                });
+            } else {
+                runOnUiThread(() -> {
+                    if (generation == manualControlGeneration) manualQueueNoticeShown = false;
                 });
             }
         });
@@ -832,6 +942,7 @@ public final class DashboardActivity extends Activity {
 
     private void stopManualControl() {
         manualControlGeneration++;
+        manualQueueNoticeShown = false;
         manualControlHandler.removeCallbacks(repeatManualControl);
         boolean wasMoving = !activeManualMode.isEmpty();
         activeManualMode = "";

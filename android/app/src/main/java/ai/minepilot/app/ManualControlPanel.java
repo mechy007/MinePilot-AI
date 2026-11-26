@@ -42,8 +42,15 @@ public final class ManualControlPanel extends LinearLayout {
         addView(hint);
 
         joystick = new ManualJoystickView(context);
-        joystick.setListener((strafe, forward) -> {
-            if (this.listener != null) this.listener.onVectorChanged(strafe, forward);
+        joystick.setListener(new ManualJoystickView.Listener() {
+            @Override public void onVectorChanged(float strafe, float forward) {
+                if (ManualControlPanel.this.listener != null)
+                    ManualControlPanel.this.listener.onVectorChanged(strafe, forward);
+            }
+            @Override public void onUnavailable() {
+                if (ManualControlPanel.this.listener != null)
+                    ManualControlPanel.this.listener.onUnavailable();
+            }
         });
         LayoutParams stickParams = new LayoutParams(dp(168), dp(168));
         stickParams.gravity = Gravity.CENTER_HORIZONTAL;
@@ -89,7 +96,10 @@ public final class ManualControlPanel extends LinearLayout {
         boolean changed = controlEnabled != enabled;
         controlEnabled = enabled;
         joystick.setControlEnabled(enabled);
-        for (View view : gatedControls) view.setEnabled(enabled);
+        for (View view : gatedControls) {
+            view.setEnabled(true);
+            view.setAlpha(enabled ? 1f : 0.58f);
+        }
         if (changed && !enabled && listener != null) listener.onStop();
     }
 
@@ -97,13 +107,19 @@ public final class ManualControlPanel extends LinearLayout {
         Button control = button(title, false);
         control.setTextSize(title.length() > 3 ? 10 : 18);
         control.setContentDescription(title + ". Press and hold.");
+        final boolean[] acceptedPress = { false };
+        control.setEnabled(true);
         control.setOnTouchListener((view, event) -> {
             int actionType = event.getActionMasked();
             if (actionType == MotionEvent.ACTION_DOWN) {
                 if (!controlEnabled) {
+                    acceptedPress[0] = false;
                     if (listener != null) listener.onUnavailable();
                     return true;
                 }
+                if (view.getParent() != null)
+                    view.getParent().requestDisallowInterceptTouchEvent(true);
+                acceptedPress[0] = true;
                 view.setPressed(true);
                 if (listener != null) {
                     if (action) listener.onActionChanged(mode, true);
@@ -112,11 +128,14 @@ public final class ManualControlPanel extends LinearLayout {
                 return true;
             }
             if (actionType == MotionEvent.ACTION_UP || actionType == MotionEvent.ACTION_CANCEL) {
+                if (view.getParent() != null)
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
                 view.setPressed(false);
-                if (listener != null) {
+                if (acceptedPress[0] && listener != null) {
                     if (action) listener.onActionChanged(mode, false);
                     else listener.onLookChanged(mode, false);
                 }
+                acceptedPress[0] = false;
                 return true;
             }
             return true;

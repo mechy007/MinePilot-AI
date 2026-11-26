@@ -10,7 +10,10 @@ import android.view.ViewParent;
 
 /** Touch joystick for bounded, cardinal manual bot movement. */
 public final class ManualJoystickView extends View {
-    public interface Listener { void onVectorChanged(float strafe, float forward); }
+    public interface Listener {
+        void onVectorChanged(float strafe, float forward);
+        default void onUnavailable() {}
+    }
 
     private final Paint base = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -25,6 +28,7 @@ public final class ManualJoystickView extends View {
     private float radius;
     private float knobRadius;
     private boolean trackingTouch;
+    private boolean controlEnabled;
 
     public ManualJoystickView(Context context) { super(context); init(); }
     public ManualJoystickView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -50,13 +54,15 @@ public final class ManualJoystickView extends View {
 
     public void setListener(Listener value) { listener = value; }
     public void setControlEnabled(boolean enabled) {
-        boolean wasEnabled = isEnabled();
-        setEnabled(enabled);
-        if (!enabled && (wasEnabled || trackingTouch)) {
+        controlEnabled = enabled;
+        // Keep the View touchable so an offline tap can explain what is missing.
+        setEnabled(true);
+        if (!enabled && trackingTouch) {
             disallowParentInterception(false);
             trackingTouch = false;
             release();
         }
+        setAlpha(enabled ? 1f : 0.58f);
         invalidate();
     }
 
@@ -91,6 +97,10 @@ public final class ManualJoystickView extends View {
         if (!isEnabled()) return false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                if (!controlEnabled) {
+                    if (listener != null) listener.onUnavailable();
+                    return true;
+                }
                 trackingTouch = true;
                 // The joystick is inside the dashboard ScrollView. Without this,
                 // a vertical drag is stolen by the parent and arrives here as CANCEL.

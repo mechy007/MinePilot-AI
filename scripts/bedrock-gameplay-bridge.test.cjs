@@ -242,6 +242,29 @@ test('nested Bedrock PlayerRecords add/remove resolves names only for visible en
   bridge.stop();
 });
 
+test('player names arriving after AddPlayer rehydrate the Follow target cache', async () => {
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
+  initialized(client, bridge);
+  client.emit('add_player', {
+    runtime_entity_id: 200n, uuid: 'late-name-uuid',
+    position: { x: 14, y: 64, z: 11 }
+  });
+  assert.deepEqual(bridge.snapshot().layerTwo.visiblePlayerNames, []);
+  client.emit('player_list', { records: { type: 'add', records: [
+    { uuid: 'late-name-uuid', username: 'LateFriend' }
+  ] } });
+  assert.deepEqual(bridge.snapshot().layerTwo.visiblePlayerNames, ['LateFriend']);
+  const plan = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'late-follow',
+    action: 'plan_follow', playerName: 'LateFriend'
+  });
+  assert.equal(plan.status, 'accepted');
+  assert.equal(bridge.snapshot().layerTwo.preview.targetName, 'LateFriend');
+  bridge.stop();
+});
+
 test('Layer 3 block updates do not imply mining, and dimension resets resource targets', async () => {
   const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
   const client = new Client();
@@ -380,6 +403,72 @@ test('Bedrock Dedicated Server zero runtime-id respawn packets are accepted for 
   assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
   assert.equal(bridge.snapshot().respawnRecovery.recovered, 1);
   assert.deepEqual(bridge.snapshot().position, { x: 12.5, y: 70, z: 8.5 });
+  bridge.stop();
+});
+
+test('respawn recovery handles three consecutive deaths and server runtime ID changes', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client).start();
+  initialized(client, bridge);
+  const cycles = [
+    { stateZeroId: 0n, stateOneId: 456n, x: 12.5 },
+    { stateZeroId: 789n, stateOneId: 789n, x: 13.5 },
+    { stateZeroId: 0n, stateOneId: 0n, x: 14.5 }
+  ];
+  let recovered = 0;
+  for (const cycle of cycles) {
+    client.emit('set_health', { health: 0 });
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'dead_waiting_for_server');
+    client.emit('respawn', {
+      runtime_entity_id: cycle.stateZeroId, state: 0,
+      position: { x: cycle.x, y: 70, z: 8.5 }
+    });
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'client_ready_sent');
+    client.emit('respawn', {
+      runtime_entity_id: cycle.stateOneId, state: 1,
+      position: { x: cycle.x, y: 70, z: 8.5 }
+    });
+    const activeId = cycle.stateOneId === 0n ? bridge.self : cycle.stateOneId.toString();
+    assert.equal(bridge.self, activeId);
+    const action = client.sent.filter(item => item.packet === 'player_action').at(-1);
+    assert.ok(action, 'server ReadyToSpawn step sends the respawn action');
+    assert.equal(action.value.runtime_entity_id, BigInt(activeId));
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'respawn_action_sent');
+    client.emit('set_health', { health: 20 });
+    recovered++;
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
+    assert.equal(bridge.snapshot().spawned, true);
+    assert.equal(bridge.snapshot().respawnRecovery.recovered, recovered);
+  }
+  const final = bridge.snapshot();
+  assert.equal(final.respawnRecovery.deaths, 3);
+  assert.equal(final.respawnRecovery.recovered, 3);
+  assert.equal(final.respawnRecovery.actionRequests, 3);
+  bridge.stop();
+});
+
+test('respawn recovery retries are bounded when positive health confirmation is delayed', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  client.emit('set_health', { health: 0 });
+  client.emit('respawn', { runtime_entity_id: 0n, state: 0, position: origin });
+  client.emit('respawn', { runtime_entity_id: 0n, state: 1, position: origin });
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 1);
+  now += 1800;
+  bridge.tickRespawnRecovery();
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 2);
+  now += 1800;
+  bridge.tickRespawnRecovery();
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 3);
+  now += 1800;
+  bridge.tickRespawnRecovery();
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 3,
+    'retry limit prevents an unbounded packet loop');
+  assert.equal(bridge.snapshot().respawnRecovery.error, 'respawn_confirmation_timeout');
+  client.emit('set_health', { health: 20 });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
   bridge.stop();
 });
 
