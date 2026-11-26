@@ -1241,7 +1241,8 @@ class BedrockGameplayBridge {
       // carries simulated state until release or the UI keepalive expires.
       return this.movement.runManualHold(this, {
         mode: raw.mode, ticks: raw.ticks,
-        vector: Number.isFinite(raw.motionX) && Number.isFinite(raw.motionY)
+        vector: Number.isFinite(raw.motionX) && Number.isFinite(raw.motionY) &&
+          (raw.mode === 'vector' || Math.hypot(raw.motionX, raw.motionY) > 0)
           ? { x: raw.motionX, y: raw.motionY } : undefined,
         jump: raw.jump === true, sprint: raw.sprint === true, sneak: raw.sneak === true
       });
