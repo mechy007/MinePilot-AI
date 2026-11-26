@@ -490,6 +490,9 @@ test('respawn restores an active Follow plan only after server health recovery',
   const movement = { stop() {}, stopPresence() {}, startPresence() {} };
   const bridge = new BedrockGameplayBridge(client, { clock: () => now, layerTwo, autonomy, movement }).start();
   initialized(client, bridge);
+  // startGame resets optional runtimes; explicitly enable the fake Follow task
+  // after initialization to model a user-enabled task at the moment of death.
+  autonomous = true;
   client.emit('set_health', { health: 0 });
   assert.equal(bridge.snapshot().respawnRecovery.resumeTask.goal, 'follow');
   assert.equal(autonomous, false);
