@@ -260,9 +260,14 @@ class BedrockMovementController {
   }
 
   runManualHold(world, options = {}) {
-    if (this.capability(world) !== 'ready' || !this.preflightTerrain(world)) {
-      return { status: 'rejected', reason: this.lastError ? 'physics_data_unavailable' : 'terrain_not_fully_observed' };
+    if (this.capability(world) !== 'ready') {
+      const timedOut = this.unconfirmedMovement && this.lastNonNeutralAt != null &&
+        Date.now() - this.lastNonNeutralAt > 7000;
+      return { status: 'rejected', reason: this.lastError ? 'physics_data_unavailable' :
+        (timedOut ? 'server_ack_timeout' : 'movement_unavailable') };
     }
+    if (!this.preflightTerrain(world))
+      return { status: 'rejected', reason: 'terrain_not_fully_observed' };
     const modes = {
       forward: { x: 0, z: 1 }, backward: { x: 0, z: -1 },
       strafe_left: { x: -1, z: 0 }, strafe_right: { x: 1, z: 0 },
@@ -290,10 +295,14 @@ class BedrockMovementController {
   }
 
   runVerifiedStep(world, target, ticks = 8) {
-    if (this.capability(world) !== 'ready' || !this.preflightTerrain(world) || !finite3(target) ||
-        !Number.isInteger(ticks) || ticks < 1 || ticks > 20) {
-      return { status: 'rejected', reason: 'movement_unavailable' };
+    if (this.capability(world) !== 'ready') {
+      const timedOut = this.unconfirmedMovement && this.lastNonNeutralAt != null &&
+        Date.now() - this.lastNonNeutralAt > 7000;
+      return { status: 'rejected', reason: timedOut ? 'server_ack_timeout' : 'movement_unavailable' };
     }
+    if (!this.preflightTerrain(world) || !finite3(target) ||
+        !Number.isInteger(ticks) || ticks < 1 || ticks > 20)
+      return { status: 'rejected', reason: 'movement_unavailable' };
     const dx = target.x - world.position.x;
     const dz = target.z - world.position.z;
     if (Math.hypot(dx, dz) < 0.15) {
@@ -334,10 +343,12 @@ class BedrockMovementController {
       return this.idleFrame(world, tick);
     }
     const now = Date.now();
+    let serverAckTimedOut = false;
     if (this.unconfirmedMovement && this.lastNonNeutralAt != null &&
         now - this.lastNonNeutralAt > 7000) {
       this.releaseManual();
       this.lastMovementResult = { status: 'unavailable', reason: 'server_ack_timeout' };
+      serverAckTimedOut = true;
     }
     if (this.manualHoldActive && now > this.manualHoldDeadline) this.releaseManual();
     const control = {
@@ -419,7 +430,7 @@ class BedrockMovementController {
     }
     this.history.push({ tick, input: this.captureInput(input), state: cloneState(this.state) });
     if (this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
-    this.lastMovementResult = { status: 'simulating', reason: 'physics_tick' };
+    if (!serverAckTimedOut) this.lastMovementResult = { status: 'simulating', reason: 'physics_tick' };
     return frame;
   }
 
