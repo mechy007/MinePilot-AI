@@ -27,7 +27,7 @@
 // - slow falling only while falling (vy < 0);
 // - creative flight: see moveFlying; elytra: the Java formula (matches BDS).
 'use strict'
-const { Vec3 } = require('vec3')
+const { Vec3 } = require('../vec3')
 const AABB = require('./aabb')
 const attribute = require('./attribute')
 const { f32, sin, cos, clamp } = require('./math')
