@@ -1079,6 +1079,7 @@ public final class DashboardActivity extends Activity {
                         + "\nAutonomous Follow: " + (autonomyActive ? "active" : "stopped")
                         + " · Attempted: " + current.getInt("autonomy_attempted")
                         + " · Server-confirmed: " + current.getInt("autonomy_verified")
+                        + " · Prediction-only: " + current.getInt("autonomy_predicted_steps")
                         + (current.getString("autonomy_reason", "").isEmpty() ? ""
                             : "\nAutonomy reason: " + current.getString("autonomy_reason"))
                         + "\nBlock action: " + current.getString("block_break_status", "idle")
@@ -1137,7 +1138,11 @@ public final class DashboardActivity extends Activity {
                         + (task.isEmpty() ? "" : "\nTask: " + task + " · " + taskState)
                         + (movementOwner.isEmpty() ? "" : "\nMovement owner: " + movementOwner)
                         + (current.getBoolean("safety_hold", false) ? "\nSurvival hold: critical health" : "")
-                        + (command.isEmpty() ? "" : "\nLast command: " + command));
+                        + (command.isEmpty() ? "" : "\nLast command: " + command
+                            + " · Runtime: " + current.getString("last_command_execution_stage", "awaiting receipt").replace('_', ' ')
+                            + " · Dispatch accepted: " + current.getBoolean("last_command_dispatch_accepted", false)
+                            + (current.getString("last_command_server_confirmation", "").isEmpty() ? "" :
+                                " · Server: " + current.getString("last_command_server_confirmation").replace('_', ' '))));
         inspectWorld.setVisibility(playing ? View.VISIBLE : View.GONE);
         waitHere.setVisibility(playing ? View.VISIBLE : View.GONE);
         planFollow.setVisibility(playing ? View.VISIBLE : View.GONE);
