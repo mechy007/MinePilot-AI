@@ -7,7 +7,7 @@ const { tmpdir } = require('node:os');
 const { test } = require('node:test');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { learningEngineFor, odysseyCapabilityStates } = require('./bedrock-skill-manifest.cjs');
-const { ExperimentalPlayerInput, buildInputPacket } = require('./bedrock-player-input.cjs');
+const { buildInputPacket } = require('./bedrock-player-input.cjs');
 const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
 
 class Client extends EventEmitter {
@@ -26,7 +26,6 @@ function initialized(client, bridge) {
   // later tests assert zero unsolicited *gameplay* input packets.
   client.sent.length = 0;
 }
-
 test('world state mirrors only live packet data, without inventing blocks', () => {
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client).start();
@@ -86,62 +85,13 @@ test('private single-command inbox handles status, stop and rejected commands', 
   assert.equal(cmd('cmd-1', 'status').status, 'ok');
   assert.equal(cmd('cmd-2', 'stop_movement').reason, 'movement_cancelled');
   assert.equal(stops, 1);
-  assert.equal(cmd('cmd-3', 'probe_step', { confirmed: true, direction: 'forward' }).reason, 'movement_unavailable');
+  assert.equal(cmd('cmd-3', 'obsolete_movement_probe', { confirmed: true }).reason, 'invalid_command');
   assert.equal(cmd('cmd-4', 'mine').reason, 'invalid_command');
   writeFileSync(commandPath, '{"version":"minepilot.gameplay.v1","action":"status"');
   bridge.poll();
   assert.equal(JSON.parse(readFileSync(receiptPath, 'utf8')).reason, 'invalid_command');
   bridge.stop();
   assert.equal(stops, 2);
-});
-
-test('PlayerAuthInput builder is bounded and uses 1.26.60 ordinal input flags', () => {
-  const frame = buildInputPacket(origin, 0, 101n, true);
-  assert.equal(frame.position.z, origin.z + 0.065);
-  assert.deepEqual(frame.input_data, [10]);
-  assert.equal(frame.tick, 101n);
-  assert.equal(frame.input_mode, 'touch');
-  assert.equal(frame.raw_move_vector.z, 1);
-  const stopped = buildInputPacket(frame.position, 0, 102n, false);
-  assert.equal(stopped.position.z, frame.position.z);
-  assert.deepEqual(stopped.input_data, []);
-  assert.throws(() => buildInputPacket(origin, NaN, 101n, true), /Invalid/);
-});
-
-test('experimental diagnostic input requires opt-in, movement authority and explicit confirmation', async () => {
-  const client = new Client();
-  const disabled = new ExperimentalPlayerInput(client, false);
-  const bridge = new BedrockGameplayBridge(client, { movement: disabled }).start();
-  initialized(client, bridge);
-  const probe = { version: 'minepilot.gameplay.v1', requestId: 'step1',
-    action: 'probe_step', confirmed: true, direction: 'forward' };
-  assert.equal(bridge.execute(probe).reason, 'movement_unavailable');
-  assert.equal(client.sent.length, 0);
-  bridge.stop();
-
-  const enabled = new ExperimentalPlayerInput(client, true);
-  const session = new BedrockGameplayBridge(client, { movement: enabled }).start();
-  initialized(client, session);
-  assert.equal(session.execute({ ...probe, confirmed: false }).reason, 'confirmation_required');
-  assert.equal(session.execute(probe).status, 'accepted');
-  await new Promise(resolve => setTimeout(resolve, 160));
-  assert.ok(client.sent.length >= 1 && client.sent.length <= 6, 'bounded tick pulse');
-  assert.ok(client.sent.every(s => s.packet === 'player_auth_input'));
-  assert.ok(client.sent.every((s, i) => i === 0 || s.value.tick > client.sent[i - 1].value.tick));
-  session.stop();
-  const count = client.sent.length;
-  await new Promise(resolve => setTimeout(resolve, 120));
-  assert.equal(client.sent.length, count);
-});
-
-test('pinned Bedrock 1.26.60 serializer accepts the experimental auth input shape', () => {
-  const { createSerializer } = require('bedrock-protocol/src/transforms/serializer');
-  const serializer = createSerializer('1.26.60');
-  for (const moving of [true, false]) {
-    const payload = buildInputPacket(origin, 0, 102n, moving);
-    const buffer = serializer.createPacketBuffer({ name: 'player_auth_input', params: payload });
-    assert.ok(Buffer.isBuffer(buffer) && buffer.length > 10);
-  }
 });
 
 test('Layer 1 runs inspect -> wait -> stop -> probe through one live-client bridge', async () => {
@@ -632,160 +582,6 @@ test('Layer 8 enforces fresh world observations and never claims beta or autonom
 });
 
 
-test('motion diagnostic uses bounded 20 Hz frame sequence and one neutral stop', () => {
-  const client = new Client();
-  let now=1000, pulse;
-  const movement = new ExperimentalPlayerInput(client, true, {
-    clock: () => now, setInterval: callback => { pulse=callback; return 123; },
-    clearInterval: () => {}
-  });
-  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
-  initialized(client, bridge);
-  const cmd = (requestId, extra={}) => bridge.execute({
-    version:'minepilot.gameplay.v1', requestId, action:'motion_diagnostic', ...extra
-  });
-  assert.equal(cmd('without-confirm',{ mode:'forward',ticks:6 }).reason,'confirmation_required');
-  assert.equal(cmd('bad-frames',{ mode:'forward',ticks:21,confirmed:true }).reason,'unsupported_diagnostic');
-  assert.equal(cmd('start',{ mode:'forward',ticks:6,confirmed:true }).status,'accepted');
-  assert.equal(cmd('busy',{ mode:'forward',ticks:6,confirmed:true }).reason,'movement_busy');
-  for(let i=0;i<6;i++){ now+=50;pulse(); }
-  assert.equal(movement.snapshot().framesSent,6);
-  assert.equal(client.sent.length,6);
-  now+=50;pulse();
-  assert.equal(client.sent.length,7,'one neutral end frame');
-  assert.equal(client.sent.at(-1).value.raw_move_vector.z,0);
-  assert.equal(movement.snapshot().active,false);
-  assert.equal(movement.snapshot().stoppedReason,'bounded_sequence_complete');
-  assert.ok(client.sent.every(x=>x.packet==='player_auth_input'));
-  assert.ok(client.sent.every((x,i)=>i===0||x.value.tick>client.sent[i-1].value.tick));
-  assert.equal(movement.snapshot().movementVerified,false);
-  bridge.stop();
-});
-
-test('turn diagnostics change yaw without claiming movement and are serializer-compatible', () => {
-  const client = new Client();
-  let now=2000, pulse;
-  const movement = new ExperimentalPlayerInput(client,true,{
-    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
-  });
-  const bridge = new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  initialized(client,bridge);
-  for(const [mode,sign] of [['turn_left',-1],['turn_right',1]]) {
-    const result=bridge.execute({version:'minepilot.gameplay.v1',
-      requestId:mode,action:'motion_diagnostic',mode,ticks:2,confirmed:true});
-    assert.equal(result.status,'accepted');
-    now+=50;pulse();
-    const first=client.sent.at(-1).value;
-    assert.equal(first.raw_move_vector.z,0);
-    assert.deepEqual(first.position,origin);
-    assert.equal(first.yaw,sign===-1?355:5);
-    now+=50;pulse();
-    movement.stop();
-  }
-  const {createSerializer}=require('bedrock-protocol/src/transforms/serializer');
-  const serializer=createSerializer('1.26.60');
-  for(const frame of client.sent) {
-    const encoded=serializer.createPacketBuffer({name:'player_auth_input',params:frame.value});
-    assert.ok(encoded.length>10);
-  }
-  bridge.stop();
-});
-
-test('server correction input can halt excessive prediction drift and reset on disconnect', () => {
-  const client = new Client();
-  let now=1000,pulse;
-  const movement = new ExperimentalPlayerInput(client,true,{
-    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
-  });
-  const bridge = new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  initialized(client,bridge);
-  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'start',
-    action:'motion_diagnostic',mode:'forward',ticks:20,confirmed:true}).status,'accepted');
-  now+=50;pulse();
-  client.emit('correct_player_move_prediction',{position:{x:100,y:64,z:100},tick:104n});
-  assert.equal(movement.snapshot().corrections,1);
-  now+=50;pulse();
-  client.emit('correct_player_move_prediction',{position:{x:200,y:64,z:200},tick:110n});
-  assert.equal(movement.snapshot().stoppedReason,'prediction_diverged');
-  assert.equal(movement.snapshot().active,false);
-  assert.equal(movement.snapshot().movementVerified,false);
-  assert.ok(client.sent.length<=4);
-  bridge.stop();
-  assert.equal(client.listenerCount('correct_player_move_prediction'),0);
-});
-
-test('normal Stop and critical survival continue to override experimental diagnostics', () => {
-  const client=new Client();
-  let pulse,now=1000;
-  const movement=new ExperimentalPlayerInput(client,true,{
-    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
-  });
-  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  initialized(client,bridge);
-  const cmd=(id,action,more={})=>bridge.execute({
-    version:'minepilot.gameplay.v1',requestId:id,action,...more
-  });
-  assert.equal(cmd('one','motion_diagnostic',{confirmed:true,mode:'forward',ticks:6}).status,'accepted');
-  now+=50;pulse();
-  assert.equal(cmd('stop','stop_movement').status,'ok');
-  assert.equal(movement.snapshot().active,false);
-  assert.equal(client.sent.at(-1).value.input_data.length,0);
-  const count=client.sent.length;
-  now+=50;pulse();
-  assert.equal(client.sent.length,count);
-  bridge.stop();
-});
-
-test('motion diagnostics require opt-in and server-authenticated movement authority', () => {
-  const client=new Client();
-  const movement=new ExperimentalPlayerInput(client,false);
-  const bridge=new BedrockGameplayBridge(client,{movement}).start();
-  initialized(client,bridge);
-  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'x',
-    action:'motion_diagnostic',mode:'forward',ticks:6,confirmed:true}).reason,'movement_unavailable');
-  assert.equal(client.sent.length,0);
-  bridge.stop();
-});
-
-
-test('pinned Bedrock authority packet activates diagnostics after StartGame without movement_authority', () => {
-  const client=new Client();
-  let now=1000,pulse;
-  const movement=new ExperimentalPlayerInput(client,true,{
-    clock:()=>now,setInterval:cb=>{pulse=cb;return 1;},clearInterval:()=>{}
-  });
-  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  const actualStart={...start};
-  delete actualStart.movement_authority;
-  actualStart.rotation={x:7,z:90};
-  client.emit('start_game',actualStart);
-  client.emit('spawn');
-  client.emit('level_chunk',{x:0,z:0,dimension:0});
-  assert.equal(bridge.yaw,90);
-  assert.equal(bridge.pitch,7);
-  assert.equal(bridge.movementAuthority,1,
-    'modern Bedrock must not depend on deprecated authority packet');
-  assert.equal(bridge.movementAuthoritySource,'protocol_1_26_default');
-  assert.equal(movement.capability(bridge),'experimental');
-  client.emit('set_movement_authority',{movement_authority:'server'});
-  assert.equal(bridge.movementAuthority,1);
-  assert.equal(movement.capability(bridge),'experimental');
-  const cmd={version:'minepilot.gameplay.v1',requestId:'authority',
-    action:'motion_diagnostic',confirmed:true,mode:'forward',ticks:6};
-  assert.equal(bridge.execute(cmd).status,'accepted');
-  now+=50;pulse();
-  assert.ok(client.sent.at(-1).value.position.x<origin.x);
-  client.emit('set_movement_authority',{movement_authority:'client'});
-  assert.equal(movement.snapshot().active,false);
-  assert.equal(movement.snapshot().stoppedReason,'movement_authority_changed');
-  assert.equal(movement.capability(bridge),'unavailable');
-  const written=client.sent.length;
-  now+=50;pulse();
-  assert.equal(client.sent.length,written);
-  bridge.stop();
-  assert.equal(client.listenerCount('set_movement_authority'),0);
-});
-
 test('server correction packet rotation updates yaw in the authenticated session',()=>{
   const client=new Client();
   const bridge=new BedrockGameplayBridge(client).start();
@@ -795,31 +591,6 @@ test('server correction packet rotation updates yaw in the authenticated session
   });
   assert.equal(bridge.pitch,12);
   assert.equal(bridge.yaw,135);
-  bridge.stop();
-});
-
-
-test('Bedrock input ticks stay monotonic across separate diagnostic commands and restart only on fresh StartGame', () => {
-  const client=new Client();
-  let now=1000,pulse;
-  const movement=new ExperimentalPlayerInput(client,true,{
-    clock:()=>now,setInterval:cb=>{pulse=cb;return 1},clearInterval:()=>{}
-  });
-  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  initialized(client,bridge);
-  for(const id of ['first','second']){
-    assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:id,
-      action:'motion_diagnostic',mode:'forward',ticks:1,confirmed:true}).status,'accepted');
-    now+=50;pulse();now+=50;pulse();
-  }
-  assert.deepEqual(client.sent.map(x=>x.value.tick),[101n,102n,103n,104n]);
-  client.emit('start_game',{...start,current_tick:500n});
-  client.emit('spawn');
-  client.emit('level_chunk',{x:0,z:0,dimension:0});
-  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'fresh',
-    action:'motion_diagnostic',mode:'forward',ticks:1,confirmed:true}).status,'accepted');
-  now+=50;pulse();now+=50;pulse();
-  assert.deepEqual(client.sent.slice(-2).map(x=>x.value.tick),[501n,502n]);
   bridge.stop();
 });
 
@@ -960,64 +731,6 @@ test('addon-derived follow priority is wired to same Xbox world without automati
 });
 
 
-test('neutral presence sends continuous 20Hz frames without moving when experimental locomotion is disabled',()=>{
-  const client=new Client();
-  let now=1000,intervals=new Map(),counter=0;
-  const movement=new ExperimentalPlayerInput(client,false,{
-    presenceEnabled:true,clock:()=>now,
-    setInterval:callback=>{const id=++counter;intervals.set(id,callback);return id;},
-    clearInterval:id=>intervals.delete(id)
-  });
-  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  initialized(client,bridge);
-  assert.equal(bridge.movementAuthority,1);
-  assert.equal(movement.snapshot().presenceActive,true);
-  assert.equal(movement.capability(bridge),'unavailable',
-    'presence is independent of opting in to locomotion');
-  for(let i=0;i<10;i++){
-    now+=50;
-    for(const callback of [...intervals.values()])callback();
-  }
-  assert.equal(movement.snapshot().presenceFrames,10);
-  assert.equal(client.sent.length,10);
-  assert.ok(client.sent.every(s=>s.packet==='player_auth_input'));
-  assert.ok(client.sent.every(s=>s.value.input_data.length===0));
-  assert.ok(client.sent.every(s=>s.value.position.x===origin.x && s.value.position.z===origin.z));
-  assert.deepEqual(client.sent.map(s=>s.value.tick),
-    Array.from({length:10},(_,i)=>BigInt(101+i)));
-  bridge.stop();
-  assert.equal(movement.snapshot().presenceActive,false);
-  const before=client.sent.length;
-  for(const callback of [...intervals.values()])callback();
-  assert.equal(client.sent.length,before);
-});
-
-test('presence and opted-in movement share one ordered input stream with no overlap',()=>{
-  const client=new Client();
-  let now=1000,intervals=new Map(),counter=0;
-  const movement=new ExperimentalPlayerInput(client,true,{
-    presenceEnabled:true,clock:()=>now,
-    setInterval:callback=>{const id=++counter;intervals.set(id,callback);return id;},
-    clearInterval:id=>intervals.delete(id)
-  });
-  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  initialized(client,bridge);
-  const tick=()=>{now+=50;for(const callback of [...intervals.values()])callback();};
-  tick();tick();
-  assert.equal(bridge.execute({version:'minepilot.gameplay.v1',requestId:'motion',
-    action:'motion_diagnostic',mode:'forward',ticks:2,confirmed:true}).status,'accepted');
-  tick();tick();tick();tick();
-  const frames=client.sent.filter(s=>s.packet==='player_auth_input');
-  assert.ok(frames.length>=6);
-  assert.ok(frames.every((s,i)=>i===0||s.value.tick>frames[i-1].value.tick));
-  assert.ok(frames.some(s=>s.value.input_data.includes(10)));
-  assert.equal(movement.snapshot().presenceActive,true);
-  client.emit('change_dimension',{dimension:1});
-  assert.equal(movement.snapshot().presenceActive,false);
-  assert.equal(intervals.size,0);
-  bridge.stop();
-});
-
 test('authority inferred from modern protocol, explicit rewind and new dimension reset',()=>{
   const client=new Client();
   const bridge=new BedrockGameplayBridge(client).start();
@@ -1031,44 +744,6 @@ test('authority inferred from modern protocol, explicit rewind and new dimension
   bridge.stop();
 });
 
-
-test('neutral presence packets serialize with pinned Bedrock 1.26.60 SDK, no movement flags',()=>{
-  const client=new Client();
-  let pulse;
-  const movement=new ExperimentalPlayerInput(client,false,{
-    presenceEnabled:true,clock:()=>1000,
-    setInterval:cb=>{pulse=cb;return 7;},clearInterval:()=>{}
-  });
-  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>1000}).start();
-  initialized(client,bridge);
-  pulse();
-  const frame=client.sent.at(-1);
-  assert.equal(frame.packet,'player_auth_input');
-  assert.deepEqual(frame.value.input_data,[]);
-  assert.deepEqual(frame.value.position,origin);
-  const {createSerializer}=require('bedrock-protocol/src/transforms/serializer');
-  const serializer=createSerializer('1.26.60');
-  const encoded=serializer.createPacketBuffer({name:frame.packet,params:frame.value});
-  assert.ok(Buffer.isBuffer(encoded)&&encoded.length>10);
-  bridge.stop();
-});
-
-test('neutral presence maintains bot input when idle spawn coordinates have no fresh self movement echo',()=>{
-  const client=new Client();
-  let now=1000,pulse;
-  const movement=new ExperimentalPlayerInput(client,true,{
-    presenceEnabled:true,clock:()=>now,
-    setInterval:cb=>{pulse=cb;return 7;},clearInterval:()=>{}
-  });
-  const bridge=new BedrockGameplayBridge(client,{movement,clock:()=>now}).start();
-  initialized(client,bridge);
-  now+=31_000;
-  pulse();
-  assert.equal(movement.snapshot().presenceFrames,1);
-  assert.equal(movement.capability(bridge),'experimental');
-  assert.equal(movement.snapshot().movementVerified,false);
-  bridge.stop();
-});
 
 test('ODYSSEY read-only observation results survive the private IPC receipt boundary', t => {
   const dir = mkdtempSync(join(tmpdir(), 'minepilot-odyssey-observe-'));
@@ -1425,96 +1100,6 @@ test('the live bridge forwards official subchunk packets into its terrain cache'
   bridge.stop();
 });
 
-test('manual D-pad directions serialize independent forward, backward and strafe inputs', () => {
-  const client = new Client();
-  let now = 1000;
-  let pulse = null;
-  const movement = new ExperimentalPlayerInput(client, true, {
-    clock: () => now,
-    setInterval: callback => { pulse = callback; return 1; },
-    clearInterval: () => {}
-  });
-  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
-  initialized(client, bridge);
-  const expected = [
-    ['forward', { x: 0, z: 1 }, 10],
-    ['backward', { x: 0, z: -1 }, 11],
-    ['strafe_left', { x: -1, z: 0 }, 12],
-    ['strafe_right', { x: 1, z: 0 }, 13]
-  ];
-  for (const [mode, vector, flag] of expected) {
-    initialized(client, bridge);
-    const result = bridge.execute({
-      version: 'minepilot.gameplay.v1', requestId: mode,
-      action: 'manual_move', confirmed: true, mode, ticks: 2
-    });
-    assert.equal(result.status, 'accepted', mode);
-    now += 50;
-    pulse();
-    const frame = client.sent.at(-1).value;
-    assert.deepEqual(frame.move_vector, vector, mode);
-    assert.deepEqual(frame.raw_move_vector, vector, mode);
-    assert.deepEqual(frame.input_data, [flag], mode);
-    bridge.execute({
-      version: 'minepilot.gameplay.v1', requestId: mode + '-release',
-      action: 'manual_stop'
-    });
-    assert.equal(movement.snapshot().active, false, mode);
-  }
-  bridge.stop();
-});
-
-test('manual movement is still blocked by missing authority, critical health and the active autonomous agent', () => {
-  const client = new Client();
-  let pulse;
-  const movement = new ExperimentalPlayerInput(client, false, {
-    setInterval: callback => { pulse = callback; return 1; },
-    clearInterval: () => {}
-  });
-  const bridge = new BedrockGameplayBridge(client, {
-    movement,
-    gameplayAgent: { snapshot: () => ({ active: true }), stop() {} }
-  }).start();
-  initialized(client, bridge);
-  const base = {
-    version: 'minepilot.gameplay.v1', requestId: 'manual-test',
-    action: 'manual_move', confirmed: true, mode: 'forward', ticks: 4
-  };
-  assert.equal(bridge.execute(base).reason, 'autonomous_controller_busy');
-  bridge.gameplayAgent = { snapshot: () => ({ active: false }), stop() {} };
-  assert.equal(bridge.execute({ ...base, requestId: 'manual-disabled' }).reason, 'movement_unavailable');
-  bridge.stop();
-});
-
-test('manual look controls rotate camera without translating the bot', () => {
-  const client = new Client();
-  let now = 1000;
-  let pulse = null;
-  const movement = new ExperimentalPlayerInput(client, true, {
-    clock: () => now,
-    setInterval: callback => { pulse = callback; return 1; },
-    clearInterval: () => {}
-  });
-  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
-  initialized(client, bridge);
-  for (const [mode, yaw] of [['turn_left', 355], ['turn_right', 5]]) {
-    initialized(client, bridge);
-    const result = bridge.execute({
-      version: 'minepilot.gameplay.v1', requestId: mode,
-      action: 'manual_move', confirmed: true, mode, ticks: 2
-    });
-    assert.equal(result.status, 'accepted');
-    now += 50;
-    pulse();
-    const frame = client.sent.at(-1).value;
-    assert.deepEqual(frame.move_vector, { x: 0, z: 0 });
-    assert.deepEqual(frame.input_data, []);
-    assert.equal(frame.yaw, yaw);
-    bridge.execute({ version: 'minepilot.gameplay.v1', requestId: mode + '-stop', action: 'manual_stop' });
-  }
-  bridge.stop();
-});
-
 test('vanilla runtime registry refuses hashed IDs but retains known states beside custom definitions', () => {
   const { createVanillaRuntimeRegistry, clearRuntimeRegistryCache } =
     require('./bedrock-runtime-registry.cjs');
@@ -1540,49 +1125,6 @@ test('vanilla runtime registry refuses hashed IDs but retains known states besid
   clearRuntimeRegistryCache();
 });
 
-
-test('idle spawn anchor stays usable only with neutral presence and no unconfirmed movement', () => {
-  let now = 1000;
-  const client = new Client();
-  const motion = {
-    presenceActive: true,
-    presenceFrames: 20,
-    unconfirmedMovement: false
-  };
-  const bridge = new BedrockGameplayBridge(client, {
-    clock: () => now,
-    movement: { snapshot: () => motion }
-  });
-  bridge.spawned = true;
-  bridge.closed = false;
-  bridge.self = '123';
-  bridge.position = { x: 33.25, y: 70.5, z: -17.75 };
-  bridge.dimension = 0;
-  bridge.movementAuthority = 1;
-  bridge.serverTick = 120n;
-  bridge.receivedChunks.set('0:2:-2', now);
-  bridge.lastServerPositionAt = now;
-
-  now += 6 * 60 * 1000;
-  assert.deepEqual(bridge.positionStatus(), {
-    usable: true, mode: 'idle_spawn_anchor', ageMs: 360000
-  }, 'neutral presence preserves the original anchor across long idle periods');
-
-  motion.unconfirmedMovement = true;
-  assert.equal(bridge.positionUsable(), false,
-    'queued non-neutral input invalidates the idle anchor');
-  assert.equal(bridge.positionStatus().mode, 'awaiting_server_position');
-
-  motion.unconfirmedMovement = false;
-  bridge.lastServerPositionAt = now;
-  assert.equal(bridge.positionStatus().mode, 'server_fresh',
-    'a new server position report restores current position freshness');
-
-  now += 31000;
-  motion.presenceFrames = 0;
-  assert.equal(bridge.positionUsable(), false,
-    'stale position without neutral presence cannot be used as an anchor');
-});
 
 test('Bedrock 1.26.60 skeleton chunks trigger a bounded and deduplicated local subchunk request', () => {
   let now = 1000;
