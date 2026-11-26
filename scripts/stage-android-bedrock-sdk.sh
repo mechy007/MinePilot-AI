@@ -331,7 +331,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = process.argv[2];
 const data = require(path.join(root, 'bedrock-collision-data.cjs')).loadBedrockCollisionData();
-assert.equal(data.stateCount, 23948);
+assert.equal(data.stateCount, 23960);
 assert.ok(data.blockCount > 1000);
 assert.equal(data.profilesByHash.get((-604749536) >>> 0)?.name, 'air');
 assert.equal(data.profilesByHash.get((-2144268767) >>> 0)?.name, 'stone');
