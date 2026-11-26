@@ -1535,7 +1535,7 @@ class BedrockGameplayBridge {
       ...(command?.action === 'manual_move' ? {
         serverConfirmation: 'correction_only_if_prediction_differs'
       } : {}),
-      ...(completedPlacement ? { blockPlacement: completedPlacement } : {});
+      ...(completedPlacement ? { blockPlacement: completedPlacement } : {}),
       ...(command?.action === 'odyssey_execute' ? {
         primitive: command.primitive,
         dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
