@@ -6,6 +6,7 @@ import android.graphics.Paint;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewParent;
 
 /** Touch joystick for bounded, cardinal manual bot movement. */
 public final class ManualJoystickView extends View {
@@ -23,6 +24,7 @@ public final class ManualJoystickView extends View {
     private float centerY;
     private float radius;
     private float knobRadius;
+    private boolean trackingTouch;
 
     public ManualJoystickView(Context context) { super(context); init(); }
     public ManualJoystickView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -30,6 +32,7 @@ public final class ManualJoystickView extends View {
 
     private void init() {
         setFocusable(true);
+        setClickable(true);
         setContentDescription("Analog movement joystick. Drag in any direction for 360-degree movement; release to stop.");
         base.setColor(0xff202c40);
         base.setStyle(Paint.Style.FILL);
@@ -48,7 +51,11 @@ public final class ManualJoystickView extends View {
     public void setListener(Listener value) { listener = value; }
     public void setControlEnabled(boolean enabled) {
         setEnabled(enabled);
-        if (!enabled) release();
+        if (!enabled) {
+            disallowParentInterception(false);
+            trackingTouch = false;
+            release();
+        }
         invalidate();
     }
 
@@ -83,17 +90,46 @@ public final class ManualJoystickView extends View {
         if (!isEnabled()) return false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                trackingTouch = true;
+                // The joystick is inside the dashboard ScrollView. Without this,
+                // a vertical drag is stolen by the parent and arrives here as CANCEL.
+                disallowParentInterception(true);
+                update(event.getX(), event.getY());
+                return true;
             case MotionEvent.ACTION_MOVE:
+                if (!trackingTouch) return false;
+                disallowParentInterception(true);
                 update(event.getX(), event.getY());
                 return true;
             case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
+                if (!trackingTouch) return false;
+                trackingTouch = false;
                 release();
+                disallowParentInterception(false);
                 performClick();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                trackingTouch = false;
+                release();
+                disallowParentInterception(false);
                 return true;
             default:
                 return true;
         }
+    }
+
+    private void disallowParentInterception(boolean disallow) {
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(disallow);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (trackingTouch) {
+            trackingTouch = false;
+            release();
+            disallowParentInterception(false);
+        }
+        super.onDetachedFromWindow();
     }
 
     private void update(float touchX, float touchY) {
