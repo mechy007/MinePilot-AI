@@ -22,9 +22,12 @@ const MAX_FAILURES=2;
 const ACK_MS=4500;
 const POSITION_TTL_MS=7000;
 const MIN_PROGRESS=0.08;
-const GOALS=new Set(['survive','explore','follow','return_home','gather','goto']);
+const GOALS=new Set(['auto','survive','explore','follow','return_home','gather','goto']);
 const GOAL_DIRECTIVES=Object.freeze({
-  survive:'survive_world', explore:'explore', follow:'follow_player',
+  // Auto uses the survival policy as its safe default: explore verified ground,
+  // collect only observed drops, retreat from recognized hostiles, and pause
+  // when food, health, terrain or server evidence is insufficient.
+  auto:'survive_world', survive:'survive_world', explore:'explore', follow:'follow_player',
   return_home:'return_home', gather:'gather_resources', goto:'go_to_position'
 });
 const FOOD_ITEMS=new Set(['minecraft:apple','minecraft:bread','minecraft:carrot',
@@ -138,7 +141,7 @@ class BedrockGameplayAgent {
     this.nextActionAt=0;this.recentCells.clear();
     this.subgoal=null;this.targetPosition=opts.goal==='goto'?copy(opts.targetPosition):null;this.collected=0;this.ignoredDrops.clear();
     this.lastIntelligenceDirective=null;
-    world.intelligence.setGoal(opts.goal);
+    world.intelligence.setGoal(opts.goal==='auto'?'survive':opts.goal);
     this.interval=this.setInterval(()=>this.pulse(),INTERVAL_MS);
     return {status:'accepted',reason:'gameplay_agent_enabled_not_yet_moving'};
   }
@@ -294,7 +297,7 @@ class BedrockGameplayAgent {
   }
 
   targetFromGoal(world) {
-    if(this.goal==='survive')return this.survivalGoal(world);
+    if(this.goal==='survive'||this.goal==='auto')return this.survivalGoal(world);
     const state=world.gameplayWorld();
     if(this.goal==='goto') {
       if(!finite(this.targetPosition))
