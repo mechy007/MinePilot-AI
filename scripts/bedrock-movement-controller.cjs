@@ -463,8 +463,9 @@ class BedrockMovementController {
         this.physics.simulatePlayer(state, this.physicsWorld);
         if (this.physicsWorld.unknown) {
           this.state = cloneState(this.history[index].state);
+          this.history.splice(index + 1);
           this.lastMovementResult = { status: 'unavailable', reason: 'terrain_not_fully_observed' };
-          return;
+          break;
         }
         entry.state = cloneState(state);
       }
@@ -494,6 +495,10 @@ class BedrockMovementController {
       this.history[index].input.knockback = motion.clone();
       let state = cloneState(index > 0 ? this.history[index - 1].state : this.history[index].state);
       const start = index > 0 ? index : index + 1;
+      if (index === 0) {
+        state.vel = motion.clone();
+        this.history[0].state.vel = motion.clone();
+      }
       for (let i = start; i < this.history.length; i++) {
         const entry = this.history[i];
         this.applyInput(state, entry.input);
