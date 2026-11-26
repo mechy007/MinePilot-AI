@@ -386,32 +386,27 @@ public final class WorldSessionProvider extends ContentProvider {
                 }
                 result.putInt("nearby_players", gameplay.optInt("visiblePlayers", 0));
                 result.putInt("corrections", gameplay.optInt("correctionCount", 0));
-                JSONObject diagnostic = gameplay.optJSONObject("motionDiagnostic");
-                if (diagnostic != null) {
-                    result.putString("motion_mode", diagnostic.optString("mode", "idle"));
-                    result.putBoolean("motion_active", diagnostic.optBoolean("active", false));
-                    result.putInt("motion_frames", diagnostic.optInt("framesSent", 0));
-                    result.putBoolean("presence_active", diagnostic.optBoolean("presenceActive", false));
-                    result.putInt("presence_frames", diagnostic.optInt("presenceFrames", 0));
-                    result.putString("presence_error", diagnostic.optString("presenceError", ""));
-                    result.putInt("motion_server_updates", diagnostic.optInt("serverUpdates", 0));
-                    result.putInt("motion_corrections", diagnostic.optInt("corrections", 0));
-                    result.putString("motion_displacement", diagnostic.optString("observedDisplacement", ""));
-                    result.putString("motion_drift", diagnostic.optString("maxDrift", ""));
-                    result.putString("motion_stop_reason", diagnostic.optString("stoppedReason", ""));
-                    String motionModel=diagnostic.optString("motionModel","");
-                    if(motionModel.matches("[a-z_]{1,40}"))
-                        result.putString("motion_model",motionModel);
-                    JSONObject inputClock=diagnostic.optJSONObject("inputClock");
-                    if(inputClock!=null&&inputClock.optInt("protocol",-1)==2225) {
-                        result.putInt("input_skipped_ticks",Math.max(0,
-                                inputClock.optInt("skippedTicks",0)));
-                        result.putInt("input_correction_anchors",Math.max(0,
-                                inputClock.optInt("observedCorrections",0)));
-                        result.putInt("input_rejected_anchors",Math.max(0,
-                                inputClock.optInt("rejectedCorrections",0)));
-                        String tick=inputClock.optString("lastTick","");
-                        if(tick.matches("[0-9]{1,20}"))result.putString("input_last_tick",tick);
+                JSONObject movementSystem = gameplay.optJSONObject("movementSystem");
+                if (movementSystem != null) {
+                    result.putBoolean("movement_ready", movementSystem.optBoolean("available", false));
+                    result.putString("movement_capability", movementSystem.optString("capability", "unavailable"));
+                    result.putInt("movement_frames", Math.max(0, movementSystem.optInt("framesSent", 0)));
+                    result.putInt("movement_corrections", Math.max(0, movementSystem.optInt("corrections", 0)));
+                    JSONObject terrain = movementSystem.optJSONObject("terrain");
+                    result.putBoolean("movement_terrain_ready", terrain != null && !terrain.optBoolean("unknown", true));
+                    if (terrain != null)
+                        result.putInt("movement_terrain_queries", Math.max(0, terrain.optInt("queries", 0)));
+                    JSONObject physics = movementSystem.optJSONObject("physics");
+                    if (physics != null) {
+                        result.putInt("movement_physics_blocks", Math.max(0, physics.optInt("blocks", 0)));
+                        result.putInt("movement_physics_states", Math.max(0, physics.optInt("states", 0)));
+                    }
+                    JSONObject last = movementSystem.optJSONObject("lastMovementResult");
+                    if (last != null) {
+                        String status = last.optString("status", "");
+                        String reason = last.optString("reason", "");
+                        if (status.matches("[a-z_]{1,32}")) result.putString("movement_last_status", status);
+                        if (reason.matches("[a-z_]{1,64}")) result.putString("movement_last_reason", reason);
                     }
                 }
                 JSONObject layer = gameplay.optJSONObject("layerOne");
