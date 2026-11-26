@@ -11,4 +11,6 @@ Use the current source of truth instead:
 - [Runtime function contracts](../../FUNCTION_CONTRACTS.md)
 - [Android app status](../../ANDROID-APP-STATUS.md)
 
+The legacy-movement-probes folder preserves earlier six-frame and diagnostic movement investigations. Those packet paths have been superseded by the physics-backed controller.
+
 Archived notes may mention old branch names, PR stacks, experimental packet paths or capabilities that have since changed. Verify all such details against current code and tests before relying on them.
