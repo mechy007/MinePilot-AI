@@ -922,7 +922,7 @@ class BedrockGameplayBridge {
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       respawnRecovery: { ...this.respawnRecovery },
       movement: this.movement?.capability?.(this) ?? 'unavailable',
-      ...(this.movement?.snapshot ? { motionDiagnostic: this.movement.snapshot() } : {}),
+      ...(this.movement?.snapshot ? { movementSystem: this.movement.snapshot() } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
       ...(this.layerTwo ? { layerTwo: this.layerTwo.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerThree ? { layerThree: this.layerThree.snapshot(this.gameplayWorld()) } : {}),
