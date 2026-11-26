@@ -411,9 +411,16 @@ public final class DashboardActivity extends Activity {
         mark.setImageResource(R.drawable.minepilot_icon_foreground);
         mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         heading.addView(mark, new LinearLayout.LayoutParams(dp(46), dp(46)));
-        TextView brand = text("MinePilot", 24, INK, true);
-        heading.addView(brand, new LinearLayout.LayoutParams(-2, -2));
-        root.addView(heading, new LinearLayout.LayoutParams(-1, dp(56)));
+        LinearLayout brandStack = new LinearLayout(this);
+        brandStack.setOrientation(LinearLayout.VERTICAL);
+        brandStack.setPadding(dp(8), 0, 0, 0);
+        TextView brand = text("MinePilot", 23, INK, true);
+        brandStack.addView(brand);
+        TextView tagline = text("BEDROCK COMPANION  ·  ANDROID", 9, MUTED, true);
+        tagline.setLetterSpacing(.12f);
+        brandStack.addView(tagline);
+        heading.addView(brandStack, new LinearLayout.LayoutParams(-2, -2));
+        root.addView(heading, new LinearLayout.LayoutParams(-1, dp(60)));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true); scroll.setVerticalScrollBarEnabled(false);
         body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
@@ -425,7 +432,8 @@ public final class DashboardActivity extends Activity {
         status.setVisibility(View.GONE);
         root.addView(status);
         LinearLayout nav = new LinearLayout(this);
-        nav.setPadding(0, dp(8), 0, 0);
+        nav.setPadding(dp(5), dp(7), dp(5), dp(5));
+        nav.setBackground(surface(PANEL, 16));
         for (String page : new String[]{"World", "Xbox", "Skills", "Logs", "Settings"}) {
             boolean selected = page.equals(tab) || ("Settings".equals(page) && "Diagnostics".equals(tab));
             Button item = new Button(this);
@@ -436,7 +444,8 @@ public final class DashboardActivity extends Activity {
                 default -> page;
             });
             item.setAllCaps(false);
-            item.setTextSize(12);
+            item.setTextSize(11);
+            item.setMinHeight(dp(48));
             item.setPadding(dp(2), 0, dp(2), 0);
             item.setTextColor(selected ? BG : MUTED);
             item.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -764,14 +773,17 @@ public final class DashboardActivity extends Activity {
         hint.setPadding(0, dp(7), 0, dp(10));
         panel.addView(hint);
 
+        // Use a vertical, width-safe layout. Side-by-side controls were too
+        // cramped on common Android phones and made the joystick difficult to use.
         LinearLayout controls = new LinearLayout(this);
-        controls.setOrientation(LinearLayout.HORIZONTAL);
-        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setOrientation(LinearLayout.VERTICAL);
+        controls.setGravity(Gravity.CENTER_HORIZONTAL);
 
         manualJoystick = new ManualJoystickView(this);
         manualJoystick.setListener(this::onManualJoystickVector);
-        LinearLayout.LayoutParams stickParams = new LinearLayout.LayoutParams(dp(148), dp(148));
-        stickParams.setMargins(0, 0, dp(12), 0);
+        LinearLayout.LayoutParams stickParams = new LinearLayout.LayoutParams(dp(168), dp(168));
+        stickParams.gravity = Gravity.CENTER_HORIZONTAL;
+        stickParams.bottomMargin = dp(12);
         controls.addView(manualJoystick, stickParams);
 
         LinearLayout look = new LinearLayout(this);
@@ -799,7 +811,7 @@ public final class DashboardActivity extends Activity {
         TextView state = text("Hold to move · release to brake", 11, MUTED, false);
         state.setPadding(0, dp(8), 0, 0);
         look.addView(state);
-        controls.addView(look, new LinearLayout.LayoutParams(0, -2, 1f));
+        controls.addView(look, new LinearLayout.LayoutParams(-1, -2));
         panel.addView(controls);
 
         TextView footer = text("Physics-based 360° movement with jump, sprint and sneak. Release controls to stop; movement pauses when terrain or server authority is unavailable.", 11, MUTED, false);
