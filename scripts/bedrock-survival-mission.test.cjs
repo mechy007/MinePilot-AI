@@ -30,7 +30,7 @@ function setup(){
         z:from.z+dz/d*Math.min(d,0.9)};
       return {status:'route_found',waypoint:wp,path:[from,wp]};
     },
-    movement:{capability(){return 'experimental';},
+    movement:{capability(){return 'ready';},
       snapshot(){return {active:false};},
       runVerifiedStep(world,target){count++;return {status:'accepted'};}},
     autonomy:{snapshot(){return {active:false};}},
