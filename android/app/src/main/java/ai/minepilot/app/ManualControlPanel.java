@@ -25,6 +25,7 @@ public final class ManualControlPanel extends LinearLayout {
     private final Listener listener;
     private final ManualJoystickView joystick;
     private final ArrayList<View> gatedControls = new ArrayList<>();
+    private final ArrayList<Runnable> activeControlReleases = new ArrayList<>();
     private boolean controlEnabled;
 
     public ManualControlPanel(Context context, Listener listener) {
@@ -85,7 +86,7 @@ public final class ManualControlPanel extends LinearLayout {
         addView(look, new LayoutParams(-1, -2));
 
         TextView footer = label(
-                "Movement is enabled only when the server authority, physics runtime and observed terrain are ready.",
+                "Commands run only when server authority, physics and observed terrain are ready. Held controls release safely on touch interruption.",
                 11, MinePilotTheme.TEXT_SECONDARY, false);
         footer.setPadding(0, dp(9), 0, 0);
         addView(footer);
@@ -100,26 +101,41 @@ public final class ManualControlPanel extends LinearLayout {
             view.setEnabled(true);
             view.setAlpha(enabled ? 1f : 0.58f);
         }
-        if (changed && !enabled && listener != null) listener.onStop();
+        if (changed && !enabled) {
+            for (Runnable release : activeControlReleases) release.run();
+            if (listener != null) listener.onStop();
+        }
     }
 
     private void addControl(LinearLayout row, String title, String mode, boolean action) {
         Button control = button(title, false);
         control.setTextSize(title.length() > 3 ? 10 : 18);
         control.setContentDescription(title + ". Press and hold.");
-        final boolean[] acceptedPress = { false };
+        final int[] activePointerId = { MotionEvent.INVALID_POINTER_ID };
+        final Runnable releaseControl = () -> {
+            if (activePointerId[0] == MotionEvent.INVALID_POINTER_ID) return;
+            activePointerId[0] = MotionEvent.INVALID_POINTER_ID;
+            control.setPressed(false);
+            if (control.getParent() != null)
+                control.getParent().requestDisallowInterceptTouchEvent(false);
+            if (listener != null) {
+                if (action) listener.onActionChanged(mode, false);
+                else listener.onLookChanged(mode, false);
+            }
+        };
+        activeControlReleases.add(releaseControl);
         control.setEnabled(true);
         control.setOnTouchListener((view, event) -> {
             int actionType = event.getActionMasked();
             if (actionType == MotionEvent.ACTION_DOWN) {
                 if (!controlEnabled) {
-                    acceptedPress[0] = false;
+                    activePointerId[0] = MotionEvent.INVALID_POINTER_ID;
                     if (listener != null) listener.onUnavailable();
                     return true;
                 }
+                activePointerId[0] = event.getPointerId(0);
                 if (view.getParent() != null)
                     view.getParent().requestDisallowInterceptTouchEvent(true);
-                acceptedPress[0] = true;
                 view.setPressed(true);
                 if (listener != null) {
                     if (action) listener.onActionChanged(mode, true);
@@ -127,15 +143,19 @@ public final class ManualControlPanel extends LinearLayout {
                 }
                 return true;
             }
+            if (actionType == MotionEvent.ACTION_POINTER_DOWN) return true;
+            if (actionType == MotionEvent.ACTION_MOVE) {
+                if (activePointerId[0] != MotionEvent.INVALID_POINTER_ID &&
+                        event.findPointerIndex(activePointerId[0]) < 0) releaseControl.run();
+                return true;
+            }
+            if (actionType == MotionEvent.ACTION_POINTER_UP) {
+                if (event.getPointerId(event.getActionIndex()) == activePointerId[0])
+                    releaseControl.run();
+                return true;
+            }
             if (actionType == MotionEvent.ACTION_UP || actionType == MotionEvent.ACTION_CANCEL) {
-                if (view.getParent() != null)
-                    view.getParent().requestDisallowInterceptTouchEvent(false);
-                view.setPressed(false);
-                if (acceptedPress[0] && listener != null) {
-                    if (action) listener.onActionChanged(mode, false);
-                    else listener.onLookChanged(mode, false);
-                }
-                acceptedPress[0] = false;
+                releaseControl.run();
                 return true;
             }
             return true;
