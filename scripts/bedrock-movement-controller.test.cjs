@@ -153,6 +153,11 @@ test('movement controller refuses to predict through an unknown terrain cell', (
   assert.equal(controller.snapshot().terrain.unknown, true);
   assert.deepEqual(frame.move_vector, { x: 0, z: 0 });
   assert.equal(controller.lastMovementResult.reason, 'terrain_not_fully_observed');
+  const missing = controller.snapshot().terrain.unknownCells[0];
+  assert.equal(missing.reason, 'block_not_observed');
+  assert.ok(Number.isInteger(missing.x) && Number.isInteger(missing.y) && Number.isInteger(missing.z));
+  terrain.unknown = false;
+  assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
   controller.stop('session_closed');
 });
 
@@ -178,6 +183,39 @@ test('movement controller supports numeric runtime-state palettes as well as has
   assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
   const frame = controller.tick(101n);
   assert.ok(frame.position.z > world.position.z);
+  controller.stop('session_closed');
+});
+
+
+test('manual prediction continues past seven seconds without a positive correction packet', () => {
+  const { controller, world } = movementWorld();
+  assert.equal(controller.startPresence(world), true);
+  controller.unconfirmedMovement = true;
+  controller.nonNeutralFrames = 20;
+  controller.lastNonNeutralAt = Date.now() - 8001;
+  assert.equal(controller.capability(world), 'ready');
+  assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
+  const frame = controller.tick(101n);
+  assert.ok(frame.input_data.includes('up'));
+  assert.equal(controller.manualHoldActive, true);
+  assert.equal(controller.lastMovementResult.status, 'awaiting_server_correction');
+  controller.stop('session_closed');
+});
+
+test('terrain preflight follows the predicted position instead of a stale server spawn position', () => {
+  const { controller, world, terrain } = movementWorld();
+  const queried = [];
+  const original = terrain.blockId.bind(terrain);
+  terrain.blockId = (dimension, x, y, z) => {
+    queried.push({ x, y, z });
+    return original(dimension, x, y, z);
+  };
+  assert.equal(controller.startPresence(world), true);
+  queried.length = 0;
+  controller.state.pos.x = 48.25;
+  assert.equal(controller.preflightTerrain(world), true);
+  assert.ok(queried.length > 0);
+  assert.ok(queried.every(cell => cell.x >= 47 && cell.x <= 49));
   controller.stop('session_closed');
 });
 
