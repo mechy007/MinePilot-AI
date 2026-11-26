@@ -2,8 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Vec3 } = require('../vendor/bedboo-physics/lib/vec3');
-const { Physics, PlayerState } = require('../vendor/bedboo-physics/lib/physics');
+const path = require('node:path');
+const root = path.basename(__dirname) === 'scripts' ? path.resolve(__dirname, '..') : __dirname;
+const { Vec3 } = require(path.join(root, 'vendor/bedboo-physics/lib/vec3'));
+const { Physics, PlayerState } = require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
 const { buildBedrockCollisionData } = require('./bedrock-collision-data.cjs');
 const { BedrockMovementController } = require('./bedrock-movement-controller.cjs');
 
