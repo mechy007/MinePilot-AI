@@ -437,7 +437,7 @@ test('respawn recovery handles three consecutive deaths and server runtime ID ch
     client.emit('set_health', { health: 20 });
     recovered++;
     assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
-    assert.equal(bridge.snapshot().spawned, true);
+    assert.equal(bridge.snapshot().state, 'observing');
     assert.equal(bridge.snapshot().respawnRecovery.recovered, recovered);
   }
   const final = bridge.snapshot();
