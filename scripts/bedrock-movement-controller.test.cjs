@@ -231,3 +231,20 @@ test('server correction replaces the predicted state and records reconciliation'
   assert.ok(Math.abs(controller.state.pos.z - (-0.2)) < 1e-6);
   controller.stop('session_closed');
 });
+
+
+test('movement readiness refreshes stale unknown terrain after the missing block arrives', () => {
+  const { controller, world, terrain } = movementWorld();
+  assert.equal(controller.startPresence(world), true);
+  terrain.unknown = true;
+  const blocked = controller.tick(101n);
+  assert.deepEqual(blocked.move_vector, { x: 0, z: 0 });
+  assert.equal(controller.capability(world), 'unavailable');
+  terrain.unknown = false;
+  assert.equal(controller.capability(world), 'ready');
+  assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
+  const resumed = controller.tick(102n);
+  assert.ok(resumed.input_data.includes('up'));
+  assert.ok(resumed.position.z > world.position.z);
+  controller.stop('session_closed');
+});
