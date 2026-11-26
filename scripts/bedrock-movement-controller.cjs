@@ -1,10 +1,14 @@
 'use strict';
 
-const { Vec3 } = require('../vendor/bedboo-physics/lib/vec3');
-const { Physics, PlayerState } = require('../vendor/bedboo-physics/lib/physics');
-const { buildFlags } = require('../vendor/bedboo-physics/lib/physics/input');
-const { createInputQueue } = require('../vendor/bedboo-physics/lib/bedrock/input_queue');
-const { EYE_HEIGHT } = require('../vendor/bedboo-physics/lib/bedrock/constants');
+const path = require('node:path');
+const vendorRoot = path.basename(__dirname) === 'scripts'
+  ? path.resolve(__dirname, '..', 'vendor')
+  : path.join(__dirname, 'vendor');
+const { Vec3 } = require(path.join(vendorRoot, 'bedboo-physics/lib/vec3'));
+const { Physics, PlayerState } = require(path.join(vendorRoot, 'bedboo-physics/lib/physics'));
+const { buildFlags } = require(path.join(vendorRoot, 'bedboo-physics/lib/physics/input'));
+const { createInputQueue } = require(path.join(vendorRoot, 'bedboo-physics/lib/bedrock/input_queue'));
+const { EYE_HEIGHT } = require(path.join(vendorRoot, 'bedboo-physics/lib/bedrock/constants'));
 const { loadBedrockCollisionData } = require('./bedrock-collision-data.cjs');
 
 const TICK_MS = 50;
