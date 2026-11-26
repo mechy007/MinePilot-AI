@@ -70,6 +70,7 @@ class BedrockPhysicsWorld {
     const block = {
       name: profile.name,
       type: profile.id,
+      boundingBox: profile.boundingBox,
       friction: profile.friction,
       metadata: profile.metadata,
       isWaterlogged: profile.isWaterlogged,
@@ -87,13 +88,14 @@ class BedrockMovementController {
     if (!client || typeof client.queue !== 'function') throw new TypeError('Bedrock client is required');
     this.client = client;
     this.terrain = options.terrain ?? null;
-    this.collisionData = null;
+    this.collisionData = options.collisionData ?? null;
     this.physics = null;
     this.physicsWorld = null;
     this.queueBot = { _client: client, emit: () => {} };
     this.inputQueue = createInputQueue(this.queueBot, {
       now: options.clock ?? Date.now,
-      maxCatchupTicks: 4
+      maxCatchupTicks: 4,
+      timers: options.timers
     });
     this.world = null;
     this.state = null;
@@ -123,7 +125,7 @@ class BedrockMovementController {
   loadPhysics() {
     if (this.physics) return true;
     try {
-      this.collisionData = loadBedrockCollisionData();
+      this.collisionData ??= loadBedrockCollisionData();
       this.physicsWorld = new BedrockPhysicsWorld(this.terrain, this.collisionData, this.world?.dimension);
       this.physics = Physics(this.collisionData.registry, this.physicsWorld);
       return true;
@@ -141,7 +143,6 @@ class BedrockMovementController {
         !validTick(world.serverTick) || !world.terrain ||
         world.terrain.dimension !== world.dimension || world.receivedChunks?.size === 0) return 'unavailable';
     if (!this.collisionData || !this.physics || !this.physicsWorld) return 'unavailable';
-    if (!this.lastServerPositionAt || Date.now() - this.lastServerPositionAt > 30000) return 'unavailable';
     return this.physicsWorld.unknown ? 'unavailable' : 'ready';
   }
 
@@ -237,6 +238,32 @@ class BedrockMovementController {
     this.manualHoldDeadline = Date.now() + 1100;
     this.lastMovementResult = { status: 'accepted', reason: 'movement_controls_applied' };
     return this.lastMovementResult;
+  }
+
+  runVerifiedStep(world, target, ticks = 8) {
+    if (this.capability(world) !== 'ready' || !finite3(target) ||
+        !Number.isInteger(ticks) || ticks < 1 || ticks > 20) {
+      return { status: 'rejected', reason: 'movement_unavailable' };
+    }
+    const dx = target.x - world.position.x;
+    const dz = target.z - world.position.z;
+    if (Math.hypot(dx, dz) < 0.15) {
+      this.releaseManual();
+      return { status: 'ok', reason: 'target_reached' };
+    }
+    const yawDegrees = Math.atan2(-dx, dz) * 180 / Math.PI;
+    if (this.state) this.state.yaw = fromWireYaw(yawDegrees);
+    this.setControls({ x: 0, z: 1 });
+    this.manualHoldActive = true;
+    this.manualHoldDeadline = Date.now() + ticks * TICK_MS;
+    this.lastMovementResult = { status: 'accepted', reason: 'verified_navigation_step' };
+    return this.lastMovementResult;
+  }
+
+  observeRotation(yaw, pitch) {
+    if (!this.state) return;
+    if (Number.isFinite(yaw)) this.state.yaw = fromWireYaw(yaw);
+    if (Number.isFinite(pitch)) this.state.pitch = fromWirePitch(pitch);
   }
 
   releaseManual() {
@@ -404,9 +431,14 @@ class BedrockMovementController {
       for (let i = index + 1; i < this.history.length; i++) {
         const entry = this.history[i];
         this.applyInput(state, entry.input);
+        if (entry.input.knockback) state.vel = entry.input.knockback.clone();
         this.physicsWorld.beginTick();
         this.physics.simulatePlayer(state, this.physicsWorld);
-        if (this.physicsWorld.unknown) break;
+        if (this.physicsWorld.unknown) {
+          this.state = cloneState(this.history[index].state);
+          this.lastMovementResult = { status: 'unavailable', reason: 'terrain_not_fully_observed' };
+          return;
+        }
         entry.state = cloneState(state);
       }
       this.state = state;
@@ -430,11 +462,27 @@ class BedrockMovementController {
     const velocity = packet.velocity;
     const targetTick = packet.tick != null ? BigInt(packet.tick) + 1n : null;
     const index = targetTick == null ? -1 : this.history.findIndex(entry => entry.tick === targetTick);
+    const motion = new Vec3(velocity.x, velocity.y, velocity.z);
     if (index >= 0) {
-      this.history[index].input.knockback = new Vec3(velocity.x, velocity.y, velocity.z);
-      this.state.vel = new Vec3(velocity.x, velocity.y, velocity.z);
+      this.history[index].input.knockback = motion.clone();
+      let state = cloneState(index > 0 ? this.history[index - 1].state : this.history[index].state);
+      const start = index > 0 ? index : index + 1;
+      for (let i = start; i < this.history.length; i++) {
+        const entry = this.history[i];
+        this.applyInput(state, entry.input);
+        if (entry.input.knockback) state.vel = entry.input.knockback.clone();
+        this.physicsWorld.beginTick();
+        this.physics.simulatePlayer(state, this.physicsWorld);
+        if (this.physicsWorld.unknown) {
+          this.state.vel = motion;
+          this.lastMovementResult = { status: 'unavailable', reason: 'terrain_not_fully_observed' };
+          return;
+        }
+        entry.state = cloneState(state);
+      }
+      this.state = state;
     } else {
-      this.state.vel = new Vec3(velocity.x, velocity.y, velocity.z);
+      this.state.vel = motion;
     }
   }
 
@@ -464,6 +512,7 @@ class BedrockMovementController {
   snapshot() {
     return {
       available: this.capability() === 'ready',
+      capability: this.capability(),
       state: this.started ? 'running' : 'stopped',
       framesSent: this.framesSent,
       corrections: this.corrections,
