@@ -330,7 +330,11 @@ assert.ok(hashed instanceof Map,'hashed runtime block registry loads from bundle
 assert.equal(hashed.size,23960);
 assert.equal(hashed.get((-2144268767) >>> 0)?.name,'minecraft:stone');
 assert.equal(hashed.get((-604749536) >>> 0)?.name,'minecraft:air');
-console.log('Verified complete numeric and hashed Bedrock runtime block-state registries in extracted Android SDK');
+const numeric266=createVanillaRuntimeRegistry({engine:'1.26.66',block_network_ids_are_hashes:false,block_properties:[]});
+const hashed266=createVanillaRuntimeRegistry({engine:'1.26.66',block_network_ids_are_hashes:true,block_properties:[]});
+assert.equal(numeric266?.size,23960);
+assert.equal(hashed266?.size,23960);
+console.log('Verified complete numeric and hashed Bedrock runtime block-state registries for protocol 2225');
 JS
 node - "$temp/verify" <<'JS'
 const path = require('node:path');
