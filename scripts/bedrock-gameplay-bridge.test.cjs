@@ -142,6 +142,8 @@ test('Android gameplay inbox carries joystick commands through controller execut
     snapshot() { return { capability: 'ready', active: true }; }
   };
   const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath, movement }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
   const cmd = (requestId, action, rest = {}) => {
     writeFileSync(commandPath, JSON.stringify({
       version: 'minepilot.gameplay.v1', requestId, action, ...rest
