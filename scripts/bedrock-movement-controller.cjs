@@ -352,6 +352,10 @@ class BedrockMovementController {
     const raw = { x: -this.controls.x, z: this.controls.z };
     const magnitude = Math.hypot(raw.x, raw.z);
     const processed = magnitude > 1 ? { x: raw.x / magnitude, z: raw.z / magnitude } : { ...raw };
+    if (control.sneak && !this.state.flying) {
+      processed.x *= 0.3;
+      processed.z *= 0.3;
+    }
     const input = {
       control,
       rawMoveVector: raw,
