@@ -444,18 +444,22 @@ class BedrockMovementController {
 
   correct(position, tick, packet = {}) {
     if (!finite3(position)) return;
+    const tickValue = tick == null ? null : (typeof tick === 'bigint' ? tick :
+      (Number.isInteger(Number(tick)) ? BigInt(tick) : null));
     const corrected = {
       pos: feetFromWire(position),
       vel: new Vec3(Number(packet.delta?.x) || 0, Number(packet.delta?.y) || 0, Number(packet.delta?.z) || 0),
       onGround: packet.on_ground === true
     };
-    const index = typeof tick === 'bigint' ? this.history.findIndex(entry => entry.tick === tick) : -1;
+    if (!this.state) this.resetFromServer(position, this.world?.yaw, this.world?.pitch,
+      corrected.onGround, corrected.vel);
+    let replayFailed = false;
+    const index = tickValue == null ? -1 : this.history.findIndex(entry => entry.tick === tickValue);
     if (index >= 0) {
       Object.assign(this.history[index].state, {
         pos: corrected.pos.clone(), vel: corrected.vel.clone(), onGround: corrected.onGround
       });
       let state = cloneState(this.history[index].state);
-      let replayFailed = false;
       for (let i = index + 1; i < this.history.length; i++) {
         const entry = this.history[i];
         this.applyInput(state, entry.input);
@@ -481,10 +485,10 @@ class BedrockMovementController {
     this.lastServerPosition = { ...position };
     this.lastServerPositionAt = Date.now();
     this.corrections++;
-    this.lastCorrection = { tick: tick == null ? null : String(tick), position: { ...position },
+    this.lastCorrection = { tick: tickValue == null ? null : String(tickValue), position: { ...position },
       velocity: { x: corrected.vel.x, y: corrected.vel.y, z: corrected.vel.z },
       onGround: corrected.onGround, replayed: index >= 0 ? this.history.length - index - 1 : 0 };
-    this.lastMovementResult = { status: 'reconciled', reason: 'server_prediction_correction' };
+    if (!replayFailed) this.lastMovementResult = { status: 'reconciled', reason: 'server_prediction_correction' };
   }
 
   knockback(packet) {
