@@ -838,7 +838,7 @@ public final class DashboardActivity extends Activity {
         boolean startPulse = !nextMode.equals(activeManualMode);
         activeManualMode = nextMode;
         if (startPulse) {
-            sendManualMotionPulse("vector");
+            sendManualMotionPulse(nextMode);
             manualControlHandler.removeCallbacks(repeatManualControl);
             manualControlHandler.postDelayed(repeatManualControl, 450);
         }
@@ -856,7 +856,7 @@ public final class DashboardActivity extends Activity {
             default -> { return; }
         }
         boolean active = Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
-                manualJump || manualSprint || manualSneak;
+                manualJump || manualSprint || manualSneak || !manualLookMode.isEmpty();
         if (!active) {
             stopManualControl();
             return;
