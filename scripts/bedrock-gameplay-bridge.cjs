@@ -220,6 +220,7 @@ class BedrockGameplayBridge {
         if (this.closed) return;
         this.tickControlPlane();
         this.tickRespawnRecovery();
+        this.tickLearning();
       }, this.controlTickMs);
       this.watch.unref?.();
       this.controlWatch.unref?.();
@@ -1692,14 +1693,12 @@ class BedrockGameplayBridge {
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
         unlinkSync(this.commandPath);
-        this.tickLearning();
         return;
       }
       data = readFileSync(this.commandPath, 'utf8');
       unlinkSync(this.commandPath);
     } catch (error) {
       if (error.code !== 'ENOENT') this.lastReceipt = { status: 'rejected', reason: 'inbox_error' };
-      this.tickLearning();
       return;
     }
     let command;
@@ -1707,7 +1706,6 @@ class BedrockGameplayBridge {
     catch { command = null; }
     // agent_start performs its own tick before replacing the current task.
     // All other commands share the normal single 100 ms runtime tick.
-    if (command?.action !== 'agent_start') this.tickLearning();
     const result = this.execute(command);
     const completedPlacement = command?.action === 'odyssey_execute' && command?.primitive === 'placeBlock' &&
       this.lastBlockPlacement?.requestId === command?.requestId ? this.lastBlockPlacement : null;
