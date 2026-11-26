@@ -1137,10 +1137,6 @@ public final class DashboardActivity extends Activity {
         String betaStage = current.getString("beta_stage", "");
         String betaBlockers = current.getString("beta_blockers", "");
         String betaPlanReason = current.getString("beta_plan_reason", "");
-        String motionMode = current.getString("motion_mode", "idle");
-        String motionStopReason = current.getString("motion_stop_reason", "");
-        String motionDisplacement = current.getString("motion_displacement", "");
-        String motionDrift = current.getString("motion_drift", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -1157,22 +1153,15 @@ public final class DashboardActivity extends Activity {
                         + " · Respawn acks: " + current.getInt("spawn_respawn_acks")
                         + " · Errors: " + current.getInt("spawn_handshake_errors")
                         + "\nInventory: " + inventory
-                        + "\nMotion diagnostic: " + motionMode
-                        + (current.getBoolean("motion_active", false) ? " · active" : " · idle")
-                        + "\nNeutral presence: " + (current.getBoolean("presence_active", false) ? "active" : "stopped")
-                        + " · Heartbeat frames: " + current.getInt("presence_frames")
-                        + (current.getString("presence_error", "").isEmpty() ? "" : " · Error: " + current.getString("presence_error"))
-                        + "\nInput frames sent: " + current.getInt("motion_frames")
-                        + " · Position echoes: " + current.getInt("motion_server_updates")
-                        + " · Prediction corrections: " + current.getInt("motion_corrections")
-                        + "\nAuth input v2225 · Model: " + current.getString("motion_model","unknown")
-                        + " · Tick: " + current.getString("input_last_tick","—")
-                        + " · Skipped timer ticks: " + current.getInt("input_skipped_ticks")
-                        + " · Correction anchors: " + current.getInt("input_correction_anchors")
-                        + " · Rejected stale anchors: " + current.getInt("input_rejected_anchors")
-                        + (motionDisplacement.isEmpty() ? "" : "\nObserved displacement (not proof): " + motionDisplacement)
-                        + (motionDrift.isEmpty() ? "" : " · Max drift: " + motionDrift)
-                        + (motionStopReason.isEmpty() ? "" : "\nLast motion stop: " + motionStopReason)
+                        + "\nPhysics movement: " + (movementReady ? "ready" : "waiting for server / terrain")
+                        + " · Frames: " + current.getInt("movement_frames")
+                        + " · Server corrections: " + current.getInt("movement_corrections")
+                        + "\nCollision data: " + current.getInt("movement_physics_blocks") + " blocks / "
+                        + current.getInt("movement_physics_states") + " states"
+                        + " · Terrain: " + (current.getBoolean("movement_terrain_ready", false) ? "observed" : "incomplete")
+                        + " · Queries: " + current.getInt("movement_terrain_queries")
+                        + (current.getString("movement_last_reason", "").isEmpty() ? "" :
+                            "\nMovement status: " + current.getString("movement_last_reason").replace('_', ' '))
                         + (betaStage.isEmpty() ? "" :
                             "\nGameplay beta: " + betaStage
                             + (current.getBoolean("beta_ready", false) ? " · ready" : " · not device-verified")
