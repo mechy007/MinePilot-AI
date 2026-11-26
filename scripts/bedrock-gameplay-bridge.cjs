@@ -13,6 +13,7 @@ const { BedrockStackRequestManager } = require('./bedrock-stack-request-manager.
 const { BedrockInventoryLedger } = require('./bedrock-inventory-ledger.cjs');
 const { BedrockRecipeCatalog, sumItem } = require('./bedrock-recipe-catalog.cjs');
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
+const { BedrockTerrainCheck } = require('./bedrock-terrain-check.cjs');
 const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill, learningEngineFor, evaluateCapabilities, startBedrockNativeSkill } = require('./bedrock-skill-manifest.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
@@ -69,6 +70,7 @@ class BedrockGameplayBridge {
     this.layerEight = options.layerEight ?? null;
     this.addonNavigation = options.addonNavigation ?? null;
     this.terrain = options.terrain ?? null;
+    this.terrainCheck = options.terrainCheck ?? new BedrockTerrainCheck();
     this.routePlanner = options.routePlanner ?? null;
     this.registryResolver = options.registryResolver ?? null;
     this.navigationRoute = null;
@@ -238,6 +240,7 @@ class BedrockGameplayBridge {
     this.pendingHotbarSelection = null;
     this.lastHotbarSelection = null;
     this.terrain?.reset(this.dimension);
+    this.terrainCheck?.reset?.();
     this.intelligence?.reset(this.dimension);
     this.navigationRoute = null;
     this.lastIntelligenceDecision = null;
@@ -1022,6 +1025,7 @@ class BedrockGameplayBridge {
     try {
       // The gameplay agent owns its own cadence while active; otherwise keep
       // safety observations fresh from the bridge's 100 ms control loop.
+      this.checkTerrainReadiness();
       if (!this.gameplayAgent?.snapshot?.()?.active) this.intelligenceTick();
       if (this.addonNavigation) this.updateAddonNavigation();
       this.controlTickStatus = { state: 'healthy', reason: 'control_tick_ok' };
@@ -1029,27 +1033,22 @@ class BedrockGameplayBridge {
       this.controlTickStatus = { state: 'error', reason: 'control_tick_failed' };
     }
   }
-  requestMovementTerrainRecovery(unknownCells) {
-    if (this.closed || !this.position || !Array.isArray(unknownCells) ||
-        typeof this.requestLocalSubchunks !== 'function') return 0;
-    // Manual input stays blocked while collision data is unknown. Recover by
-    // requesting the exact missing chunk columns instead of waiting for a new
-    // LevelChunk header that may never arrive. Existing per-column throttling
-    // keeps these bounded and prevents request floods.
-    const columns = new Set();
-    for (const cell of unknownCells.slice(0, 8)) {
-      if (!cell || cell.reason !== 'block_not_observed' ||
-          !Number.isFinite(cell.x) || !Number.isFinite(cell.z)) continue;
-      columns.add(Math.floor(cell.x / 16) + ':' + Math.floor(cell.z / 16));
-    }
-    let requested = 0;
-    for (const key of columns) {
-      const [x, z] = key.split(':').map(Number);
-      if (this.requestLocalSubchunks({
-        x, z, dimension: this.dimension, sub_chunk_count: 0xffffffff
-      })) requested++;
-    }
-    return requested;
+  checkTerrainReadiness() {
+    if (this.closed || !this.terrainCheck) return null;
+    const movementCapability = this.movement?.capability?.(this) ?? 'unavailable';
+    const movementSnapshot = this.movement?.snapshot?.() ?? null;
+    return this.terrainCheck.check({
+      now: this.clock(), spawned: this.spawned, position: this.position,
+      dimension: this.dimension, movementCapability, movementSnapshot,
+      terrainSnapshot: this.terrain?.snapshot?.() ?? null,
+      requestSubchunks: packet => this.requestLocalSubchunks(packet)
+    });
+  }
+
+  requestMovementTerrainRecovery() {
+    if (this.closed || !this.terrainCheck) return 0;
+    const result = this.checkTerrainReadiness();
+    return result?.columnsRequested ?? 0;
   }
 
   snapshot() {
@@ -1057,8 +1056,7 @@ class BedrockGameplayBridge {
     const age = this.lastServerPositionAt == null ? null : Math.max(0, now - this.lastServerPositionAt);
     const movementCapability = this.movement?.capability?.(this) ?? 'unavailable';
     const movementSystem = this.movement?.snapshot?.() ?? null;
-    if (movementCapability !== 'ready')
-      this.requestMovementTerrainRecovery(movementSystem?.unknownCells);
+    const terrainCheck = this.checkTerrainReadiness();
     return {
       state: this.closed ? 'closed' : this.spawned && this.self && this.position && this.receivedChunks.size
         ? 'observing' : 'awaiting_world',
@@ -1081,6 +1079,7 @@ class BedrockGameplayBridge {
       // A chunk header does NOT prove decoded, navigable block/voxel data.
       blocksDecoded: (this.terrain?.snapshot().decodedSections ?? 0)>0,
       ...(this.terrain ? { terrain: this.terrain.snapshot() } : {}),
+      ...(terrainCheck ? { terrainCheck } : {}),
       craftingRecipes: this.recipeCatalog?.snapshot?.(64) ?? null,
       crafting: this.pendingCraft ? { state: 'awaiting_server_confirmation', recipeId: this.pendingCraft.recipe.id,
         resultItem: this.pendingCraft.resultItem, timesCrafted: this.pendingCraft.timesCrafted } : this.lastCraft ? { ...this.lastCraft } : { state: 'idle' },
