@@ -1279,3 +1279,26 @@ test('movement readiness retries exact missing terrain columns without bypassing
     'a still-missing column can be retried after the cooldown');
   bridge.stop();
 });
+
+test('live control loop actively runs terrain preflight and exposes its status', () => {
+  const client = new Client();
+  const movement = {
+    capability() { return 'unavailable'; },
+    snapshot() { return { unknownCells: [
+      { x: 40, y: 70, z: -20, reason: 'block_not_observed' }
+    ] }; },
+    stop() {}, stopPresence() {}
+  };
+  const bridge = new BedrockGameplayBridge(client, { movement }).start();
+  client.emit('start_game', { ...start, player_position: { x: 8.5, y: 64, z: 10.5 } });
+  client.emit('spawn');
+  client.sent.length = 0;
+  bridge.tickControlPlane();
+  const requests = client.sent.filter(item => item.packet === 'subchunk_request');
+  assert.equal(requests.length, 1, 'control loop requests missing terrain without waiting for UI polling');
+  const status = bridge.snapshot().terrainCheck;
+  assert.equal(status.ready, false);
+  assert.equal(status.state, 'blocked', 'the request is not treated as proof that terrain arrived');
+  assert.equal(status.reason, 'terrain_observation_incomplete');
+  bridge.stop();
+});
