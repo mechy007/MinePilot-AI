@@ -136,10 +136,15 @@ class BedrockMovementController {
       this.lastInput = { tick: String(tick), position: packet.position, delta: packet.delta,
         input: inputFlags };
       const vector = packet.move_vector ?? {};
-      const nonNeutral = Math.hypot(Number(vector.x) || 0, Number(vector.z) || 0) > 0.02 ||
+      const nonNeutralInput = Math.hypot(Number(vector.x) || 0, Number(vector.z) || 0) > 0.02 ||
         inputFlags.some(flag => ['jump_down', 'jumping', 'sprint_down', 'sprinting',
           'sneak_down', 'sneaking'].includes(flag));
-      if (nonNeutral) {
+      const position = packet.position;
+      const predictedDisplacement = finite3(position) && finite3(this.lastServerPosition)
+        ? Math.hypot(position.x - this.lastServerPosition.x,
+            position.y - this.lastServerPosition.y, position.z - this.lastServerPosition.z)
+        : 0;
+      if (nonNeutralInput && predictedDisplacement > 0.02) {
         if (!this.unconfirmedMovement) this.lastNonNeutralAt = Date.now();
         this.unconfirmedMovement = true;
         this.nonNeutralFrames++;
