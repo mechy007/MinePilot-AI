@@ -7,7 +7,7 @@ temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
 
 npm --prefix "$root" run build
-npm install --prefix "$temp" --no-save --ignore-scripts --omit=optional bedrock-protocol@3.61.0 minecraft-data@3.119.0 prismarine-auth@3.1.1 nethernet@1.1.2 vec3@0.1.10
+npm install --prefix "$temp" --no-save --ignore-scripts --omit=optional bedrock-protocol@3.61.0 minecraft-data@3.119.0 prismarine-auth@3.1.1 nethernet@1.1.2
 node "$root/scripts/bedrock-protocol-wire-contract.cjs" "$temp/node_modules/bedrock-protocol"
 # Live responses report expires_in in seconds. In 3.1.1 the live cache adds
 # that value directly to Date.now(), which expires a one-hour token in 3.6 seconds.
