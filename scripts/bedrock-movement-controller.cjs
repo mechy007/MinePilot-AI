@@ -1,6 +1,6 @@
 'use strict';
 
-const { Vec3 } = require('vec3');
+const { Vec3 } = require('../vendor/bedboo-physics/lib/vec3');
 const { Physics, PlayerState } = require('../vendor/bedboo-physics/lib/physics');
 const { buildFlags } = require('../vendor/bedboo-physics/lib/physics/input');
 const { createInputQueue } = require('../vendor/bedboo-physics/lib/bedrock/input_queue');
