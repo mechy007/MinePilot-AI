@@ -52,19 +52,24 @@ class BedrockPhysicsWorld {
     this.unknown = false;
     this.queries = 0;
     this.hashedIds = false;
+    this.blockCache = new Map();
   }
   beginTick() {
     this.unknown = false;
     this.queries = 0;
+    this.blockCache.clear();
   }
   getBlock(pos) {
     const x = Math.floor(pos.x);
     const y = Math.floor(pos.y);
     const z = Math.floor(pos.z);
+    const cacheKey = x + ',' + y + ',' + z;
+    if (this.blockCache.has(cacheKey)) return this.blockCache.get(cacheKey);
     const runtimeId = this.terrain?.blockId(this.dimension, x, y, z);
     this.queries++;
     if (runtimeId === null || runtimeId === undefined) {
       this.unknown = true;
+      this.blockCache.set(cacheKey, null);
       return null;
     }
     const key = this.hashedIds ? (Number(runtimeId) >>> 0) : Number(runtimeId);
@@ -76,6 +81,7 @@ class BedrockPhysicsWorld {
       ? profile.name : 'minecraft:' + (profile?.name ?? '');
     if (!profile || !registered || registered.name !== expectedName) {
       this.unknown = true;
+      this.blockCache.set(cacheKey, null);
       return null;
     }
     const block = {
@@ -90,6 +96,7 @@ class BedrockPhysicsWorld {
       shapes: profile.shapes,
       getProperties: () => profile.properties
     };
+    this.blockCache.set(cacheKey, block);
     return block;
   }
 }
