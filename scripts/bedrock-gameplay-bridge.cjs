@@ -425,8 +425,7 @@ class BedrockGameplayBridge {
   completeRespawnRecovery() {
     const recovery = this.respawnRecovery;
     if (this.closed || recovery.state === 'alive' || !recovery.healthConfirmed ||
-        !finitePosition(recovery.position) ||
-        (recovery.serverState !== 1 && !recovery.spawnObserved)) return false;
+        !finitePosition(recovery.position) || !recovery.spawnObserved) return false;
     const position = safePoint(recovery.position);
     const resumeTask = recovery.resumeTask;
     this.position = position;
@@ -522,6 +521,7 @@ class BedrockGameplayBridge {
         // action-cycle counter so the next ReadyToSpawn can be acknowledged.
         recovery.state = 'dead_waiting_for_server';
         recovery.attempts = 0;
+        recovery.spawnObserved = false;
       }
       if (this.completeRespawnRecovery()) return;
       this.tickRespawnRecovery();
