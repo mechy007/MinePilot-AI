@@ -165,11 +165,14 @@ class BedrockMovementController {
     this.terrain = world.terrain;
     if (!this.loadPhysics()) return false;
     this.physicsWorld.dimension = world.dimension;
-    this.physicsWorld.hashedIds = world.blockNetworkIdsAreHashes === true;
+    const hashedAirId = (-604749536) >>> 0;
+    this.physicsWorld.hashedIds = world.blockNetworkIdsAreHashes === true ||
+      (world.blockNetworkIdsAreHashes !== false && this.terrain.registry?.has(hashedAirId) === true);
     this.lastServerPosition = { ...world.position };
     this.lastServerPositionAt = world.lastServerPositionAt ?? Date.now();
     this.lastServerTick = world.serverTick;
     if (!this.started || !this.state) this.resetFromServer(world.position, world.yaw, world.pitch, false);
+    this.preflightTerrain(world);
     this.inputQueue.anchor(world.serverTick, world.serverTickObservedAt ?? Date.now());
     this.inputQueue.start();
     this.started = true;
