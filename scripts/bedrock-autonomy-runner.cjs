@@ -69,7 +69,7 @@ class VerifiedAutonomyRunner {
     this.startedAt=this.clock();
     this.initialDimension=world.dimension;
     this.awaiting=null;
-    this.lastReason='experimental_autonomy_started_not_verified';
+    this.lastReason='autonomy_started_not_verified';
     this.interval=this.setInterval(()=>this.pulse(),TICK_MS);
     return {status:'accepted',reason:'bounded_follow_autonomy_started'};
   }
