@@ -13,9 +13,9 @@ const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const finite3 = p => p && ['x', 'y', 'z'].every(k => Number.isFinite(p[k]));
 const validTick = value => typeof value === 'bigint' && value >= 0n;
 const wireYaw = yaw => ((180 - yaw * 180 / Math.PI) % 360 + 360) % 360;
-const wirePitch = pitch => clamp(pitch * 180 / Math.PI, -90, 90);
+const wirePitch = pitch => clamp(-pitch * 180 / Math.PI, -90, 90);
 const fromWireYaw = yaw => Math.PI - Number(yaw) * Math.PI / 180;
-const fromWirePitch = pitch => Number(pitch) * Math.PI / 180;
+const fromWirePitch = pitch => -Number(pitch) * Math.PI / 180;
 const viewDirection = (yaw, pitch) => {
   const cp = Math.cos(pitch);
   return { x: -Math.sin(yaw) * cp, y: Math.sin(pitch), z: -Math.cos(yaw) * cp };
