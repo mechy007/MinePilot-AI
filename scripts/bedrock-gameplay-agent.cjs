@@ -2,8 +2,8 @@
 
 /**
  * Bedrock Gameplay Agent V1
- * The only automated locomotion path is the existing experimental player
- * input writer. Every step requires explicitly classified collision-safe
+ * The only automated locomotion path is the shared physics-based Bedrock
+ * movement controller. Every step requires explicitly classified collision-safe
  * voxels and a later, fresh SERVER position update showing progress.
  *
  * Goals: explore verified terrain, follow named player, return home, approach
@@ -84,8 +84,8 @@ class BedrockGameplayAgent {
        typeof world.terrain.tile!=='function' ||
        typeof world.routePlanner!=='function')
       return 'verified_terrain_unavailable';
-    if(world.movement?.capability?.(world)!=='experimental')
-      return 'experimental_movement_not_enabled';
+    if(world.movement?.capability?.(world)!=='ready')
+      return 'movement_unavailable';
     if(world.blockBreaker?.snapshot?.()?.active)
       return 'block_break_busy';
     return null;
@@ -541,7 +541,7 @@ class BedrockGameplayAgent {
       failures:this.failures,maxSteps:MAX_STEPS,runBudgetMs:MAX_RUN_MS,
       target:this.awaiting?{...this.awaiting.target}:null,
       lastPlan:this.lastPlan?{target:{...this.lastPlan.target},kind:this.lastPlan.kind}:null,
-      execution:this.active?'experimental_verified_movement':'inactive',
+      execution:this.active?'physics_verified_movement':'inactive',
       collectedDrops:this.collected,
       currentSubgoal:this.subgoal?{kind:this.subgoal.kind,item:this.subgoal.item}:null,
       targetPosition:this.targetPosition?{...this.targetPosition}:null,
