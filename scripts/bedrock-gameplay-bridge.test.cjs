@@ -1241,3 +1241,41 @@ test('server returning to SearchingForSpawn restarts the correct respawn handsha
   assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 2);
   bridge.stop();
 });
+
+
+test('movement readiness retries exact missing terrain columns without bypassing collision safety', () => {
+  let now = 1000;
+  const client = new Client();
+  const movement = {
+    capability() { return 'unavailable'; },
+    snapshot() { return { unknownCells: [
+      { x: 40, y: 70, z: -20, reason: 'block_not_observed' },
+      { x: 41, y: 70, z: -19, reason: 'block_not_observed' },
+      { x: 8, y: 64, z: 10, reason: 'collision_mapping_unavailable' }
+    ] }; },
+    stop() {}, stopPresence() {}
+  };
+  const bridge = new BedrockGameplayBridge(client, { movement, clock: () => now }).start();
+  client.emit('start_game', { ...start, player_position: { x: 8.5, y: 64, z: 10.5 } });
+  client.emit('spawn');
+  client.sent.length = 0;
+
+  assert.equal(bridge.snapshot().movement, 'unavailable',
+    'unknown terrain must continue to block movement');
+  let requests = client.sent.filter(item => item.packet === 'subchunk_request');
+  assert.equal(requests.length, 1, 'request the missing chunk column found by preflight');
+  assert.deepEqual(requests[0].value.requests, [
+    { x: 2, y: -2, z: -2 }, { x: 2, y: -1, z: -2 },
+    { x: 2, y: 0, z: -2 }, { x: 2, y: 1, z: -2 },
+    { x: 2, y: 2, z: -2 }
+  ]);
+
+  bridge.snapshot();
+  assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 1,
+    'repeated status snapshots must respect the per-column cooldown');
+  now += 15001;
+  bridge.snapshot();
+  assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 2,
+    'a still-missing column can be retried after the cooldown');
+  bridge.stop();
+});

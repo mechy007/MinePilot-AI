@@ -1029,9 +1029,36 @@ class BedrockGameplayBridge {
       this.controlTickStatus = { state: 'error', reason: 'control_tick_failed' };
     }
   }
+  requestMovementTerrainRecovery(unknownCells) {
+    if (this.closed || !this.position || !Array.isArray(unknownCells) ||
+        typeof this.requestLocalSubchunks !== 'function') return 0;
+    // Manual input stays blocked while collision data is unknown. Recover by
+    // requesting the exact missing chunk columns instead of waiting for a new
+    // LevelChunk header that may never arrive. Existing per-column throttling
+    // keeps these bounded and prevents request floods.
+    const columns = new Set();
+    for (const cell of unknownCells.slice(0, 8)) {
+      if (!cell || cell.reason !== 'block_not_observed' ||
+          !Number.isFinite(cell.x) || !Number.isFinite(cell.z)) continue;
+      columns.add(Math.floor(cell.x / 16) + ':' + Math.floor(cell.z / 16));
+    }
+    let requested = 0;
+    for (const key of columns) {
+      const [x, z] = key.split(':').map(Number);
+      if (this.requestLocalSubchunks({
+        x, z, dimension: this.dimension, sub_chunk_count: 0xffffffff
+      })) requested++;
+    }
+    return requested;
+  }
+
   snapshot() {
     const now = this.clock();
     const age = this.lastServerPositionAt == null ? null : Math.max(0, now - this.lastServerPositionAt);
+    const movementCapability = this.movement?.capability?.(this) ?? 'unavailable';
+    const movementSystem = this.movement?.snapshot?.() ?? null;
+    if (movementCapability !== 'ready')
+      this.requestMovementTerrainRecovery(movementSystem?.unknownCells);
     return {
       state: this.closed ? 'closed' : this.spawned && this.self && this.position && this.receivedChunks.size
         ? 'observing' : 'awaiting_world',
@@ -1090,8 +1117,8 @@ class BedrockGameplayBridge {
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       respawnRecovery: { ...this.respawnRecovery,
         resumeTask: this.respawnRecovery.resumeTask ? { ...this.respawnRecovery.resumeTask } : null },
-      movement: this.movement?.capability?.(this) ?? 'unavailable',
-      ...(this.movement?.snapshot ? { movementSystem: this.movement.snapshot() } : {}),
+      movement: movementCapability,
+      ...(movementSystem ? { movementSystem } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
       ...(this.layerTwo ? { layerTwo: this.layerTwo.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerThree ? { layerThree: this.layerThree.snapshot(this.gameplayWorld()) } : {}),
