@@ -341,6 +341,8 @@ assert.equal(data.stateCount, 23960);
 assert.equal(data.profilesByHash.size, data.stateCount);
 assert.equal(data.profilesByStateId.size, data.stateCount);
 assert.ok(data.blockCount > 1000);
+assert.equal(data.registry.blocksByName.air.id, 0);
+assert.equal(data.registry.blocksByName.stone.id, 1);
 assert.equal(data.registry.blocksByName.ice.friction, 0.98);
 assert.equal(data.registry.blocksByName.blue_ice.friction, 0.989);
 assert.equal(data.registry.blocksByName.slime.friction, 0.8);
