@@ -9,7 +9,7 @@ import android.view.View;
 
 /** Touch joystick for bounded, cardinal manual bot movement. */
 public final class ManualJoystickView extends View {
-    public interface Listener { void onDirectionChanged(String direction); }
+    public interface Listener { void onVectorChanged(float strafe, float forward); }
 
     private final Paint base = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -23,7 +23,6 @@ public final class ManualJoystickView extends View {
     private float centerY;
     private float radius;
     private float knobRadius;
-    private String direction = "";
 
     public ManualJoystickView(Context context) { super(context); init(); }
     public ManualJoystickView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -31,7 +30,7 @@ public final class ManualJoystickView extends View {
 
     private void init() {
         setFocusable(true);
-        setContentDescription("Manual movement joystick. Drag up, down, left or right. Release to stop.");
+        setContentDescription("Analog movement joystick. Drag in any direction for 360-degree movement; release to stop.");
         base.setColor(0xff202c40);
         base.setStyle(Paint.Style.FILL);
         ring.setColor(0xff65e4ad);
@@ -108,24 +107,24 @@ public final class ManualJoystickView extends View {
         }
         x = centerX + dx;
         y = centerY + dy;
-        float normalized = (float)Math.hypot(dx, dy) / Math.max(1f, limit);
-        String next = "";
-        if (normalized >= .22f) {
-            if (Math.abs(dx) > Math.abs(dy)) next = dx < 0 ? "strafe_left" : "strafe_right";
-            else next = dy < 0 ? "forward" : "backward";
+        float strafe = dx / Math.max(1f, limit);
+        float forward = -dy / Math.max(1f, limit);
+        float normalized = (float)Math.hypot(strafe, forward);
+        if (normalized < .12f) {
+            strafe = 0f;
+            forward = 0f;
+        } else if (normalized > 1f) {
+            strafe /= normalized;
+            forward /= normalized;
         }
-        if (!next.equals(direction)) {
-            direction = next;
-            if (listener != null) listener.onDirectionChanged(direction);
-        }
+        if (listener != null) listener.onVectorChanged(strafe, forward);
         invalidate();
     }
 
     private void release() {
         x = centerX;
         y = centerY;
-        direction = "";
-        if (listener != null) listener.onDirectionChanged("");
+        if (listener != null) listener.onVectorChanged(0f, 0f);
         invalidate();
     }
 
