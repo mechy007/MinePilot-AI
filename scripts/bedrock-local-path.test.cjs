@@ -35,11 +35,11 @@ test('A* will not cut diagonally through blocked corners', () => {
   assert.notDeepEqual([result.path[1].x, result.path[1].z], [1.5, 1.5]);
 });
 
-test('unknown terrain blocks route proposals rather than becoming air', () => {
-  const terrain = world(new Set(), new Set(['1,0', '0,1', '1,1']));
+test('unknown terrain at the destination is rejected without guessing', () => {
+  const terrain = world(new Set(), new Set(['1,1']));
   const result = planLocalRoute(terrain, 0, pos(0, 0), pos(1, 1));
   assert.equal(result.status, 'unverified');
-  assert.equal(result.reason, 'no_verified_route');
+  assert.equal(result.reason, 'start_or_target_not_verified_walkable');
 });
 
 test('A* keeps the vertical-level safety boundary', () => {
@@ -48,7 +48,7 @@ test('A* keeps the vertical-level safety boundary', () => {
 });
 
 test('search and path budgets remain bounded', () => {
-  const result = planLocalRoute(world(), 0, pos(0, 0), pos(12, 12), {
+  const result = planLocalRoute(world(), 0, pos(0, 0), pos(24, 24), {
     radius: 24, maxExpanded: 16
   });
   assert.equal(result.status, 'unverified');
