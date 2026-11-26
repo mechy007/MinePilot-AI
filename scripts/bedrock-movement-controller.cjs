@@ -132,8 +132,19 @@ class BedrockMovementController {
     this.inputQueue.setProvider((tick) => this.tick(tick));
     this.inputQueue.onSent((packet, tick) => {
       this.framesSent++;
+      const inputFlags = Array.isArray(packet.input_data) ? packet.input_data : [];
       this.lastInput = { tick: String(tick), position: packet.position, delta: packet.delta,
-        input: packet.input_data ?? [] };
+        input: inputFlags };
+      const vector = packet.move_vector ?? {};
+      const nonNeutral = Math.hypot(Number(vector.x) || 0, Number(vector.z) || 0) > 0.02 ||
+        inputFlags.some(flag => ['jump_down', 'jumping', 'sprint_down', 'sprinting',
+          'sneak_down', 'sneaking'].includes(flag));
+      if (nonNeutral) {
+        if (!this.unconfirmedMovement) this.lastNonNeutralAt = Date.now();
+        this.unconfirmedMovement = true;
+        this.nonNeutralFrames++;
+        this.lastMovementResult = { status: 'awaiting_server_ack', reason: 'awaiting_server_position' };
+      }
     });
   }
 
@@ -421,13 +432,6 @@ class BedrockMovementController {
       interaction_model: 'crosshair'
     };
     this.previousInput = current;
-    const nonNeutral = Math.hypot(this.controls.x, this.controls.z) > 0.02 ||
-      control.jump || control.sprint || control.sneak;
-    if (nonNeutral) {
-      if (!this.unconfirmedMovement) this.lastNonNeutralAt = now;
-      this.unconfirmedMovement = true;
-      this.nonNeutralFrames++;
-    }
     this.history.push({ tick, input: this.captureInput(input), state: cloneState(this.state) });
     if (this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
     if (!serverAckTimedOut) this.lastMovementResult = this.unconfirmedMovement
