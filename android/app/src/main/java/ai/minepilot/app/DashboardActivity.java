@@ -389,71 +389,10 @@ public final class DashboardActivity extends Activity {
         if (xuidInput != null) xuidDraft = xuidInput.getText().toString();
         xuidInput = null;
         currentTab = tab;
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
-        root.setPadding(dp(18), dp(12), dp(18), dp(10));
-        if (Build.VERSION.SDK_INT >= 30) {
-            root.setOnApplyWindowInsetsListener((view, insets) -> {
-                android.graphics.Insets bars = insets.getInsets(Type.systemBars() | Type.displayCutout());
-                view.setPadding(dp(18) + bars.left, dp(12) + bars.top, dp(18) + bars.right, dp(10) + bars.bottom);
-                return insets;
-            });
-        }
-        LinearLayout heading = new LinearLayout(this);
-        heading.setGravity(Gravity.CENTER_VERTICAL);
-        ImageView mark = new ImageView(this);
-        mark.setImageResource(R.drawable.minepilot_icon_foreground);
-        mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        heading.addView(mark, new LinearLayout.LayoutParams(dp(46), dp(46)));
-        LinearLayout brandStack = new LinearLayout(this);
-        brandStack.setOrientation(LinearLayout.VERTICAL);
-        brandStack.setPadding(dp(8), 0, 0, 0);
-        TextView brand = text("MinePilot", 23, INK, true);
-        brandStack.addView(brand);
-        TextView tagline = text("BEDROCK COMPANION  ·  ANDROID", 9, MUTED, true);
-        tagline.setLetterSpacing(.12f);
-        brandStack.addView(tagline);
-        heading.addView(brandStack, new LinearLayout.LayoutParams(-2, -2));
-        root.addView(heading, new LinearLayout.LayoutParams(-1, dp(60)));
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true); scroll.setVerticalScrollBarEnabled(false);
-        body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(0, dp(6), 0, dp(16)); scroll.addView(body);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        status = text("", 13, INK, false);
-        status.setPadding(dp(12), dp(10), dp(12), dp(10));
-        status.setBackground(surface(PANEL, 6));
-        status.setVisibility(View.GONE);
-        root.addView(status);
-        LinearLayout nav = new LinearLayout(this);
-        nav.setPadding(dp(5), dp(7), dp(5), dp(5));
-        nav.setBackground(surface(PANEL, 16));
-        for (String page : new String[]{"World", "Xbox", "Skills", "Logs", "Settings"}) {
-            boolean selected = page.equals(tab) || ("Settings".equals(page) && "Diagnostics".equals(tab));
-            Button item = new Button(this);
-            item.setText(switch (page) {
-                case "World" -> "Control";
-                case "Xbox" -> "Friends";
-                case "Logs" -> "Activity";
-                default -> page;
-            });
-            item.setAllCaps(false);
-            item.setTextSize(11);
-            item.setMinHeight(dp(48));
-            item.setPadding(dp(2), 0, dp(2), 0);
-            item.setTextColor(selected ? BG : MUTED);
-            item.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            item.setSelected(selected);
-            item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2673dab6),
-                    surface(selected ? GRASS : PANEL, 10), null));
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
-            params.setMargins(dp(3), 0, dp(3), 0);
-            nav.addView(item, params);
-            item.setOnClickListener(view -> show(page));
-        }
-        root.addView(nav);
-        setContentView(root);
+        DashboardShell shell = new DashboardShell(this, tab, this::show);
+        body = shell.content();
+        status = shell.status();
+        setContentView(shell);
 
         boolean signedIn = BotAccount.saved(this);
         switch (tab) {
