@@ -661,28 +661,10 @@ public final class DashboardActivity extends Activity {
     }
 
     private void showSkills() {
-        hero("BOT SKILLS", "Capabilities", "See the actions and observations available to your bot.");
-        skillCard("Vitals awareness", "Available", GRASS,
-                "Reads the bot’s health and hunger while connected and flags low vitals.");
-        section("Planned skills");
-        skillCard("Follow a player", "Planned", AMBER, "Track a selected player and maintain a follow distance.");
-        skillCard("Resource observations", "Experimental", AMBER,
-                "Read item registry, nearby drops and block updates; gathering remains planning-only.");
-        skillCard("Survival priorities", "Experimental", AMBER,
-                "Pause plans on critical vitals and suggest observed food; no automatic eating or combat.");
-        skillCard("Craft and shelter plans", "Experimental", AMBER,
-                "Estimate plank materials and preview a 23-block shelter; no crafting or placement yet.");
+        SkillsScreen.render(this, body);
     }
 
-    private void skillCard(String name, String availability, int color, String description) {
-        LinearLayout card = card();
-        card.addView(text(availability, 12, color, true));
-        TextView title = text(name, 19, INK, true);
-        title.setPadding(0, dp(4), 0, dp(4));
-        card.addView(title);
-        card.addView(text(description, 14, MUTED, false));
-        body.addView(card, panelLayout(10));
-    }
+
 
     private Bundle worldRequest(String method, String sessionId) {
         return worldRequest(method, sessionId, null);
