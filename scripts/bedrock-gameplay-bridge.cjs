@@ -548,7 +548,11 @@ class BedrockGameplayBridge {
     }
     this.spawned = true;
     if (this.spawnTrace.loadingCompleted || typeof this.client.queue !== 'function') {
-      if (this.spawnTrace.loadingCompleted) this.movement?.startPresence?.(this);
+      // The health+Respawn recovery path may already have re-anchored the
+      // movement stream before the SDK emits its companion spawn event.
+      if (this.spawnTrace.loadingCompleted &&
+          this.movement?.snapshot?.()?.presenceActive !== true)
+        this.movement?.startPresence?.(this);
       return;
     }
     try {
