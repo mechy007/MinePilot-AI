@@ -584,6 +584,7 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putString("autonomy_reason", autonomy.optString("stopReason", ""));
                     result.putInt("autonomy_attempted", autonomy.optInt("attemptedSteps", 0));
                     result.putInt("autonomy_verified", autonomy.optInt("serverVerifiedSteps", 0));
+                    result.putInt("autonomy_predicted_steps", autonomy.optInt("predictionSteps", 0));
                 }
                 JSONObject navigator = gameplay.optJSONObject("addonNavigation");
                 if (navigator != null) {
@@ -626,6 +627,14 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
                             + ": " + command.optString("reason", ""));
+                    String executionStage = command.optString("executionStage", "");
+                    if (executionStage.matches("[a-z_]{1,64}"))
+                        result.putString("last_command_execution_stage", executionStage);
+                    result.putBoolean("last_command_dispatch_accepted",
+                            command.optBoolean("dispatchAccepted", false));
+                    String serverConfirmation = command.optString("serverConfirmation", "");
+                    if (serverConfirmation.matches("[a-z_]{1,64}"))
+                        result.putString("last_command_server_confirmation", serverConfirmation);
                     String primitive = command.optString("primitive", "");
                     if (primitive.matches("getLogsCount|getPlanksCount|checkBlockAbove|checkBlocksAround|findSuitablePosition")) {
                         result.putString("last_command_primitive", primitive);
@@ -896,6 +905,7 @@ public final class WorldSessionProvider extends ContentProvider {
             Files.move(temporary, inbox, StandardCopyOption.ATOMIC_MOVE);
             result.putString("request_id", requestId);
             result.putBoolean("accepted", true);
+            result.putString("queue_stage", "queued_for_runtime");
         } catch (Exception ignored) {
             // Command is rejected or the session already ended. Never send account data.
         } finally {
