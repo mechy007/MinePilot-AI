@@ -237,7 +237,8 @@ class BedrockMovementController {
     const modes = {
       forward: { x: 0, z: 1 }, backward: { x: 0, z: -1 },
       strafe_left: { x: -1, z: 0 }, strafe_right: { x: 1, z: 0 },
-      turn_left: { x: 0, z: 0 }, turn_right: { x: 0, z: 0 }
+      turn_left: { x: 0, z: 0 }, turn_right: { x: 0, z: 0 },
+      jump: { x: 0, z: 0 }, sprint: { x: 0, z: 0 }, sneak: { x: 0, z: 0 }
     };
     const vector = options.vector && Number.isFinite(options.vector.x) && Number.isFinite(options.vector.y)
       ? { x: options.vector.x, z: options.vector.y } : modes[options.mode];
