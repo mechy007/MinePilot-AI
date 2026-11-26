@@ -42,6 +42,8 @@ test('collision registry maps hashed Bedrock states to exact collision boxes', (
   assert.deepEqual(data.profilesByHash.get(100).shapes, []);
   assert.deepEqual(data.profilesByHash.get(101).shapes, [[0, 0, 0, 1, 1, 1]]);
   assert.equal(data.registry.blocksByName.stone.id, 1);
+  assert.equal(data.profilesByStateId.get(0).name, 'air');
+  assert.equal(data.profilesByStateId.get(1).name, 'stone');
 });
 
 test('Bedrock physics engine applies directional movement and gravity against loaded terrain', () => {
@@ -117,6 +119,31 @@ test('movement controller refuses to predict through an unknown terrain cell', (
   assert.equal(controller.snapshot().terrain.unknown, true);
   assert.deepEqual(frame.move_vector, { x: 0, z: 0 });
   assert.equal(controller.lastMovementResult.reason, 'terrain_not_fully_observed');
+  controller.stop();
+});
+
+
+test('movement controller supports numeric runtime-state palettes as well as hashed IDs', () => {
+  const data = fixture();
+  const terrain = {
+    dimension: 0,
+    registry: new Map([[0, { name: 'minecraft:air' }], [1, { name: 'minecraft:stone' }]]),
+    blockId(dimension, x, y) { return y < 0 ? 1 : 0; }
+  };
+  const client = { packets: [], queue(name, packet) { this.packets.push({ name, packet }); } };
+  const timers = { setInterval() { return { unref() {} }; }, clearInterval() {} };
+  const controller = new BedrockMovementController(client, { terrain, collisionData: data, timers });
+  const world = {
+    closed: false, spawned: true, position: { x: 0, y: 1.62, z: 0 }, yaw: 0, pitch: 0,
+    self: { runtimeId: 1 }, movementAuthority: 1, serverTick: 100n,
+    serverTickObservedAt: Date.now(), dimension: 0, blockNetworkIdsAreHashes: false,
+    terrain, receivedChunks: new Map([['0:0', true]])
+  };
+  assert.equal(controller.startPresence(world), true);
+  assert.equal(controller.physicsWorld.hashedIds, false);
+  assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
+  const frame = controller.tick(101n);
+  assert.ok(frame.position.z > world.position.z);
   controller.stop();
 });
 
