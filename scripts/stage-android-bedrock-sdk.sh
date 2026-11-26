@@ -231,7 +231,6 @@ cp "$root/vendor/bedboo-physics/COPYING" "$temp/vendor/bedboo-physics/COPYING"
 cp "$root/vendor/bedboo-physics/COPYING.LESSER" "$temp/vendor/bedboo-physics/COPYING.LESSER"
 cp "$root/vendor/bedboo-physics/NOTICE.md" "$temp/vendor/bedboo-physics/NOTICE.md"
 cp "$root/vendor/bedboo-physics/BEDROCK-DATA-NOTICE.md" "$temp/vendor/bedboo-physics/BEDROCK-DATA-NOTICE.md"
-cp -R "$bedrock_data" "$temp/bedrock-physics-data"
 cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
 cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-12660-states.json"
@@ -334,7 +333,8 @@ const root = process.argv[2];
 const data = require(path.join(root, 'bedrock-collision-data.cjs')).loadBedrockCollisionData();
 assert.equal(data.stateCount, 23948);
 assert.ok(data.blockCount > 1000);
-assert.ok(data.profilesByHash.get(18894)?.name === 'air' || data.registry.blocksByName.air);
+assert.equal(data.profilesByHash.get(18894)?.name, 'air');
+assert.equal(data.profilesByHash.get(3317)?.name, 'stone');
 require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
 console.log('Verified Bedrock 1.26.60 collision geometry and physics engine');
 JS
