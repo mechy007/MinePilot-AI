@@ -73,13 +73,14 @@ test('Bedrock physics engine applies directional movement and gravity against lo
   assert.ok(Number.isFinite(state.vel.y));
 });
 
-function movementWorld(unknown = false) {
+function movementWorld() {
   const data = fixture();
   const terrain = {
     dimension: 0,
     registry: new Map([[100, { name: 'minecraft:air' }], [101, { name: 'minecraft:stone' }]]),
+    unknown: false,
     blockId(dimension, x, y, z) {
-      if (unknown && x > 1) return null;
+      if (this.unknown) return null;
       return y < 0 ? 101 : 100;
     }
   };
@@ -132,9 +133,10 @@ test('analog diagonal movement combines jump and sprint flags and supports sneak
 });
 
 test('movement controller refuses to predict through an unknown terrain cell', () => {
-  const { controller, world } = movementWorld(true);
+  const { controller, world, terrain } = movementWorld();
   assert.equal(controller.startPresence(world), true);
   assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
+  terrain.unknown = true;
   const frame = controller.tick(101n);
   assert.equal(controller.snapshot().terrain.unknown, true);
   assert.deepEqual(frame.move_vector, { x: 0, z: 0 });
