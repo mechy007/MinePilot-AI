@@ -1459,7 +1459,9 @@ class BedrockGameplayBridge {
       const envelope = this.runtimeExtensions?.envelope?.evaluate?.('manual_move', {
         confirmed: raw.confirmed === true, worldReady: this.spawned === true,
         sessionClosed: this.closed,
-        freshPosition: this.positionUsable() || this.isIdlePositionAnchor(),
+        freshPosition: this.position !== null && this.lastServerPositionAt !== null &&
+          this.clock() >= this.lastServerPositionAt &&
+          (this.clock() - this.lastServerPositionAt <= 7000 || this.isIdlePositionAnchor()),
         freshObservation: this.position !== null && this.dimension !== null,
         safetyHold: this.layerOne?.snapshot?.()?.safetyHold === true || this.layerFour?.critical === true,
         controllerBusy: this.gameplayAgent?.snapshot?.()?.active === true || this.autonomy?.snapshot?.()?.active === true,

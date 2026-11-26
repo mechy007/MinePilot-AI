@@ -1,6 +1,8 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
+const {EventEmitter}=require('node:events');
+const {BedrockGameplayBridge}=require('../../../../scripts/bedrock-gameplay-bridge.cjs');
 const {ActionEnvelope}=require('../actions/envelope.cjs');
 const {OutcomeVerifier}=require('../actions/outcomes.cjs');
 const {resolveWindow,planPickup,planQuickMove}=require('../inventory/containers.cjs');
@@ -80,4 +82,19 @@ test('runtime facade declares target Bedrock version unverified',()=>{
  const s=createRuntimeExtensions().snapshot();
  assert.equal(s.targetGameVersion,'1.26.66.1');assert.equal(s.targetVersionVerified,false);
  assert.equal(s.planners.obtain,'preview_only');
+});
+
+test('live bridge exposes Bedboo obtain planning as a non-executing command',()=>{
+ const clock=()=>1000;
+ const bridge=new BedrockGameplayBridge(new EventEmitter(),{
+  clock,
+  inventoryLedger:{playerInventory:()=>({known:true,fresh:true,registryKnown:true,unresolvedItemCount:0,observedAt:1000,revision:1,generation:1,items:[{empty:false,itemName:'minecraft:oak_log',count:1}]})},
+  recipeCatalog:{snapshot:()=>({observedAt:1000,generation:1,recipes:[{supported:true,id:'oak_planks',resultItem:'minecraft:oak_planks',resultCount:4,ingredients:[{name:'minecraft:oak_log',count:1}]}]})}
+ });
+ bridge.spawned=true;
+ const result=bridge.execute({version:'minepilot.gameplay.v1',requestId:'obtain_1',action:'plan_obtain',itemName:'minecraft:oak_planks',count:4});
+ assert.equal(result.status,'preview');
+ assert.equal(result.executable,false);
+ assert.equal(result.source,'bedboo_obtain_planner');
+ bridge.stop();
 });
