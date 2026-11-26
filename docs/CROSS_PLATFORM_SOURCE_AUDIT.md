@@ -17,7 +17,7 @@ This is a source audit and integration map, not a claim that every listed upstre
 - Remote AI has a manual ON/OFF control. When OFF, no remote model calls occur. Do not silently fall back to a local model. Minecraft connection and manual gameplay remain independent of Remote AI.
 - The planned remote AI topology is Android -> authenticated HTTPS/WSS gateway -> remote GPU worker (Kaggle first). The worker returns bounded, schema-validated goals/plans, never raw packets or unrestricted commands.
 - Keep experimental, preview-only and unsupported capabilities visibly distinct from verified capabilities.
-- Preserve license files, notices, attribution and source provenance for every reused component.
+- Do not exclude a technically useful Bedrock implementation merely because it has a large dependency tree, a different language, or a restrictive license. Include candidates in the research and integration plan; preserve their original notices and meet applicable license obligations if code is actually copied or linked. Dependency size is not a discovery filter, but ABI, Android packaging, runtime, and version compatibility must still be solved.
 - Work on a feature branch, add tests, verify engine/SDK/Android ARM64 packaging, and do not merge to main without explicit project-owner approval.
 
 ## Ecosystem coverage and findings
@@ -27,7 +27,7 @@ This is a source audit and integration map, not a claim that every listed upstre
 | Source | Platform / language | Useful modules or files | MinePilot decision |
 |---|---|---|---|
 | [Acacia](https://github.com/acacia-rs/acacia) | Rust; Bedrock client/bot | `crates/acacia-bot/src/world/`, `crates/acacia-bot/src/pathfind/`, `crates/acacia-bot/src/movement/`, `crates/acacia-bot/src/interact/`, `crates/acacia-api/`, `crates/acacia-testserver/`, `crates/acacia-mitm/` | Highest-value architecture and algorithm reference. MIT. Port selected algorithms/contracts into existing JS/Android modules; do not replace MinePilot's live Xbox friend-world session. Current upstream README targets protocol 2193 / Bedrock 1.26.51 and says friend-hosted worlds are not supported, so its client/auth stack is not a drop-in replacement. |
-| [bedboo](https://github.com/LiteLDev/bedboo) | Node.js 24; Bedrock bot API | `packages/bedboo/lib/physics/`, `packages/bedboo/lib/bedrock/inventory_model.js`, `packages/bedboo/lib/plugins/inventory.js`, `packages/bedboo/lib/plugins/craft.js`, `packages/agent/src/planner.js`, `runner.js`, `safety.js`, `skills/`, `test/` | Excellent Bedrock behavior reference and compatibility target. LGPL-3.0-only: do not copy implementation files into MinePilot without a deliberate LGPL compliance decision and preserving notices/source obligations. Prefer independently reimplementing the behavior behind MinePilot interfaces; vendor/link only when the license and Android ABI/runtime are verified. Node 24 is compatible in principle with the current runtime, but upstream RakNet native dependencies have x64-only constraints; its pure-JS NetherNet route is more relevant. |
+| [bedboo](https://github.com/LiteLDev/bedboo) | Node.js 24; Bedrock bot API | `packages/bedboo/lib/physics/engine.js`, `packages/bedboo/lib/physics/aabb.js`, `packages/bedboo/lib/bedrock/inventory_model.js`, `packages/bedboo/lib/bedrock/windows.js`, `packages/bedboo/lib/bedrock/click.js`, `packages/agent/src/planner.js`, `runner.js`, `safety.js`, `skills/`, `test/` | Top source-code candidate for direct study, vendoring or adaptation. The inventory model, container mappings, click-to-stack-request translation, Bedrock physics, obtain planner, task runner and safety layer are concrete files—not just design inspiration. Its documented stable BDS support currently stops at 1.26.63.1, so it is not yet proven against MinePilot's 1.26.66.1 target. Include its dependency tree in the port plan; preserve source notices and satisfy applicable license terms if copying. |
 | [PrismarineJS/bedrock-protocol](https://github.com/PrismarineJS/bedrock-protocol) | JavaScript / Node | `src/`, `docs/API.md`, protocol serializers, auth and transport adapters | Existing MinePilot dependency and current protocol foundation. MIT. Keep pinned versions and update protocol support deliberately. |
 | [minecraft-data](https://github.com/PrismarineJS/minecraft-data) | Multi-language generated data | Bedrock blocks, items, recipes, entities, protocol and collision-shape datasets; audit scripts and JSON schemas | Use as versioned data source with provenance and automated schema/data checks. Never assume Java data is interchangeable with Bedrock. |
 | [bedrock-rs](https://github.com/bedrock-crustaceans/bedrock-rs) | Rust | protocol, network, auth, level, form and addon crates | Apache-2.0 cross-check for packet/auth/world behavior; not a direct Android integration until FFI/ABI and protocol compatibility are demonstrated. |
@@ -93,7 +93,7 @@ Do not create parallel implementations of these systems without first proving th
 
 - No replacement of the existing Xbox/NetherNet friend-world connection with a second bot client.
 - No Java Edition/Fabric runtime or Windows DLL injection in the Android app.
-- No copying of LGPL source into MinePilot without compliance review.
+- Do not reject a useful source solely because it is LGPL or has substantial dependencies; include it and handle the applicable obligations if adopted.
 - No arbitrary upstream JavaScript execution, shell access or raw packet execution from an LLM.
 - No declaring a skill ready based only on catalog metadata, simulated tests or generated plans.
 - No automatic local AI fallback when Remote AI is disabled or unavailable.
@@ -113,3 +113,56 @@ Do not create parallel implementations of these systems without first proving th
 | [PyBedrock Net](https://pypi.org/project/pybedrock-net/) | Python, MIT (package metadata) | Layered RakNet, packet, auth, world, inventory and bot APIs. | Secondary research/test implementation; confirm repository provenance and exact version support before using any code. |
 
 The additional survey confirms that the ecosystem spans Rust, JavaScript/TypeScript, Python, C#, Java, C++, Go and Zig. It does not imply all projects are suitable runtime dependencies. MinePilot should stay on its existing Android + embedded Node path and use other language implementations as algorithm, protocol and test references unless a measured gap justifies a native module.
+
+
+## 6. Bedrock-only file shortlist (expanded after the user's instruction)
+
+The search filter is now technical Bedrock relevance, not license family or dependency size. Candidates below are included even when they require additional packages, a native build, or a different implementation language. Exact target-version support remains a separate test gate.
+
+### Highest-value files to inspect or port
+
+| Source file / directory | What it contains | MinePilot use |
+|---|---|---|
+| [bedboo inventory_model.js](https://github.com/LiteLDev/bedboo/blob/main/packages/bedboo/lib/bedrock/inventory_model.js) | Server-authoritative inventory model, Java-slot-to-Bedrock-container mapping, predicted stack updates, request correlation, rollback, per-slot request chains and resync | Compare against and selectively extend `scripts/bedrock-inventory-ledger.cjs` + `scripts/bedrock-stack-request-manager.cjs`; likely the biggest useful inventory implementation |
+| [bedboo windows.js](https://github.com/LiteLDev/bedboo/blob/main/packages/bedboo/lib/bedrock/windows.js) | Bedrock container/window registry, slot maps, player inventory layout, station/container metadata | Add missing container semantics to MinePilot's inventory model |
+| [bedboo click.js](https://github.com/LiteLDev/bedboo/blob/main/packages/bedboo/lib/bedrock/click.js) | Pure click semantics converted into Bedrock item-stack-request steps | Reuse/adapt the pure transformation logic and test cases |
+| [bedboo physics engine.js](https://github.com/LiteLDev/bedboo/blob/main/packages/bedboo/lib/physics/engine.js) | Bedrock-specific player simulation, collision, friction, jumping, sneaking, liquids and movement corrections | MinePilot already vendors a bedboo-derived physics engine under `vendor/bedboo-physics/`; compare versions and bring over missing tested fixes, not a duplicate engine |
+| [bedboo planner.js](https://github.com/LiteLDev/bedboo/blob/main/packages/agent/src/planner.js) | Pure obtain planner for inventory, recipes, smelting, fuels, sources, tools and stations | Adapt as a planning-only module using MinePilot's world snapshot and action gates |
+| [bedboo runner.js](https://github.com/LiteLDev/bedboo/blob/main/packages/agent/src/runner.js) | Scripted task runner, timeout/retry, progress events, task reports and stuck recovery | Merge useful task lifecycle/reporting patterns into MinePilot's agent |
+| [bedboo safety.js](https://github.com/LiteLDev/bedboo/blob/main/packages/agent/src/safety.js) | Background threat response, flee/fight guard, lava/fire escape, drowning, suffocation and recovery | Extract safety priorities and recovery tests; route all actions through MinePilot's existing authority |
+| [bedrockflayer / 27-7](https://github.com/inuttan/27-7) | Bedrock bot framework with subchunk palettes, A*, block/item registries, recipes, physics and plugin modules | Broad alternative source pool for world parsing, recipe handling and navigation; its README says protocol support is behind, so version-gate it |
+| [LeviBatone](https://github.com/sang765/levibatone/tree/main/src) | Native C++ Bedrock client-side Baritone-style navigation for Android ARM64 / LeviLauncher | Inspect movement costs, path nodes, goal handling, mining/farming and touch controls; client injection model is not MinePilot's connection architecture |
+| [chase-west/minecraft-bot](https://github.com/chase-west/minecraft-bot/tree/main/src) | Bedrock protocol bot, 20 Hz PlayerAuthInput loop, 3D A*, GOAP, DQN/ONNX and trajectory collection | Extract agent/planner/evaluation concepts; its documented setup uses offline-mode BDS, not MinePilot's Xbox friend-world session |
+| [Acacia](https://github.com/acacia-rs/acacia/tree/main/crates/acacia-bot/src) | Rust Bedrock world, pathfinding, movement and interaction modules | Port algorithmically or bind selected Rust components through Android NDK only where it materially outperforms the existing JS path |
+| [Minecraft AI action envelope](https://github.com/Ace1928/minecraft_ai/tree/main/src/minecraft_ai/control) | Action envelopes, outcomes and operator budgets | Bring bounded action contracts and postcondition/outcome verification into MinePilot's planner interface |
+
+### Protocol and transport files that matter for current Bedrock
+
+- [PrismarineJS bedrock-protocol package.json](https://github.com/PrismarineJS/bedrock-protocol/blob/master/package.json): current package is 3.61.0, requires Node >=24, includes `nethernet` and `prismarine-auth`, and retains RakNet packages as well.
+- [bedrock-protocol API / NetherNet options](https://github.com/PrismarineJS/bedrock-protocol/blob/master/docs/API.md): exposes transport selection, Xbox auth flow, Realm/world selection, WebRTC backend selection and NetherNet signalling modes.
+- [node-nethernet src](https://github.com/PrismarineJS/node-nethernet/tree/master/src): WebRTC transport, discovery, signalling, data channels, identity signing and peer lifecycle. It does not authenticate Microsoft/Xbox accounts itself; it expects the authentication layer to supply the identity token/key.
+- [Mojang NetherNet onboarding guide](https://github.com/Mojang/bedrock-protocol-docs/blob/main/additional_docs/NetherNetOnboardingGuide.md): authoritative HTTP signalling and SDP exchange details.
+- [Bedrock Wiki RakNet notes](https://wiki.bedrock.dev/servers/raknet): reports that Bedrock 26.60 clients no longer connect over RakNet and require NetherNet. Do not design new MinePilot connectivity around RakNet-only code.
+- [bedboo supported versions](https://levimc.org/bedboo/reference/versions/): tested stable BDS range currently ends at 1.26.63.1 (protocol 2225 family). This is newer than MinePilot's 1.26.60 code markers but still does not prove 1.26.66.1 support.
+- [bedboo connection differences](https://levimc.org/bedboo/reference/differences/connection): documents its NetherNet/RakNet selection and direct signalling behavior.
+
+### MinePilot compatibility gaps found in its current files
+
+1. `scripts/bedrock-inventory-ledger.cjs` explicitly identifies itself as a Bedrock 1.26.60 inventory mirror.
+2. `scripts/bedrock-stack-request-manager.cjs` hardcodes `LEGACY_ACTION_IDS_1_26_60`; this must become versioned protocol data rather than an unqualified constant.
+3. `scripts/bedrock-movement-controller.cjs` already imports the vendored `vendor/bedboo-physics` engine. Do not import another physics engine beside it.
+4. `scripts/bedrock-terrain-cache.cjs` contains its own runtime-palette subchunk decoder. Cross-check its bit widths, palette storage versions, bounds and malformed-packet behavior against multiple Bedrock parsers and current protocol fixtures.
+5. `scripts/bedrock-gameplay-agent.cjs` already enforces fresh server position, classified terrain, bounded actions and acknowledgement checks. Bedboo's richer planner/skills must call this existing authority rather than create a second movement actor.
+
+### Version and integration rule
+
+MinePilot's target is Bedrock 1.26.66.1, while the directly inspected MinePilot inventory code is labelled 1.26.60, bedrock-protocol 3.61.0 advertises 1.26.60 support, and bedboo's tested stable matrix currently ends at 1.26.63.1. Therefore, no external module is to be labelled fully compatible with 1.26.66.1 until packet/version fixtures and a real friend-world session pass. We can still import its source and dependencies into an isolated feature branch, then adapt and test them against MinePilot's existing NetherNet session.
+
+## 7. Immediate integration order
+
+1. Port/merge bedboo's inventory model, windows and click transformations into MinePilot's existing inventory ledger and stack-request manager, retaining the single existing client and response correlation.
+2. Port the pure bedboo obtain planner and connect its output only to MinePilot's allow-listed skill manifest and action gate.
+3. Compare bedboo physics fixes against the already vendored physics engine and update that vendor in place if tests demonstrate a gap.
+4. Cross-check and extend the subchunk parser using current Bedrock protocol fixtures; use bedboo/27-7 and JSPrismarine as alternate decoders.
+5. Inspect LeviBatone's native movement code and Acacia pathfinder as candidate improvements, but do not replace the current verified movement controller.
+6. Upgrade protocol/data version support to the exact 1.26.66.1 target, including NetherNet session behavior, before declaring end-to-end compatibility.
