@@ -20,7 +20,7 @@ function fixture() {
   });
   const intelligence=new MinePilotIntelligence({clock});
   const movement={
-    capability(){return enabled?'experimental':'unavailable';},
+    capability(){return enabled?'ready':'unavailable';},
     snapshot(){return {active,unconfirmedMovement:unconfirmed};},
     runVerifiedStep(world,point,ticks){
       assert.ok(Math.hypot(point.x-world.position.x,point.z-world.position.z)<=2.1);
@@ -105,13 +105,13 @@ function fixture() {
   };
 }
 
-test('agent is opt-in and cannot run without experimental movement, live world, and verified terrain',()=>{
+test('agent is opt-in and cannot run without ready physics movement, live world, and verified terrain',()=>{
   const f=fixture();
   assert.equal(f.agent.start(f.world,{goal:'explore'}).reason,'confirmation_required');
   assert.equal(f.agent.start(f.world,{confirmed:true,goal:'fight'}).reason,'unsupported_goal');
   f.setMovementEnabled(false);
   assert.equal(f.agent.start(f.world,{confirmed:true,goal:'explore'}).reason,
-    'experimental_movement_not_enabled');
+    'movement_unavailable');
   f.setMovementEnabled(true);
   f.world.autonomy.snapshot=()=>({active:true});
   assert.equal(f.agent.start(f.world,{confirmed:true,goal:'explore'}).reason,

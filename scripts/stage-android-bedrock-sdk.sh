@@ -22,6 +22,24 @@ if (source.split(old).length !== 3) {
 fs.writeFileSync(file, source.replaceAll(old, 'token.obtainedOn + Number(token.expires_in) * 1000'));
 JS
 node "$root/scripts/stage-android-bedrock-sdk.mjs" "$temp" 1.26.60
+# Bedrock 1.26.60 block-state hashes, collision boxes and friction are pinned
+# to the audited bedboo data commit. Verify Git blob IDs before bundling.
+bedrock_data="$temp/bedrock-physics-data"
+mkdir -p "$bedrock_data"
+bedboo_commit=1d8d2ae4e7b5c062f71a6373b7aede65d6810bb9
+fetch_bedrock_data() {
+  local name="$1" expected="$2"
+  local file="$bedrock_data/$name.json.gz"
+  curl --fail --location --silent --show-error --retry 2 --max-time 45 \
+    "https://raw.githubusercontent.com/LiteLDev/bedboo/$bedboo_commit/packages/bedrock-data/data/1.26.60/$name.json.gz" \
+    -o "$file"
+  local actual
+  actual=$(git hash-object "$file")
+  [[ "$actual" == "$expected" ]] || { echo "Bedrock physics data hash mismatch: $name" >&2; exit 1; }
+}
+fetch_bedrock_data blockCollisionShapes f1f8e751b8a428383761e2c43820f7d21f3810f2
+fetch_bedrock_data blockStates 7fc6af1ca5d2ee3536bb62cfafd1acae8d554d37
+fetch_bedrock_data blocks 8c7958734d735aeab060dbb0654efd77f9100ab8
 # Surface the pinned SDK's join stages without forwarding private session data.
 # Publishing the bot's own Xbox activity is optional for joining a host.
 node - "$temp/node_modules" <<'JS'
@@ -205,8 +223,14 @@ cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cj
 cp "$root/scripts/bedrock-stack-request-manager.cjs" "$temp/bedrock-stack-request-manager.cjs"
 cp "$root/scripts/bedrock-recipe-catalog.cjs" "$temp/bedrock-recipe-catalog.cjs"
 cp "$root/scripts/bedrock-inventory-ledger.cjs" "$temp/bedrock-inventory-ledger.cjs"
-cp "$root/scripts/bedrock-player-input.cjs" "$temp/bedrock-player-input.cjs"
-cp "$root/scripts/bedrock-auth-input-clock.cjs" "$temp/bedrock-auth-input-clock.cjs"
+cp "$root/scripts/bedrock-movement-controller.cjs" "$temp/bedrock-movement-controller.cjs"
+cp "$root/scripts/bedrock-collision-data.cjs" "$temp/bedrock-collision-data.cjs"
+mkdir -p "$temp/vendor/bedboo-physics"
+cp -R "$root/vendor/bedboo-physics/lib" "$temp/vendor/bedboo-physics/lib"
+cp "$root/vendor/bedboo-physics/COPYING" "$temp/vendor/bedboo-physics/COPYING"
+cp "$root/vendor/bedboo-physics/COPYING.LESSER" "$temp/vendor/bedboo-physics/COPYING.LESSER"
+cp "$root/vendor/bedboo-physics/NOTICE.md" "$temp/vendor/bedboo-physics/NOTICE.md"
+cp "$root/vendor/bedboo-physics/BEDROCK-DATA-NOTICE.md" "$temp/vendor/bedboo-physics/BEDROCK-DATA-NOTICE.md"
 cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
 cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-12660-states.json"
@@ -262,7 +286,7 @@ zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
-        "bedrock-gameplay-bridge.cjs", "bedrock-player-input.cjs", "bedrock-auth-input-clock.cjs",
+        "bedrock-gameplay-bridge.cjs", "bedrock-movement-controller.cjs", "bedrock-collision-data.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json", "bedrock-vanilla-12660-hashed-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
@@ -270,6 +294,12 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         "prismarine-world-client.mjs", "bot-awareness.mjs",
     ):
         archive.write(runtime / entrypoint, entrypoint)
+    for source in sorted((runtime / "vendor" / "bedboo-physics").rglob("*")):
+        if source.is_file():
+            archive.write(source, source.relative_to(runtime))
+    for source in sorted((runtime / "bedrock-physics-data").rglob("*")):
+        if source.is_file():
+            archive.write(source, source.relative_to(runtime))
     for source in sorted((runtime / "gameplay").rglob("*")):
         if source.is_file():
             archive.write(source, source.relative_to(runtime))
@@ -290,13 +320,46 @@ const path=require('node:path');
 const assert=require('node:assert/strict');
 const runtime=process.argv[2];
 const {createVanillaRuntimeRegistry}=require(path.join(runtime,'bedrock-runtime-registry.cjs'));
-const map=createVanillaRuntimeRegistry({engine:'1.26.60',block_properties:[]});
-assert.ok(map instanceof Map,'runtime block registry loads from bundled dependency');
-assert.equal(map.get(18894)?.name,'minecraft:air');
-assert.equal(map.get(3317)?.name,'minecraft:stone');
-console.log('Verified vanilla Bedrock runtime block-state registry in extracted Android SDK');
+const numeric=createVanillaRuntimeRegistry({engine:'1.26.60',block_network_ids_are_hashes:false,block_properties:[]});
+assert.ok(numeric instanceof Map,'numeric runtime block registry loads from bundled collision data');
+assert.equal(numeric.size,23960);
+assert.equal(numeric.get(18894)?.name,'minecraft:air');
+assert.equal(numeric.get(3317)?.name,'minecraft:stone');
+const hashed=createVanillaRuntimeRegistry({engine:'1.26.60',block_network_ids_are_hashes:true,block_properties:[]});
+assert.ok(hashed instanceof Map,'hashed runtime block registry loads from bundled collision data');
+assert.equal(hashed.size,23960);
+assert.equal(hashed.get((-2144268767) >>> 0)?.name,'minecraft:stone');
+assert.equal(hashed.get((-604749536) >>> 0)?.name,'minecraft:air');
+const numeric266=createVanillaRuntimeRegistry({engine:'1.26.66',block_network_ids_are_hashes:false,block_properties:[]});
+const hashed266=createVanillaRuntimeRegistry({engine:'1.26.66',block_network_ids_are_hashes:true,block_properties:[]});
+assert.equal(numeric266?.size,23960);
+assert.equal(hashed266?.size,23960);
+console.log('Verified complete numeric and hashed Bedrock runtime block-state registries for protocol 2225');
+JS
+node - "$temp/verify" <<'JS'
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = process.argv[2];
+const data = require(path.join(root, 'bedrock-collision-data.cjs')).loadBedrockCollisionData();
+assert.equal(data.stateCount, 23960);
+assert.equal(data.profilesByHash.size, data.stateCount);
+assert.equal(data.profilesByStateId.size, data.stateCount);
+assert.ok(data.blockCount > 1000);
+assert.equal(data.registry.blocksByName.air.id, 0);
+assert.equal(data.registry.blocksByName.stone.id, 1);
+assert.equal(data.registry.blocksByName.ice.friction, 0.98);
+assert.equal(data.registry.blocksByName.blue_ice.friction, 0.989);
+assert.equal(data.registry.blocksByName.slime.friction, 0.8);
+assert.equal(data.registry.blocksByName.stone.friction, 0.6);
+assert.equal(data.profilesByHash.get((-604749536) >>> 0)?.name, 'air');
+assert.equal(data.profilesByHash.get((-2144268767) >>> 0)?.name, 'stone');
+assert.equal(data.profilesByStateId.get(18894)?.name, 'air');
+assert.equal(data.profilesByStateId.get(3317)?.name, 'stone');
+require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
+console.log('Verified Bedrock 1.26.60 collision geometry and physics engine');
 JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
+cp "$root/scripts/bedrock-movement-controller.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-manual-terrain.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-stack-request-manager.test.cjs" "$temp/verify/"
@@ -313,7 +376,6 @@ cp "$root/scripts/bedrock-block-placement.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/"
-cp "$root/scripts/bedrock-auth-input-clock.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-survival-mission.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-first-person-scene.test.cjs" "$temp/verify/"
 cp "$root/scripts/bedrock-recipe-catalog.test.cjs" "$temp/verify/"
@@ -321,7 +383,7 @@ mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 
 if [[ "${MINEPILOT_SKIP_SDK_CONTRACT_TESTS:-0}" != "1" ]]; then
-  timeout --signal=TERM --kill-after=10s 180s node --test --test-concurrency=1 "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-manual-terrain.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-native-skill-system.test.cjs" "$temp/verify/bedrock-block-placement.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-auth-input-clock.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs" "$temp/verify/bedrock-recipe-catalog.test.cjs"
+  timeout --signal=TERM --kill-after=10s 180s node --test --test-concurrency=1 "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-movement-controller.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-manual-terrain.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-native-skill-system.test.cjs" "$temp/verify/bedrock-block-placement.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs" "$temp/verify/bedrock-recipe-catalog.test.cjs"
 else
   echo "Full SDK contract suite is scheduled in its own CI job."
 fi

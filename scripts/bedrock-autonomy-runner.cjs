@@ -53,8 +53,8 @@ class VerifiedAutonomyRunner {
     if (!world.terrain?.snapshot().collisionClassificationReady)
       return 'block_registry_unavailable';
     if (world.blockBreaker?.snapshot()?.active) return 'block_action_busy';
-    if (world.movement?.capability(world)!=='experimental')
-      return 'experimental_movement_not_enabled';
+    if (world.movement?.capability(world)!=='ready')
+      return 'movement_unavailable';
     return null;
   }
   enable(world,opts={}) {
@@ -69,7 +69,7 @@ class VerifiedAutonomyRunner {
     this.startedAt=this.clock();
     this.initialDimension=world.dimension;
     this.awaiting=null;
-    this.lastReason='experimental_autonomy_started_not_verified';
+    this.lastReason='autonomy_started_not_verified';
     this.interval=this.setInterval(()=>this.pulse(),TICK_MS);
     return {status:'accepted',reason:'bounded_follow_autonomy_started'};
   }

@@ -43,23 +43,25 @@ public final class DashboardActivity extends Activity {
     private final android.os.Handler manualControlHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private String activeManualMode = "";
+    private float manualJoystickX;
+    private float manualJoystickY;
+    private boolean manualJump;
+    private boolean manualSprint;
+    private boolean manualSneak;
+    private String manualLookMode = "";
     private int manualControlGeneration;
     private boolean manualControlsEnabled;
     private ManualJoystickView manualJoystick;
     private final Runnable repeatManualControl = new Runnable() {
         @Override public void run() {
             if (activeManualMode.isEmpty() || !manualControlsEnabled) return;
-            String mode = activeManualMode.startsWith("joystick:")
-                    ? activeManualMode.substring("joystick:".length()) : activeManualMode;
-            sendManualMotionPulse(mode);
+            sendManualMotionPulse(activeManualMode);
             manualControlHandler.postDelayed(this, 450);
         }
     };
     private LifeAnalyticsView lifeAnalytics;
     private FirstPersonVoxelView firstPersonView;
     private TextView brainStatus;
-    private Button probeStep;
-    private Button verifiedStep;
     private Button autoFollow;
     private Button autoStop;
     private Button gameplayAgentStart;
@@ -650,17 +652,10 @@ public final class DashboardActivity extends Activity {
         advisorReview.setVisibility(View.GONE);
         body.addView(advisorReview, panelLayout(8));
 
-        section("Stop and experimental connection controls");
+        section("Movement and autonomy controls");
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
         body.addView(stopMovement, panelLayout(8));
-        probeStep = actionButton("Experimental movement diagnostics", false, this::showMovementDiagnostics);
-        probeStep.setVisibility(View.GONE);
-        body.addView(probeStep, panelLayout(8));
-        verifiedStep = actionButton("Try one verified-terrain walking step", false,
-                this::showVerifiedStep);
-        verifiedStep.setVisibility(View.GONE);
-        body.addView(verifiedStep, panelLayout(8));
         autoFollow = actionButton("Start bounded autonomous Follow/Return", false,
                 this::showAutonomyConfirmation);
         autoFollow.setVisibility(View.GONE);
@@ -681,10 +676,6 @@ public final class DashboardActivity extends Activity {
                 this::showBlockBreakDialog);
         experimentalBreak.setVisibility(View.GONE);
         body.addView(experimentalBreak, panelLayout(8));
-        boolean experimentEnabled = getSharedPreferences("minepilot_gameplay", MODE_PRIVATE)
-                .getBoolean("allow_experimental_movement", false);
-        button(experimentEnabled ? "Disable movement probe for next join" : "Enable experimental movement for next join",
-                () -> configureMovementProbe(!experimentEnabled));
 
         stopWorld = actionButton("Disconnect bot", false, this::requestWorldStop);
         stopWorld.setTextColor(AMBER);
@@ -778,7 +769,7 @@ public final class DashboardActivity extends Activity {
         controls.setGravity(Gravity.CENTER_VERTICAL);
 
         manualJoystick = new ManualJoystickView(this);
-        manualJoystick.setListener(this::onManualJoystickDirection);
+        manualJoystick.setListener(this::onManualJoystickVector);
         LinearLayout.LayoutParams stickParams = new LinearLayout.LayoutParams(dp(148), dp(148));
         stickParams.setMargins(0, 0, dp(12), 0);
         controls.addView(manualJoystick, stickParams);
@@ -791,6 +782,15 @@ public final class DashboardActivity extends Activity {
         addManualPadButton(lookRow, "LOOK LEFT", "turn_left", "Look left");
         addManualPadButton(lookRow, "LOOK RIGHT", "turn_right", "Look right");
         look.addView(lookRow);
+        LinearLayout verticalLookRow = manualControlRow();
+        addManualPadButton(verticalLookRow, "LOOK UP", "look_up", "Look up while held");
+        addManualPadButton(verticalLookRow, "LOOK DOWN", "look_down", "Look down while held");
+        look.addView(verticalLookRow);
+        LinearLayout actionRow = manualControlRow();
+        addManualPadButton(actionRow, "JUMP", "jump", "Jump while held");
+        addManualPadButton(actionRow, "SPRINT", "sprint", "Sprint while held");
+        addManualPadButton(actionRow, "SNEAK", "sneak", "Sneak while held");
+        look.addView(actionRow);
         Button stop = actionButton("STOP", true, this::stopManualControl);
         stop.setTextSize(14);
         stop.setContentDescription("Stop all manual movement");
@@ -802,7 +802,7 @@ public final class DashboardActivity extends Activity {
         controls.addView(look, new LinearLayout.LayoutParams(0, -2, 1f));
         panel.addView(controls);
 
-        TextView footer = text("Experimental Bedrock controls · movement is bounded and collision-gated. Jump, sprint, mining and combat are not triggered by this joystick.", 11, MUTED, false);
+        TextView footer = text("Physics-based 360° movement with jump, sprint and sneak. Release controls to stop; movement pauses when terrain or server authority is unavailable.", 11, MUTED, false);
         footer.setPadding(0, dp(8), 0, 0);
         panel.addView(footer);
         body.addView(panel, panelLayout(10));
@@ -821,24 +821,48 @@ public final class DashboardActivity extends Activity {
         row.addView(button, params);
     }
 
-    private void onManualJoystickDirection(String mode) {
-        if (mode == null || mode.isEmpty()) {
-            if (activeManualMode.startsWith("joystick:")) stopManualControl();
-            return;
-        }
+    private void onManualJoystickVector(float strafe, float forward) {
+        manualJoystickX = Math.max(-1f, Math.min(1f, strafe));
+        manualJoystickY = Math.max(-1f, Math.min(1f, forward));
+        boolean moving = Math.hypot(manualJoystickX, manualJoystickY) >= 0.12;
         if (!manualControlsEnabled || worldSessionId.isEmpty()) {
             stopManualControl();
-            showStatus("Connect the bot to a Friend World before using manual movement.");
+            if (moving) showStatus("Movement is unavailable until the world and collision data are ready.");
             return;
         }
-        String next = "joystick:" + mode;
-        if (next.equals(activeManualMode)) return;
-        // Direction changes update the same running input stream. Do not send
-        // STOP/restart between joystick quadrants or prediction rewinds to
-        // the last server correction (which may be several seconds old).
-        if (!activeManualMode.startsWith("joystick:")) stopManualControl();
-        activeManualMode = next;
-        sendManualMotionPulse(mode);
+        if (!moving && !manualJump && !manualSprint && !manualSneak && manualLookMode.isEmpty()) {
+            if (!activeManualMode.isEmpty()) stopManualControl();
+            return;
+        }
+        String nextMode = manualLookMode.isEmpty() ? "vector" : manualLookMode;
+        boolean startPulse = !nextMode.equals(activeManualMode);
+        activeManualMode = nextMode;
+        if (startPulse) {
+            sendManualMotionPulse(nextMode);
+            manualControlHandler.removeCallbacks(repeatManualControl);
+            manualControlHandler.postDelayed(repeatManualControl, 450);
+        }
+    }
+
+    private void setManualAction(String mode, boolean pressed) {
+        if (!manualControlsEnabled || worldSessionId.isEmpty()) {
+            stopManualControl();
+            return;
+        }
+        switch (mode) {
+            case "jump" -> manualJump = pressed;
+            case "sprint" -> manualSprint = pressed;
+            case "sneak" -> manualSneak = pressed;
+            default -> { return; }
+        }
+        boolean active = Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
+                manualJump || manualSprint || manualSneak || !manualLookMode.isEmpty();
+        if (!active) {
+            stopManualControl();
+            return;
+        }
+        activeManualMode = manualLookMode.isEmpty() ? "vector" : manualLookMode;
+        sendManualMotionPulse(activeManualMode);
         manualControlHandler.removeCallbacks(repeatManualControl);
         manualControlHandler.postDelayed(repeatManualControl, 450);
     }
@@ -851,21 +875,34 @@ public final class DashboardActivity extends Activity {
             int action = event.getActionMasked();
             if (action == android.view.MotionEvent.ACTION_DOWN) {
                 if (!manualControlsEnabled || worldSessionId.isEmpty()) {
-                    showStatus("Connect the bot to a Friend World before using manual movement.");
+                    showStatus("Movement is unavailable until the world and collision data are ready.");
                     return true;
                 }
-                stopManualControl();
-                activeManualMode = mode;
-                sendManualMotionPulse(mode);
-                manualControlHandler.removeCallbacks(repeatManualControl);
-                manualControlHandler.postDelayed(repeatManualControl, 450);
+                if ("jump".equals(mode) || "sprint".equals(mode) || "sneak".equals(mode)) {
+                    setManualAction(mode, true);
+                } else {
+                    manualLookMode = mode;
+                    activeManualMode = mode;
+                    sendManualMotionPulse(mode);
+                    manualControlHandler.removeCallbacks(repeatManualControl);
+                    manualControlHandler.postDelayed(repeatManualControl, 450);
+                }
                 view.setPressed(true);
                 return true;
             }
             if (action == android.view.MotionEvent.ACTION_UP ||
                     action == android.view.MotionEvent.ACTION_CANCEL) {
                 view.setPressed(false);
-                if (mode.equals(activeManualMode)) stopManualControl();
+                if ("jump".equals(mode) || "sprint".equals(mode) || "sneak".equals(mode)) {
+                    setManualAction(mode, false);
+                } else if (mode.equals(manualLookMode)) {
+                    manualLookMode = "";
+                    if (Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
+                            manualJump || manualSprint || manualSneak) {
+                        activeManualMode = "vector";
+                        sendManualMotionPulse("vector");
+                    } else stopManualControl();
+                }
                 return true;
             }
             return true;
@@ -881,7 +918,16 @@ public final class DashboardActivity extends Activity {
         Bundle extras = new Bundle();
         extras.putString("action", "manual_move");
         extras.putBoolean("confirmed", true);
-        extras.putString("motion_mode", mode);
+        boolean hasAnalog = Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
+                manualJump || manualSprint || manualSneak;
+        boolean lookControl = mode.startsWith("turn_") || mode.startsWith("look_");
+        String effectiveMode = hasAnalog && !lookControl ? "vector" : mode;
+        extras.putString("motion_mode", effectiveMode);
+        extras.putFloat("motion_x", manualJoystickX);
+        extras.putFloat("motion_y", manualJoystickY);
+        extras.putBoolean("jump", manualJump);
+        extras.putBoolean("sprint", manualSprint);
+        extras.putBoolean("sneak", manualSneak);
         extras.putInt("motion_ticks", 8);
         worldReader.execute(() -> {
             Bundle receipt = worldRequest("gameplay", session, extras);
@@ -909,6 +955,12 @@ public final class DashboardActivity extends Activity {
         manualControlHandler.removeCallbacks(repeatManualControl);
         boolean wasMoving = !activeManualMode.isEmpty();
         activeManualMode = "";
+        manualJoystickX = 0f;
+        manualJoystickY = 0f;
+        manualJump = false;
+        manualSprint = false;
+        manualSneak = false;
+        manualLookMode = "";
         if (wasMoving) sendManualRelease();
     }
 
@@ -916,9 +968,10 @@ public final class DashboardActivity extends Activity {
         String phase = current.getString("phase", "");
         worldSessionId = current.getString("session_id", "");
         boolean playing = "spawned".equals(phase);
-        manualControlsEnabled = playing;
-        for (Button control : manualControlButtons) control.setEnabled(playing);
-        if (manualJoystick != null) manualJoystick.setControlEnabled(playing);
+        boolean movementReady = playing && current.getBoolean("movement_ready", false);
+        manualControlsEnabled = movementReady;
+        for (Button control : manualControlButtons) control.setEnabled(movementReady);
+        if (manualJoystick != null) manualJoystick.setControlEnabled(movementReady);
         if (!playing) stopManualControl();
         boolean canStop = (playing || "connecting".equals(phase)) && !worldSessionId.isEmpty();
         String assessment = switch (current.getString("assessment", "")) {
@@ -1097,10 +1150,6 @@ public final class DashboardActivity extends Activity {
         String betaStage = current.getString("beta_stage", "");
         String betaBlockers = current.getString("beta_blockers", "");
         String betaPlanReason = current.getString("beta_plan_reason", "");
-        String motionMode = current.getString("motion_mode", "idle");
-        String motionStopReason = current.getString("motion_stop_reason", "");
-        String motionDisplacement = current.getString("motion_displacement", "");
-        String motionDrift = current.getString("motion_drift", "");
         String inventory = inventoryKnown
                 ? current.getInt("inventory_occupied") + "/" + current.getInt("inventory_slots") + " occupied slots"
                 : "inventory not observed";
@@ -1117,22 +1166,16 @@ public final class DashboardActivity extends Activity {
                         + " · Respawn acks: " + current.getInt("spawn_respawn_acks")
                         + " · Errors: " + current.getInt("spawn_handshake_errors")
                         + "\nInventory: " + inventory
-                        + "\nMotion diagnostic: " + motionMode
-                        + (current.getBoolean("motion_active", false) ? " · active" : " · idle")
-                        + "\nNeutral presence: " + (current.getBoolean("presence_active", false) ? "active" : "stopped")
-                        + " · Heartbeat frames: " + current.getInt("presence_frames")
-                        + (current.getString("presence_error", "").isEmpty() ? "" : " · Error: " + current.getString("presence_error"))
-                        + "\nInput frames sent: " + current.getInt("motion_frames")
-                        + " · Position echoes: " + current.getInt("motion_server_updates")
-                        + " · Prediction corrections: " + current.getInt("motion_corrections")
-                        + "\nAuth input v2225 · Model: " + current.getString("motion_model","unknown")
-                        + " · Tick: " + current.getString("input_last_tick","—")
-                        + " · Skipped timer ticks: " + current.getInt("input_skipped_ticks")
-                        + " · Correction anchors: " + current.getInt("input_correction_anchors")
-                        + " · Rejected stale anchors: " + current.getInt("input_rejected_anchors")
-                        + (motionDisplacement.isEmpty() ? "" : "\nObserved displacement (not proof): " + motionDisplacement)
-                        + (motionDrift.isEmpty() ? "" : " · Max drift: " + motionDrift)
-                        + (motionStopReason.isEmpty() ? "" : "\nLast motion stop: " + motionStopReason)
+                        + "\nPhysics movement: " + (movementReady ? "ready" : "waiting for server / terrain")
+                        + " · Frames: " + current.getInt("movement_frames")
+                        + " · Server corrections: " + current.getInt("movement_corrections")
+                        + " · Awaiting server ack: " + current.getBoolean("movement_unconfirmed", false)
+                        + "\nCollision data: " + current.getInt("movement_physics_blocks") + " blocks / "
+                        + current.getInt("movement_physics_states") + " states"
+                        + " · Terrain: " + (current.getBoolean("movement_terrain_ready", false) ? "observed" : "incomplete")
+                        + " · Queries: " + current.getInt("movement_terrain_queries")
+                        + (current.getString("movement_last_reason", "").isEmpty() ? "" :
+                            "\nMovement status: " + current.getString("movement_last_reason").replace('_', ' '))
                         + (betaStage.isEmpty() ? "" :
                             "\nGameplay beta: " + betaStage
                             + (current.getBoolean("beta_ready", false) ? " · ready" : " · not device-verified")
@@ -1232,89 +1275,20 @@ public final class DashboardActivity extends Activity {
         advisorMode.setOnClickListener(view -> requestGameplay("advisor_mode", false,
                 null, "suggestions".equals(advisorModeText) ? "off" : "suggestions", 0));
         stopMovement.setVisibility(playing ? View.VISIBLE : View.GONE);
-        probeStep.setVisibility(playing && "experimental".equals(movement) ? View.VISIBLE : View.GONE);
-        verifiedStep.setVisibility(playing && "experimental".equals(movement) && !autonomyActive
-                ? View.VISIBLE : View.GONE);
-        autoFollow.setVisibility(playing && "experimental".equals(movement) && !autonomyActive && !gameplayAgentActive
+        autoFollow.setVisibility(movementReady && !autonomyActive && !gameplayAgentActive
                 ? View.VISIBLE : View.GONE);
         autoStop.setVisibility(playing && autonomyActive ? View.VISIBLE : View.GONE);
-        gameplayAgentStart.setVisibility(playing && "experimental".equals(movement) &&
+        gameplayAgentStart.setVisibility(movementReady &&
                 current.getBoolean("terrain_registry_ready",false) &&
                 !autonomyActive && !gameplayAgentActive ? View.VISIBLE : View.GONE);
         gameplayAgentStop.setVisibility(playing && gameplayAgentActive ? View.VISIBLE : View.GONE);
-        experimentalBreak.setVisibility(playing && "experimental".equals(movement) &&
+        experimentalBreak.setVisibility(movementReady &&
                 current.getBoolean("terrain_registry_ready", false) && !autonomyActive && !gameplayAgentActive
                 ? View.VISIBLE : View.GONE);
         stopWorld.setVisibility(canStop ? View.VISIBLE : View.GONE);
         stopWorld.setEnabled(canStop);
         joinFriend.setVisibility(playing || "connecting".equals(phase) || "stopping".equals(phase)
                 ? View.GONE : View.VISIBLE);
-    }
-
-    private void configureMovementProbe(boolean enable) {
-        if (!enable) {
-            getSharedPreferences("minepilot_gameplay", MODE_PRIVATE).edit()
-                    .putBoolean("allow_experimental_movement", false).commit();
-            show("World");
-            return;
-        }
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Experimental Bedrock movement")
-                .setMessage("Only enable this in a safe, consenting friend's test world. The movement codec and physics are not verified on your device. It will affect the next connection, and each probe still requires confirmation.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Enable for next join", (dialog, which) -> {
-                    getSharedPreferences("minepilot_gameplay", MODE_PRIVATE).edit()
-                            .putBoolean("allow_experimental_movement", true).commit();
-                    show("World");
-                }).show();
-    }
-
-    private void showMovementDiagnostics() {
-        String[] modes = { "Forward — 6 ticks (0.3 s)",
-                "Turn left — 6 ticks (0.3 s)", "Turn right — 6 ticks (0.3 s)",
-                "Forward — 20 ticks (1 s)" };
-        String[] codes = { "forward", "turn_left", "turn_right", "forward" };
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Experimental movement diagnostic")
-                .setMessage("This only tests protocol input, not autonomous gameplay. In a private flat world it may move unexpectedly or disconnect. Server telemetry does not prove causality.")
-                .setItems(modes, (dialog, selected) -> new android.app.AlertDialog.Builder(this)
-                        .setTitle("Confirm experimental movement")
-                        .setMessage("Run a bounded " + modes[selected] + " input sequence? Stop remains available.")
-                        .setNegativeButton("Cancel", null)
-                        .setPositiveButton("Run diagnostic", (confirm, which) ->
-                                requestMotionDiagnostic(codes[selected], selected == 3 ? 20 : 6))
-                        .show())
-                .setNegativeButton("Cancel", null)
-                .show();
-    }
-
-    private void requestMotionDiagnostic(String mode, int ticks) {
-        String session = worldSessionId;
-        if (session.isEmpty()) return;
-        Bundle extras = new Bundle();
-        extras.putString("action", "motion_diagnostic");
-        extras.putBoolean("confirmed", true);
-        extras.putString("motion_mode", mode);
-        extras.putInt("motion_ticks", ticks);
-        int generation = worldViewGeneration;
-        worldReader.execute(() -> {
-            Bundle receipt = worldRequest("gameplay", session, extras);
-            runOnUiThread(() -> {
-                if (generation != worldViewGeneration || !dashboardVisible) return;
-                showStatus(receipt != null && receipt.getBoolean("accepted")
-                        ? "Diagnostic queued. Packet acceptance and movement are not yet verified."
-                        : "Movement diagnostic unavailable for this session.");
-            });
-        });
-    }
-
-    private void confirmMovementProbe() {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Run one short movement probe?")
-                .setMessage("This sends up to six experimental Bedrock input ticks. It may fail, disconnect, or move unexpectedly. Test only on safe flat terrain. Queued packets do not prove the bot moved.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Run probe", (dialog, which) -> requestGameplay("probe_step", true))
-                .show();
     }
 
     private void requestFollowPlan() {
@@ -1351,16 +1325,6 @@ public final class DashboardActivity extends Activity {
                                 coordinate.getText().toString().trim()))
                 .show();
     }
-    private void showVerifiedStep() {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Verified-terrain movement step")
-                .setMessage("Attempt a short real Bedrock movement pulse toward the currently selected Follow/Return waypoint. Requires decoded and classified safe terrain. The host may reject it. No mining or combat occurs.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Attempt step", (dialog, which) ->
-                        requestGameplay("verified_step", true))
-                .show();
-    }
-
     private void chooseIntelligentGameplayGoal() {
         final String[] goals = {"Survive: explore and collect observed drops",
                 "Explore verified terrain", "Follow a player",

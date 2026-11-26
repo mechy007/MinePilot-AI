@@ -13,12 +13,22 @@ The runtime-enabled ARM64 debug APK opens MinePilot’s dashboard. The Xbox tab 
 
 ## What has been tested
 
-The engine suite runs on Node. Packaged SDK checks use synthetic account and packet data to verify identity matching, owner selection, the start-game/spawn gate, elapsed-time reporting and cancellation. These checks do not prove Microsoft sign-in, Xbox friend activity, transport interoperability, host confirmation or Android background reliability. Live Android results remain pending.
+**Phase 0 (Android and networking) has been confirmed complete by the project owner.** Keep the steps above as regression coverage when authentication, friend discovery, transport or the Android runtime changes. The Node engine suite and packaged SDK checks remain useful automated safeguards, but they do not establish that the new Phase 1 gameplay movement system works.
 
 Friend discovery requires Xbox to expose the host’s joinable activity to the signed-in account. Presence, multiplayer permissions and title-service behavior affect visibility. The current build attempts one connection and reports its failing stage. A production background service, automatic reconnection and invitation support remain future work.
+
+## Phase 1 movement integration
+
+The active movement branch adds a Bedrock physics controller with a pinned
+collision dataset, server-tick PlayerAuthInput, terrain preflight and
+server-correction reconciliation. The Android joystick is now analog and
+supports turning, vertical look, jump, sprint and sneak. The former
+experimental movement toggle and fixed-step input writer are removed from the
+active runtime path. Automated tests and a real friend-world movement session
+must pass before Phase 1 is called complete.
 
 ## Identity and dependencies
 
 MinePilot holds the authenticated Xbox session in the isolated Android runtime. It encrypts the refresh token and gamertag with Android Keystore-backed storage. Runtime status reports contain the login stage and account identity. A private pipe carries the refreshed token directly to Android Keystore-backed encryption without writing it to a status file. The app suppresses screenshots while displaying a sign-in code, auto-opens only an allowlisted Microsoft HTTPS page, and offers a code-copy option. Ending the activity clears the authentication status. The next launch sweeps temporary runtime files.
 
-The build packages bedrock-protocol 3.61.0, Prismarine authentication and Xbox services, and the pure JavaScript Werift WebRTC backend. It uses the 1.26.60 codec for protocol 2225, which Mojang also lists for [Bedrock 1.26.66](https://mojang.github.io/bedrock-protocol-docs/changelog/#12666). Interoperability with the exact 1.26.66.1 device build requires the live test. See [ARM64 runtime packaging](ANDROID-RUNTIME-PACKAGING.md) for license notices and the runtime build.
+The build packages bedrock-protocol 3.61.0, Prismarine authentication and Xbox services, and the pure JavaScript Werift WebRTC backend. It uses the 1.26.60 codec for protocol 2225, which Mojang also lists for [Bedrock 1.26.66](https://mojang.github.io/bedrock-protocol-docs/changelog/#12666). The new physics movement controller and collision dataset still require validation on the exact 1.26.66.1 device build. See [ARM64 runtime packaging](ANDROID-RUNTIME-PACKAGING.md) for license notices and the runtime build.

@@ -386,32 +386,28 @@ public final class WorldSessionProvider extends ContentProvider {
                 }
                 result.putInt("nearby_players", gameplay.optInt("visiblePlayers", 0));
                 result.putInt("corrections", gameplay.optInt("correctionCount", 0));
-                JSONObject diagnostic = gameplay.optJSONObject("motionDiagnostic");
-                if (diagnostic != null) {
-                    result.putString("motion_mode", diagnostic.optString("mode", "idle"));
-                    result.putBoolean("motion_active", diagnostic.optBoolean("active", false));
-                    result.putInt("motion_frames", diagnostic.optInt("framesSent", 0));
-                    result.putBoolean("presence_active", diagnostic.optBoolean("presenceActive", false));
-                    result.putInt("presence_frames", diagnostic.optInt("presenceFrames", 0));
-                    result.putString("presence_error", diagnostic.optString("presenceError", ""));
-                    result.putInt("motion_server_updates", diagnostic.optInt("serverUpdates", 0));
-                    result.putInt("motion_corrections", diagnostic.optInt("corrections", 0));
-                    result.putString("motion_displacement", diagnostic.optString("observedDisplacement", ""));
-                    result.putString("motion_drift", diagnostic.optString("maxDrift", ""));
-                    result.putString("motion_stop_reason", diagnostic.optString("stoppedReason", ""));
-                    String motionModel=diagnostic.optString("motionModel","");
-                    if(motionModel.matches("[a-z_]{1,40}"))
-                        result.putString("motion_model",motionModel);
-                    JSONObject inputClock=diagnostic.optJSONObject("inputClock");
-                    if(inputClock!=null&&inputClock.optInt("protocol",-1)==2225) {
-                        result.putInt("input_skipped_ticks",Math.max(0,
-                                inputClock.optInt("skippedTicks",0)));
-                        result.putInt("input_correction_anchors",Math.max(0,
-                                inputClock.optInt("observedCorrections",0)));
-                        result.putInt("input_rejected_anchors",Math.max(0,
-                                inputClock.optInt("rejectedCorrections",0)));
-                        String tick=inputClock.optString("lastTick","");
-                        if(tick.matches("[0-9]{1,20}"))result.putString("input_last_tick",tick);
+                JSONObject movementSystem = gameplay.optJSONObject("movementSystem");
+                if (movementSystem != null) {
+                    result.putBoolean("movement_ready", movementSystem.optBoolean("available", false));
+                    result.putString("movement_capability", movementSystem.optString("capability", "unavailable"));
+                    result.putInt("movement_frames", Math.max(0, movementSystem.optInt("framesSent", 0)));
+                    result.putInt("movement_corrections", Math.max(0, movementSystem.optInt("corrections", 0)));
+                    result.putBoolean("movement_unconfirmed", movementSystem.optBoolean("unconfirmedMovement", false));
+                    JSONObject terrain = movementSystem.optJSONObject("terrain");
+                    result.putBoolean("movement_terrain_ready", terrain != null && !terrain.optBoolean("unknown", true));
+                    if (terrain != null)
+                        result.putInt("movement_terrain_queries", Math.max(0, terrain.optInt("queries", 0)));
+                    JSONObject physics = movementSystem.optJSONObject("physics");
+                    if (physics != null) {
+                        result.putInt("movement_physics_blocks", Math.max(0, physics.optInt("blocks", 0)));
+                        result.putInt("movement_physics_states", Math.max(0, physics.optInt("states", 0)));
+                    }
+                    JSONObject last = movementSystem.optJSONObject("lastMovementResult");
+                    if (last != null) {
+                        String movementStatus = last.optString("status", "");
+                        String reason = last.optString("reason", "");
+                        if (movementStatus.matches("[a-z_]{1,32}")) result.putString("movement_last_status", movementStatus);
+                        if (reason.matches("[a-z_]{1,64}")) result.putString("movement_last_reason", reason);
                     }
                 }
                 JSONObject layer = gameplay.optJSONObject("layerOne");
@@ -661,8 +657,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"review_checkpoint".equals(action) && !"advisor_mode".equals(action) &&
                 !"advisor_review".equals(action) &&
                 !"stop_movement".equals(action) && !"manual_move".equals(action) &&
-                !"manual_stop".equals(action) && !"probe_step".equals(action) &&
-                !"motion_diagnostic".equals(action) && !"verified_step".equals(action) &&
+                !"manual_stop".equals(action) && !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
                 !"experimental_break".equals(action) && !"learning_start".equals(action) && !"native_skill_start".equals(action) &&
@@ -670,8 +665,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"learning_autopilot_start".equals(action) && !"learning_autopilot_stop".equals(action) &&
                 !"odyssey_observe".equals(action) && !"odyssey_execute".equals(action)) return;
         boolean confirmed = extras.getBoolean("confirmed", false);
-        if (("manual_move".equals(action) || "probe_step".equals(action) ||
-                "motion_diagnostic".equals(action) || "verified_step".equals(action) ||
+        if (("manual_move".equals(action) || "verified_step".equals(action) ||
                 "autonomy_follow".equals(action) || "follow_player".equals(action) ||
                 "agent_start".equals(action) || "learning_start".equals(action) || "native_skill_start".equals(action) ||
                 "learning_propose".equals(action) || "learning_autopilot_start".equals(action) ||
@@ -844,20 +838,21 @@ public final class WorldSessionProvider extends ContentProvider {
             if ("manual_move".equals(action)) {
                 String mode = extras.getString("motion_mode", "");
                 int ticks = extras.getInt("motion_ticks", -1);
-                if (!"forward".equals(mode) && !"backward".equals(mode) &&
+                if (!"vector".equals(mode) && !"forward".equals(mode) && !"backward".equals(mode) &&
                     !"strafe_left".equals(mode) && !"strafe_right".equals(mode) &&
-                    !"turn_left".equals(mode) && !"turn_right".equals(mode)) return;
+                    !"turn_left".equals(mode) && !"turn_right".equals(mode) &&
+                    !"look_up".equals(mode) && !"look_down".equals(mode) &&
+                    !"jump".equals(mode) && !"sprint".equals(mode) && !"sneak".equals(mode)) return;
                 if (ticks < 1 || ticks > 8) return;
-                command.put("confirmed", true).put("mode", mode).put("ticks", ticks);
-            }
-            if ("motion_diagnostic".equals(action)) {
-                String mode = extras.getString("motion_mode", "");
-                int ticks = extras.getInt("motion_ticks", -1);
-                if (!"forward".equals(mode) && !"backward".equals(mode) &&
-                    !"strafe_left".equals(mode) && !"strafe_right".equals(mode) &&
-                    !"turn_left".equals(mode) && !"turn_right".equals(mode)) return;
-                if (ticks < 1 || ticks > 20) return;
-                command.put("confirmed", true).put("mode", mode).put("ticks", ticks);
+                float motionX = extras.getFloat("motion_x", 0f);
+                float motionY = extras.getFloat("motion_y", 0f);
+                if (!Float.isFinite(motionX) || !Float.isFinite(motionY) ||
+                        Math.abs(motionX) > 1f || Math.abs(motionY) > 1f) return;
+                command.put("confirmed", true).put("mode", mode).put("ticks", ticks)
+                        .put("motionX", motionX).put("motionY", motionY)
+                        .put("jump", extras.getBoolean("jump", false))
+                        .put("sprint", extras.getBoolean("sprint", false))
+                        .put("sneak", extras.getBoolean("sneak", false));
             }
             if ("experimental_break".equals(action)) {
                 String source = extras.getString("block_position", "").trim();
@@ -879,9 +874,6 @@ public final class WorldSessionProvider extends ContentProvider {
                 "learning_autopilot_start".equals(action) || "odyssey_observe".equals(action) ||
                 "experimental_break".equals(action))
                 command.put("confirmed", true);
-            if ("probe_step".equals(action)) {
-                command.put("confirmed", true).put("direction", "forward");
-            }
             Files.write(temporary, command.toString().getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
             Files.move(temporary, inbox, StandardCopyOption.ATOMIC_MOVE);

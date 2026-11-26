@@ -9,7 +9,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { accountWriter, runtimeLogger, verifyXbox } = require('./xbox-auth-probe.cjs');
 const { BotAwareness } = require('./bot-awareness.mjs');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
-const { ExperimentalPlayerInput } = require('./bedrock-player-input.cjs');
+const { BedrockMovementController } = require('./bedrock-movement-controller.cjs');
 const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
 const { createVanillaRuntimeRegistry } = require('./bedrock-runtime-registry.cjs');
 const { planLocalRoute } = require('./bedrock-local-path.cjs');
@@ -88,15 +88,12 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   // The gameplay bridge observes and commands the SAME authenticated world client.
   // Default remains off for existing join checks and fixture clients.
   const blockBreaker = gameplayOptions ? new BedrockBlockBreakExecutor() : null;
+  const terrain = gameplayOptions ? new BedrockTerrainCache() : null;
+  const movement = gameplayOptions ? new BedrockMovementController(client, { terrain }) : null;
   const gameplay = gameplayOptions ? new BedrockGameplayBridge(client, {
     commandPath: gameplayOptions.commandPath,
     receiptPath: gameplayOptions.receiptPath,
-    movement: new ExperimentalPlayerInput(client, gameplayOptions.experimentalMovement === true, {
-      // Standing-still 20Hz input is standard Bedrock player presence, not
-      // opt-in walking. Same writer/packet tick stream as user diagnostics.
-      presenceEnabled: true,
-      blockExecutor: blockBreaker
-    }),
+    movement,
     blockBreaker,
     layerOne: gameplayOptions.layerOneFactory?.() ?? null,
     layerTwo: gameplayOptions.layerTwoFactory?.() ?? null,
@@ -107,7 +104,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     layerSeven: gameplayOptions.layerSevenFactory?.() ?? null,
     layerEight: gameplayOptions.layerEightFactory?.() ?? null,
     addonNavigation: gameplayOptions.addonNavigationFactory?.() ?? null,
-    terrain: new BedrockTerrainCache(),
+    terrain,
     registryResolver: createVanillaRuntimeRegistry,
     routePlanner: planLocalRoute,
     autonomy: new VerifiedAutonomyRunner(),
@@ -322,7 +319,6 @@ if (require.main === module) {
       gameplayOptions: {
         commandPath: path.join(__dirname, 'gameplay-command.json'),
         receiptPath: path.join(__dirname, 'gameplay-receipt.json'),
-        experimentalMovement: config.experimentalMovement === true,
         layerOneFactory: () => new LayerOneController(),
         layerTwoFactory: () => new LayerTwoPlanner(),
         layerThreeFactory: () => new LayerThreePlanner(),

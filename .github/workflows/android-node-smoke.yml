@@ -20,6 +20,13 @@ on:
       - scripts/bedrock-recipe-catalog.test.cjs
       - scripts/bedrock-intelligence-core.test.cjs
       - scripts/bedrock-manual-terrain.test.cjs
+      - scripts/bedrock-movement-controller.cjs
+      - scripts/bedrock-movement-controller.test.cjs
+      - scripts/bedrock-collision-data.cjs
+      - scripts/bedrock-protocol-wire-contract.cjs
+      - scripts/bedrock-autonomy-runner.cjs
+      - scripts/bedrock-gameplay-agent.cjs
+      - vendor/bedboo-physics/**
       - scripts/bedrock-runtime-registry.cjs
       - scripts/bedrock-vanilla-12660-states.json
       - scripts/bedrock-vanilla-12660-hashed-states.json

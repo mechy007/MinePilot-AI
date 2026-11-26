@@ -438,7 +438,6 @@ test('Android join process reuses its authenticated client for gameplay observat
     controller.signal, () => 'connection', 2000, {
       commandPath: join(dir, 'gameplay-command.json'),
       receiptPath: join(dir, 'gameplay-receipt.json'),
-      experimentalMovement: false
     });
   client.emit('start_game', { runtime_entity_id: 123n,
     player_position: { x: 14, y: 65, z: 7 }, dimension: 0,

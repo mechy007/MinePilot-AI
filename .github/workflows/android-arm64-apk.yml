@@ -1,5 +1,17 @@
 name: Android ARM64 Friend World APK
 on:
+  pull_request:
+    paths:
+      - .github/workflows/android-arm64-apk.yml
+      - .github/workflows/android-node-smoke.yml
+      - 'android/**'
+      - 'scripts/stage-android-bedrock-sdk.sh'
+      - 'scripts/stage-android-node-smoke.sh'
+      - 'scripts/bedrock-movement-controller*'
+      - scripts/bedrock-collision-data.cjs
+      - 'scripts/android-friend-world-session*'
+      - scripts/bedrock-gameplay-bridge.cjs
+      - 'vendor/bedboo-physics/**'
   push:
     branches:
       - test/verify-existing-bedrock-learning-tasks

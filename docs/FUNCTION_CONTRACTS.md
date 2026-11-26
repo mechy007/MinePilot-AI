@@ -87,12 +87,40 @@ This catalog assigns purpose and side-effect rules to the public functions in th
 | `snapshot()` | Report negotiation, pending request and last outcome. | Pure read. |
 | `close(reason)` | Remove listeners and reject pending requests. | Idempotent cleanup. |
 
+### `scripts/bedrock-movement-controller.cjs`
+
+| Function | Responsibility |
+|---|---|
+| `constructor(client, options)` | Bind one shared 20 Hz Bedrock input queue, physics engine, terrain cache and movement telemetry. |
+| `loadPhysics()` | Load the pinned Bedrock block-state collision registry and construct the physics world. |
+| `startPresence(world)` | Start the input stream only for a spawned player with server authority and a valid server tick. |
+| `capability(world)` | Report ready only when the session, authority, dimension, terrain registry and input stream are valid. |
+| `preflightTerrain(world)` | Require observed collision data around the player; unknown cells fail closed. |
+| `setControls(vector, options)` | Normalize analog strafe/forward input and retain jump, sprint and sneak state. |
+| `runManualHold(world, options)` | Apply joystick or action-button input for a bounded hold interval. |
+| `runVerifiedStep(world, target, ticks)` | Turn toward one target and execute a bounded physics-simulated navigation step. |
+| `tick(tick)` | Simulate one Bedrock tick and emit position, velocity, view, movement vector and input flags. |
+| `observeServerPosition(position, observedAt)` | Record authoritative position and clear unconfirmed movement. |
+| `teleport(position, packet)` | Re-anchor the physics state after a server teleport. |
+| `correct(position, tick, packet)` | Apply server correction and replay retained inputs when collision data is available. |
+| `knockback(packet)` | Apply server-authoritative entity velocity. |
+| `releaseManual()` | Send neutral controls without stopping the shared input queue. |
+| `stop(reason)` | Release controls; stop the queue only for terminal session/death/authority reasons. |
+| `resetSession()` | Tear down the queue and clear per-world physics state. |
+| `snapshot()` | Expose capability, active hold, server acknowledgment, physics and collision telemetry. |
+
+### `scripts/bedrock-collision-data.cjs`
+
+| Function | Responsibility |
+|---|---|
+| `buildBedrockCollisionData(data, expectedStates)` | Build block-name, numeric-state and hashed-state collision indexes. |
+| `loadBedrockCollisionData(directory)` | Load the pinned gzip datasets and validate their state count and shape data. |
 ### `scripts/bedrock-gameplay-agent.cjs`
 
 | Function | Responsibility |
 |---|---|
 | `constructor(options)` | Inject monotonic clock, scheduler and bounded run options. |
-| `readiness(world)` | Reject stale position, unsupported authority, unclassified terrain, disabled experimental movement, wrong dimension or busy executor. |
+| `readiness(world)` | Reject stale/unacknowledged position, unsupported authority, unclassified terrain, unavailable physics movement, wrong dimension or busy executor. |
 | `start(world, options)` | Require explicit confirmation and a supported goal; initialize a bounded run and its interval. |
 | `stop(reason)` | Cancel the run, movement and owned subgoal; preserve a terminal reason. |
 | `pause(reason)` | Suspend progression without reporting success. |
@@ -222,13 +250,8 @@ The dashboard is still a large Activity and should be split into screen controll
 | `worldRequest(method, sessionId, extras)` | Call the private provider with a bounded typed payload; catch provider lifecycle/security errors. |
 | `refreshCommandCenter()` | Request one status snapshot off the UI thread and discard stale screen generations. |
 | `showWorldStatus(current)` | Render connection, vitals, gameplay, learning, Autopilot and capability state from one snapshot. |
-| `configureMovementProbe(enable)` | Change the explicitly user-authorized experimental movement setting. |
-| `showMovementDiagnostics()` | Render movement authority, freshness and verified-step diagnostics. |
-| `requestMotionDiagnostic(mode, ticks)` | Request a bounded diagnostic with validated mode/tick count. |
-| `confirmMovementProbe()` | Obtain explicit confirmation before sending an experimental movement probe. |
 | `requestFollowPlan()` | Select/preview a follow target; preview is not movement success. |
 | `showBlockBreakDialog()` | Explain the single-block experimental/manual action and require confirmation. |
-| `showVerifiedStep()` | Request one bounded verified movement step after user confirmation. |
 | `chooseIntelligentGameplayGoal()` | Present supported gameplay goals; do not enable actions beyond the selected goal's capabilities. |
 | `requestGameplayAgent(goal, playerName)` | Submit a confirmed bounded gameplay goal to the active session. |
 | `showAutonomyConfirmation()` | Explain limits and obtain confirmation before enabling bounded autonomy. |

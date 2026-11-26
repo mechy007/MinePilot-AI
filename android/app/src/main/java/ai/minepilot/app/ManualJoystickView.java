@@ -6,10 +6,11 @@ import android.graphics.Paint;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewParent;
 
 /** Touch joystick for bounded, cardinal manual bot movement. */
 public final class ManualJoystickView extends View {
-    public interface Listener { void onDirectionChanged(String direction); }
+    public interface Listener { void onVectorChanged(float strafe, float forward); }
 
     private final Paint base = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -23,7 +24,7 @@ public final class ManualJoystickView extends View {
     private float centerY;
     private float radius;
     private float knobRadius;
-    private String direction = "";
+    private boolean trackingTouch;
 
     public ManualJoystickView(Context context) { super(context); init(); }
     public ManualJoystickView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -31,7 +32,8 @@ public final class ManualJoystickView extends View {
 
     private void init() {
         setFocusable(true);
-        setContentDescription("Manual movement joystick. Drag up, down, left or right. Release to stop.");
+        setClickable(true);
+        setContentDescription("Analog movement joystick. Drag in any direction for 360-degree movement; release to stop.");
         base.setColor(0xff202c40);
         base.setStyle(Paint.Style.FILL);
         ring.setColor(0xff65e4ad);
@@ -49,7 +51,11 @@ public final class ManualJoystickView extends View {
     public void setListener(Listener value) { listener = value; }
     public void setControlEnabled(boolean enabled) {
         setEnabled(enabled);
-        if (!enabled) release();
+        if (!enabled) {
+            disallowParentInterception(false);
+            trackingTouch = false;
+            release();
+        }
         invalidate();
     }
 
@@ -84,17 +90,46 @@ public final class ManualJoystickView extends View {
         if (!isEnabled()) return false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                trackingTouch = true;
+                // The joystick is inside the dashboard ScrollView. Without this,
+                // a vertical drag is stolen by the parent and arrives here as CANCEL.
+                disallowParentInterception(true);
+                update(event.getX(), event.getY());
+                return true;
             case MotionEvent.ACTION_MOVE:
+                if (!trackingTouch) return false;
+                disallowParentInterception(true);
                 update(event.getX(), event.getY());
                 return true;
             case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
+                if (!trackingTouch) return false;
+                trackingTouch = false;
                 release();
+                disallowParentInterception(false);
                 performClick();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                trackingTouch = false;
+                release();
+                disallowParentInterception(false);
                 return true;
             default:
                 return true;
         }
+    }
+
+    private void disallowParentInterception(boolean disallow) {
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(disallow);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (trackingTouch) {
+            trackingTouch = false;
+            release();
+            disallowParentInterception(false);
+        }
+        super.onDetachedFromWindow();
     }
 
     private void update(float touchX, float touchY) {
@@ -108,24 +143,24 @@ public final class ManualJoystickView extends View {
         }
         x = centerX + dx;
         y = centerY + dy;
-        float normalized = (float)Math.hypot(dx, dy) / Math.max(1f, limit);
-        String next = "";
-        if (normalized >= .22f) {
-            if (Math.abs(dx) > Math.abs(dy)) next = dx < 0 ? "strafe_left" : "strafe_right";
-            else next = dy < 0 ? "forward" : "backward";
+        float strafe = dx / Math.max(1f, limit);
+        float forward = -dy / Math.max(1f, limit);
+        float normalized = (float)Math.hypot(strafe, forward);
+        if (normalized < .12f) {
+            strafe = 0f;
+            forward = 0f;
+        } else if (normalized > 1f) {
+            strafe /= normalized;
+            forward /= normalized;
         }
-        if (!next.equals(direction)) {
-            direction = next;
-            if (listener != null) listener.onDirectionChanged(direction);
-        }
+        if (listener != null) listener.onVectorChanged(strafe, forward);
         invalidate();
     }
 
     private void release() {
         x = centerX;
         y = centerY;
-        direction = "";
-        if (listener != null) listener.onDirectionChanged("");
+        if (listener != null) listener.onVectorChanged(0f, 0f);
         invalidate();
     }
 

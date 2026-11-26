@@ -18,7 +18,7 @@ const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearni
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -79,6 +79,8 @@ class BedrockGameplayBridge {
     this.serverCustomBlockPropertiesCount = 0;
     this.autonomy = options.autonomy ?? null;
     this.blockBreaker = options.blockBreaker ?? null;
+    if (typeof this.movement?.setBlockExecutor === 'function')
+      this.movement.setBlockExecutor(this.blockBreaker);
     this.lifeSenses = options.lifeSenses ?? null;
     this.intelligence = options.intelligence ?? null;
     this.gameplayAgent = options.gameplayAgent ?? null;
@@ -153,6 +155,7 @@ class BedrockGameplayBridge {
     this.bind('sub_chunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
+    this.bind('set_entity_motion', p => this.motion(p));
     this.bind('inventory_slot', p => {
       this.inventoryLedger?.observeSlot(p);
       this.layerThree?.observeInventorySlot(p);
@@ -475,10 +478,10 @@ class BedrockGameplayBridge {
       return { usable: false, mode: 'awaiting_server_position', ageMs: age };
     if (age <= 7000)
       return { usable: true, mode: 'server_fresh', ageMs: age };
-    // Bedrock may stay silent when the predicted input needs no correction.
-    // Preserve the original server anchor for this live session while neutral
-    // presence continues and no non-neutral input has been sent.
-    if (motion.presenceActive === true &&
+    // Bedrock may stay silent when the client is stationary. Keep the spawn
+    // anchor only while the input stream is neutral; after movement, require
+    // a fresh server correction before autonomy can trust the new position.
+    if (motion.presenceActive === true && motion.nonNeutralFrames === 0 &&
         Number.isInteger(motion.presenceFrames) && motion.presenceFrames > 0)
       return { usable: true, mode: 'idle_spawn_anchor', ageMs: age };
     return { usable: false, mode: 'server_position_stale', ageMs: age };
@@ -691,9 +694,11 @@ class BedrockGameplayBridge {
       this.position = pos;
       this.lastServerPositionAt = this.clock();
       this.layerOne?.onServerPosition(pos);
-      this.movement?.observeServerPosition?.(pos, this.clock());
       if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
       if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
+      if (packet.mode === 'rotation') this.movement?.observeRotation?.(this.yaw, this.pitch);
+      else this.movement?.teleport?.(pos, packet);
+      this.movement?.observeServerPosition?.(pos, this.clock());
     } else if (this.players.has(id)) {
       this.players.get(id).position = pos;
       this.players.get(id).seenAt = this.clock();
@@ -717,7 +722,13 @@ class BedrockGameplayBridge {
       this.serverTick = tick;
       this.serverTickObservedAt = this.clock();
     }
-    this.movement?.correct?.(pos, tick);
+    this.movement?.observeRotation?.(this.yaw, this.pitch);
+    this.movement?.correct?.(pos, tick, packet);
+  }
+  motion(packet) {
+    if (this.closed || !packet || this.self == null ||
+        ident(packet.runtime_entity_id) !== this.self) return;
+    this.movement?.knockback?.(packet);
   }
   addPlayer(packet) {
     if (!packet || this.closed) return;
@@ -913,7 +924,7 @@ class BedrockGameplayBridge {
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       respawnRecovery: { ...this.respawnRecovery },
       movement: this.movement?.capability?.(this) ?? 'unavailable',
-      ...(this.movement?.snapshot ? { motionDiagnostic: this.movement.snapshot() } : {}),
+      ...(this.movement?.snapshot ? { movementSystem: this.movement.snapshot() } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
       ...(this.layerTwo ? { layerTwo: this.layerTwo.snapshot(this.gameplayWorld()) } : {}),
       ...(this.layerThree ? { layerThree: this.layerThree.snapshot(this.gameplayWorld()) } : {}),
@@ -1174,7 +1185,8 @@ class BedrockGameplayBridge {
     }
     if (raw.action === 'wait') {
       if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
-      this.movement?.stop();
+      if (typeof this.movement?.releaseManual === 'function') this.movement.releaseManual();
+      else this.movement?.stop?.();
       const result = this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
       if (result.status === 'accepted') {
         this.layerTwo?.stay();
@@ -1198,19 +1210,24 @@ class BedrockGameplayBridge {
       this.addonNavigation?.emergencyStop();
       this.autonomy?.stop('user_stop');
       this.blockBreaker?.abort('user_stop');
-      this.movement?.stop?.();
+      if (typeof this.movement?.releaseManual === 'function') this.movement.releaseManual();
+      else this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
     if (raw.action === 'manual_stop') {
-      this.movement?.stop?.('manual_control_released');
+      if (typeof this.movement?.releaseManual === 'function') this.movement.releaseManual();
+      else this.movement?.stop?.();
       return { status: 'ok', reason: 'manual_control_released' };
     }
     if (raw.action === 'manual_move') {
       if (raw.confirmed !== true)
         return { status: 'rejected', reason: 'confirmation_required' };
-      if (!['forward','backward','strafe_left','strafe_right','turn_left','turn_right'].includes(raw.mode) ||
+      if (!['vector','forward','backward','strafe_left','strafe_right','turn_left','turn_right','look_up','look_down','jump','sprint','sneak'].includes(raw.mode) ||
           !Number.isInteger(raw.ticks) || raw.ticks < 1 || raw.ticks > 8)
         return { status: 'rejected', reason: 'unsupported_manual_input' };
+      if (raw.mode === 'vector' && (!Number.isFinite(raw.motionX) || !Number.isFinite(raw.motionY) ||
+          Math.abs(raw.motionX) > 1 || Math.abs(raw.motionY) > 1))
+        return { status: 'rejected', reason: 'invalid_analog_vector' };
       if (this.blockBreaker?.snapshot()?.active)
         return { status: 'rejected', reason: 'block_action_busy' };
       if (this.layerOne?.snapshot()?.safetyHold)
@@ -1219,74 +1236,18 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: 'survival_hold' };
       if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
         return { status: 'rejected', reason: 'autonomous_controller_busy' };
-      if (!this.movement || this.movement.capability(this) !== 'experimental' ||
+      if (!this.movement || this.movement.capability(this) !== 'ready' ||
           typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
-      // Every refresh updates the existing manual hold. The input writer keeps
-      // one prediction origin and one server-tick stream until explicit STOP
-      // or the 1.1s UI keepalive watchdog expires.
-      return this.movement.runManualHold(this, { mode: raw.mode, ticks: raw.ticks });
-    }
-    if (raw.action === 'motion_diagnostic') {
-      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
-      if (this.layerOne?.snapshot()?.safetyHold)
-        return { status: 'rejected', reason: 'critical_health' };
-      if (this.layerFour?.critical)
-        return { status: 'rejected', reason: 'survival_hold' };
-      const activeFollow = this.layerTwo?.preview(this.gameplayWorld());
-      if (activeFollow && ['follow', 'return'].includes(activeFollow.goal))
-        return { status: 'rejected', reason: 'planned_navigation_not_executable' };
-      if (this.layerThree && this.layerThree.snapshot(this.gameplayWorld()).route.status !== 'idle')
-        return { status: 'rejected', reason: 'resource_goal_not_executable' };
-      if (this.layerFive && this.layerFive.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'building_plan_not_executable' };
-      if (this.layerSix && this.layerSix.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'workflow_not_executable' };
-      if (raw.confirmed !== true)
-        return { status: 'rejected', reason: 'confirmation_required' };
-      if (this.layerEight && !this.layerEight.allowPreview(this.readinessInput()).allowed)
-        return { status: 'rejected', reason: 'server_position_stale' };
-      if (!this.movement || this.movement.capability(this) !== 'experimental' ||
-          typeof this.movement.runDiagnostic !== 'function')
-        return { status: 'rejected', reason: 'movement_unavailable' };
-      // Diagnostic only: deliberately no pathfinder, auto-follow, sprint or block actions.
-      return this.movement.runDiagnostic(this, { mode: raw.mode, ticks: raw.ticks });
-    }
-    if (raw.action === 'probe_step') {
-      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
-      if (this.layerOne?.snapshot()?.safetyHold)
-        return { status: 'rejected', reason: 'critical_health' };
-      if (this.layerFour?.critical)
-        return { status: 'rejected', reason: 'survival_hold' };
-      // A raw forward diagnostic is not execution of a Follow or Return plan.
-      const plan = this.layerTwo?.preview(this.gameplayWorld());
-      if (plan && (plan.goal === 'follow' || plan.goal === 'return'))
-        return { status: 'rejected', reason: 'planned_navigation_not_executable' };
-      const resourcePlanState = this.layerThree?.snapshot(this.gameplayWorld()).route.status;
-      if (resourcePlanState && resourcePlanState !== 'idle')
-        return { status: 'rejected', reason: 'resource_goal_not_executable' };
-      if (this.layerFive?.snapshot(this.gameplayWorld()).kind !== undefined &&
-          this.layerFive.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'building_plan_not_executable' };
-      if (this.layerSix?.snapshot(this.gameplayWorld()).kind !== undefined &&
-          this.layerSix.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'workflow_not_executable' };
-      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
-      if (raw.direction !== 'forward') return { status: 'rejected', reason: 'unsupported_direction' };
-      if (!this.movement || this.movement.capability(this) !== 'experimental') {
-        return { status: 'rejected', reason: 'movement_unavailable' };
-      }
-      const preflight = this.layerOne?.beginProbe({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned });
-      if (preflight && preflight.status !== 'accepted') return preflight;
-      try {
-        const result = this.movement.probeStep(this);
-        if (result.status === 'accepted') this.layerOne?.probeQueued();
-        else this.layerOne?.probeFailed(result.reason);
-        return result;
-      } catch {
-        this.layerOne?.probeFailed('movement_failed');
-        return { status: 'rejected', reason: 'movement_failed' };
-      }
+      // Every refresh updates the physics controller. One server-tick stream
+      // carries simulated state until release or the UI keepalive expires.
+      return this.movement.runManualHold(this, {
+        mode: raw.mode, ticks: raw.ticks,
+        vector: Number.isFinite(raw.motionX) && Number.isFinite(raw.motionY) &&
+          (raw.mode === 'vector' || Math.hypot(raw.motionX, raw.motionY) > 0)
+          ? { x: raw.motionX, y: raw.motionY } : undefined,
+        jump: raw.jump === true, sprint: raw.sprint === true, sneak: raw.sneak === true
+      });
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
@@ -1587,7 +1548,7 @@ class BedrockGameplayBridge {
     this.autonomy?.stop('session_closed');
     this.blockBreaker?.abort('session_closed');
     this.movement?.stopPresence?.('session_closed');
-    this.movement?.stop?.();
+    this.movement?.stop?.('session_closed');
     this.layerOne?.stop('session_closed');
     this.layerTwo?.reset();
     this.layerThree?.reset();

@@ -30,7 +30,7 @@ function setup(){
         z:from.z+dz/d*Math.min(d,0.9)};
       return {status:'route_found',waypoint:wp,path:[from,wp]};
     },
-    movement:{capability(){return 'experimental';},
+    movement:{capability(){return 'ready';},
       snapshot(){return {active:false};},
       runVerifiedStep(world,target){count++;return {status:'accepted'};}},
     autonomy:{snapshot(){return {active:false};}},
@@ -104,6 +104,9 @@ test('food emergency refuses unrelated drops and never emits use-item or guessed
 });
 test('manifest never labels unsupported food, attacks, recipes or building as executable',()=>{
   const f=setup();
+  // The manifest intentionally exposes the experimental capability tier;
+  // the autonomous agent readiness tests above require the production 'ready' tier.
+  f.world.movement.capability=()=> 'experimental';
   const catalog=gameplaySkillManifest(f.world);
   assert.equal(catalog.version,'minepilot.gameplay.skills.v1');
   assert.equal(catalog.rawPacketAccess,false);
