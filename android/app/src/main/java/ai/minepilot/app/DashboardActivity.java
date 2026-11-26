@@ -1048,13 +1048,18 @@ public final class DashboardActivity extends Activity {
                         + "\nPhysics movement: " + (movementReady ? "ready" : "waiting for server / terrain")
                         + " · Frames: " + current.getInt("movement_frames")
                         + " · Server corrections: " + current.getInt("movement_corrections")
-                        + " · Awaiting server ack: " + current.getBoolean("movement_unconfirmed", false)
+                        + " · Correction pending: " + current.getBoolean("movement_unconfirmed", false)
+                        + " (server sends corrections when prediction differs)"
                         + "\nCollision data: " + current.getInt("movement_physics_blocks") + " blocks / "
                         + current.getInt("movement_physics_states") + " states"
                         + " · Terrain: " + (current.getBoolean("movement_terrain_ready", false) ? "observed" : "incomplete")
                         + " · Queries: " + current.getInt("movement_terrain_queries")
                         + (current.getString("movement_last_reason", "").isEmpty() ? "" :
-                            "\nMovement status: " + current.getString("movement_last_reason").replace('_', ' '))
+                            "\nMovement status: " + current.getString("movement_last_status", "unknown").replace('_', ' ')
+                            + " · " + current.getString("movement_last_reason").replace('_', ' '))
+                        + (current.getString("movement_unknown_position", "").isEmpty() ? "" :
+                            "\nMissing collision cell: " + current.getString("movement_unknown_position")
+                            + " · " + current.getString("movement_unknown_reason", "terrain unknown").replace('_', ' '))
                         + (betaStage.isEmpty() ? "" :
                             "\nGameplay beta: " + betaStage
                             + (current.getBoolean("beta_ready", false) ? " · ready" : " · not device-verified")
@@ -1063,7 +1068,7 @@ public final class DashboardActivity extends Activity {
                         + "\nDecoded sections: " + current.getInt("terrain_sections")
                         + " · Registry ready: " + current.getBoolean("terrain_registry_ready", false)
                         + " · Decode errors: " + current.getInt("terrain_decode_errors")
-                        + "\\nSubchunk requests: " + current.getInt("subchunk_requests_sent")
+                        + "\nSubchunk requests: " + current.getInt("subchunk_requests_sent")
                         + " · Request errors: " + current.getInt("subchunk_request_errors")
                         + "\\nBlock ID mode: " + (current.getBoolean("block_network_ids_are_hashes", false)
                             ? "hashed (hash resolver needed)"
