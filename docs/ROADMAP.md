@@ -27,3 +27,24 @@ unacknowledged movement fail closed. CI and Android ARM64 friend-world testing
 are still required before declaring real-world movement verified.
 
 The [Android test guide](ANDROID-APP-STATUS.md) records the current build, verification procedure and limitations. Check [pull requests](https://github.com/mechy007/MinePilot-AI/pulls) and [workflow runs](https://github.com/mechy007/MinePilot-AI/actions) for current commits, CI results, and APK artifacts.
+
+
+## Project-wide redesign and cleanup
+
+The redesign is being carried out on the dedicated `redesign/full-project-overhaul` branch. It preserves the working friend-world connection path and the existing movement implementation while improving the Android control experience and removing obsolete project clutter.
+
+Completed in the first pass:
+- Removed the unused legacy starter activity; DashboardActivity is the only launcher.
+- Added shared Android design tokens.
+- Reworked the dashboard header and navigation surface.
+- Made the joystick/control area vertical and phone-width friendly.
+- Moved experimental visual analytics and the reconstructed voxel view behind an optional disclosure.
+- Rewrote the README around current verified status.
+- Archived superseded transport, dashboard and gameplay phase plans without discarding their historical content.
+
+Remaining:
+- Split the large dashboard activity into maintainable screen/component classes.
+- Audit runtime and TypeScript engine overlap before consolidating.
+- Audit every workflow, test, dataset, vendor file and documentation link before further deletion.
+- Re-run engine, SDK and Android ARM64 build/test workflows after each meaningful phase.
+- Verify joystick movement on a real friend-hosted world before declaring movement complete.
