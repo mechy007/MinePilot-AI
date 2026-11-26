@@ -691,14 +691,30 @@ class BedrockGameplayBridge {
     const pos = safePoint(packet.position);
     if (!pos) return;
     if (id === this.self) {
+      const rawMode = packet.mode;
+      const modeName = typeof rawMode === 'string'
+        ? rawMode.toLowerCase().replace(/[^a-z]/g, '') : '';
+      const rotationOnly = rawMode === 3 ||
+        ['rotation', 'onlyheadrot', 'onlyheadrotation'].includes(modeName);
+      if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
+      if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
+      // OnlyHeadRot carries a position field for schema compatibility. It
+      // must never move the world anchor or clear pending movement prediction.
+      if (rotationOnly) {
+        this.movement?.observeRotation?.(this.yaw, this.pitch);
+        return;
+      }
       this.position = pos;
       this.lastServerPositionAt = this.clock();
       this.layerOne?.onServerPosition(pos);
-      if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
-      if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
-      if (packet.mode === 'rotation') this.movement?.observeRotation?.(this.yaw, this.pitch);
-      else this.movement?.teleport?.(pos, packet);
-      this.movement?.observeServerPosition?.(pos, this.clock());
+      const normalPosition = rawMode === 0 || modeName === 'normal';
+      if (normalPosition) {
+        this.movement?.observeServerPosition?.(pos, this.clock());
+      } else {
+        // Reset and Teleport are authoritative re-anchors, not positive
+        // acknowledgements of the preceding joystick input.
+        this.movement?.teleport?.(pos, packet);
+      }
     } else if (this.players.has(id)) {
       this.players.get(id).position = pos;
       this.players.get(id).seenAt = this.clock();
@@ -1512,7 +1528,14 @@ class BedrockGameplayBridge {
         ? command.requestId : '',
       status: completedPlacement?.status ?? result.status,
       reason: completedPlacement?.reason ?? result.reason,
-      ...(completedPlacement ? { blockPlacement: completedPlacement } : {}),
+      dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
+      executionStage: result.status === 'rejected' ? 'rejected'
+        : command?.action === 'manual_move' ? 'movement_controls_applied'
+        : result.status === 'accepted' ? 'dispatched' : 'completed',
+      ...(command?.action === 'manual_move' ? {
+        serverConfirmation: 'correction_only_if_prediction_differs'
+      } : {}),
+      ...(completedPlacement ? { blockPlacement: completedPlacement } : {});
       ...(command?.action === 'odyssey_execute' ? {
         primitive: command.primitive,
         dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
