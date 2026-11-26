@@ -840,6 +840,7 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (!"vector".equals(mode) && !"forward".equals(mode) && !"backward".equals(mode) &&
                     !"strafe_left".equals(mode) && !"strafe_right".equals(mode) &&
                     !"turn_left".equals(mode) && !"turn_right".equals(mode) &&
+                    !"look_up".equals(mode) && !"look_down".equals(mode) &&
                     !"jump".equals(mode) && !"sprint".equals(mode) && !"sneak".equals(mode)) return;
                 if (ticks < 1 || ticks > 8) return;
                 float motionX = extras.getFloat("motion_x", 0f);
