@@ -232,6 +232,7 @@ cp "$root/vendor/bedboo-physics/COPYING.LESSER" "$temp/vendor/bedboo-physics/COP
 cp "$root/vendor/bedboo-physics/NOTICE.md" "$temp/vendor/bedboo-physics/NOTICE.md"
 cp "$root/vendor/bedboo-physics/BEDROCK-DATA-NOTICE.md" "$temp/vendor/bedboo-physics/BEDROCK-DATA-NOTICE.md"
 cp "$root/scripts/bedrock-terrain-cache.cjs" "$temp/bedrock-terrain-cache.cjs"
+cp "$root/scripts/bedrock-terrain-check.cjs" "$temp/bedrock-terrain-check.cjs"
 cp "$root/scripts/bedrock-runtime-registry.cjs" "$temp/bedrock-runtime-registry.cjs"
 cp "$root/scripts/bedrock-vanilla-12660-states.json" "$temp/bedrock-vanilla-12660-states.json"
 cp "$root/scripts/bedrock-vanilla-12660-hashed-states.json" "$temp/bedrock-vanilla-12660-hashed-states.json"
@@ -287,7 +288,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
         "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-movement-controller.cjs", "bedrock-collision-data.cjs",
-        "bedrock-terrain-cache.cjs", "bedrock-runtime-registry.cjs",
+        "bedrock-terrain-cache.cjs", "bedrock-terrain-check.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json", "bedrock-vanilla-12660-hashed-states.json",
         "bedrock-local-path.cjs", "bedrock-autonomy-runner.cjs",
         "bedrock-block-break.cjs", "bedrock-life-senses.cjs", "bedrock-intelligence-core.cjs", "bedrock-gameplay-agent.cjs", "bedrock-skill-manifest.cjs", "bedrock-native-skill-system.cjs", "bedrock-block-placement.cjs", "bedrock-open-world-skills.cjs", "bedrock-odyssey-skill-library.cjs", "bedrock-odyssey-bedrock-adapter.cjs", "bedrock-odyssey-skill-catalog.json", "bedrock-odyssey-observation-executor.cjs", "bedrock-stack-request-manager.cjs", "bedrock-inventory-ledger.cjs", "bedrock-recipe-catalog.cjs", "bedrock-first-person-scene.cjs",
@@ -310,6 +311,10 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
             archive.write(source, source.relative_to(runtime))
 
 with ZipFile(zip_path) as archive:
+    required = {"bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs"}
+    missing = required.difference(archive.namelist())
+    if missing:
+        raise SystemExit(f"Android Bedrock SDK archive missing required modules: {sorted(missing)}")
     archive.extractall(runtime / "verify")
 PY
 mv "$temp/node_modules" "$temp/installed-modules"
