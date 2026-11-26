@@ -4,7 +4,7 @@
 
 MinePilot-AI aims to run an independent Minecraft Bedrock player from an Android app, using a separate Microsoft/Xbox account to discover and join a friend's multiplayer world **without opening Minecraft or installing Termux on the phone**.
 
-> **Project maturity: experimental.** The repository includes an Android shell, a packaged Node/Bedrock SDK diagnostic path, gameplay-planning foundations, and work-in-progress Xbox authentication. **A successfully built APK is not evidence of successful Xbox login, world join, spawn, or autonomous gameplay.** No end-to-end live Android friend-world join has been verified.
+> **Project maturity: experimental.** The repository includes an Android shell, a packaged Node/Bedrock SDK runtime, gameplay foundations and Xbox authentication. **Phase 0 (Android and networking) has been explicitly confirmed complete by the project owner.** A successful Phase 0 connection does not by itself establish that gameplay movement or autonomous tasks work.
 
 ## Using a dedicated Xbox bot account on Android
 
@@ -12,7 +12,7 @@ In the runtime-enabled ARM64 debug build, open **Xbox → Sign in with Microsoft
 
 MinePilot uses Microsoft device-code sign-in. No Entra application ID or payment card is needed.
 
-The account session is encrypted with Android Keystore-backed storage. Tokens pass to Android through a private pipe for encryption. The runner checks the Xbox and Bedrock identities, resolves the host and attempts the existing NetherNet join. A successful live spawn still requires device and host verification.
+The account session is encrypted with Android Keystore-backed storage. Tokens pass to Android through a private pipe for encryption. The runner checks the Xbox and Bedrock identities, resolves the host and attempts the existing NetherNet join. Phase 0 has been accepted as complete by the project owner; device/host checks remain part of regression testing.
 
 ## Project at a glance
 
@@ -37,11 +37,11 @@ The status descriptions below distinguish repository code from verified device f
 | Android dashboard | Implemented; Xbox sign-in and join flow in PR #61 | APK build and on-device UX are separate checks |
 | ARM64 Node.js packaging | Implemented diagnostic build path | CI packaging/smoke tests; live device runtime needs validation |
 | Bedrock SDK integration | Packaged experimental SDK and transport dependencies | Does not establish a successful friend-world join |
-| Microsoft/Xbox login | Device-code sign-in in the runtime-enabled build | User approval and real-account validation required |
-| Xbox Live / XSTS exchange | Packaged experimental authentication runtime | Not yet confirmed end-to-end on device |
-| Friend identification | Gamertag or numeric host XUID accepted | Requires live Xbox account verification |
+| Microsoft/Xbox login | Phase 0 complete (owner-confirmed) | Preserve account-identity and sign-in regression coverage |
+| Xbox Live / XSTS exchange | Phase 0 complete (owner-confirmed) | Preserve authentication and token-refresh regression coverage |
+| Friend identification | Phase 0 complete (owner-confirmed) | Preserve exact gamertag/XUID resolution regression coverage |
 | Friend activity / world discovery | Phase 0 confirmed complete | Preserve the confirmed Android/networking milestone; continue regression testing |
-| NetherNet / WebRTC transport | Bundled diagnostic dependencies | Real host interoperability unverified |
+| NetherNet / WebRTC transport | Phase 0 complete (owner-confirmed) | Preserve reconnect and host-interoperability regression coverage |
 | Spawn and sustained connection | Phase 0 confirmed complete | Phase 0 is accepted as complete; ongoing QA still protects reconnect and stability |
 | Gameplay actions | Physics movement integration in progress | New movement controller and Bedrock collision data are in the integration branch; real-device movement validation remains |
 | Autonomous tasks | Planned and partial foundations | No verified autonomous gameplay |
@@ -73,9 +73,9 @@ A **gamertag** is a human-readable Xbox account name. An **XUID** is the numeric
 
 For an eventual join, the bot account must be permitted to play multiplayer and access the host's session. The friend must have the target Bedrock world open with multiplayer enabled. Discovery depends on Xbox activity/presence availability and any applicable platform or service permissions.
 
-### Required live-join verification
+### Phase 0 regression checklist
 
-A passing smoke test is not enough. The acceptance test must show:
+Phase 0 is owner-confirmed complete. Keep these checks as regression coverage when the Android runtime or network stack changes:
 
 1. The bot authenticates as the intended **separate** Xbox account.
 2. The exact host is found, with no wrong-account selection.
