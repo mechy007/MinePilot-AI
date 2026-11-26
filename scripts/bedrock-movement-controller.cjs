@@ -138,6 +138,7 @@ class BedrockMovementController {
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
+    this.lastPredictedAt = null;
     this.lastServerAckAt = null;
     this.started = false;
     this.framesSent = 0;
@@ -152,6 +153,11 @@ class BedrockMovementController {
       const inputFlags = Array.isArray(packet.input_data) ? packet.input_data : [];
       this.lastInput = { tick: String(tick), position: packet.position, delta: packet.delta,
         input: inputFlags };
+      const moveVector = packet.move_vector ?? {};
+      const activeMove = Math.hypot(Number(moveVector.x) || 0, Number(moveVector.z) || 0) > 0.01;
+      const activeAction = inputFlags.some(flag => ['jump', 'sprint', 'sneak'].includes(flag));
+      if (this.manualHoldActive || activeMove || activeAction)
+        this.lastPredictedAt = this.clock();
       this.blockExecutor?.pulseTimeout?.();
       const position = packet.position;
       const predictedDisplacement = finite3(position) && finite3(this.lastServerPosition)
@@ -217,6 +223,7 @@ class BedrockMovementController {
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
+    this.lastPredictedAt = null;
     this.lastServerAckAt = this.clock();
     if (!this.started || !this.state) this.resetFromServer(world.position, world.yaw, world.pitch, false);
     this.preflightTerrain(world);
@@ -264,6 +271,7 @@ class BedrockMovementController {
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
+    this.lastPredictedAt = null;
     this.lastServerAckAt = this.clock();
     return true;
   }
@@ -286,7 +294,7 @@ class BedrockMovementController {
     if (!world || !finite3(world.position) || !this.physicsWorld) return false;
     // The bridge's last server position can lag behind the local prediction.
     // Sample around the current simulated feet position, not the spawn anchor.
-    const feet = this.state?.pos?.clone?.() ?? feetFromWire(world.position);
+    const feet = this.state?.pos ?? feetFromWire(world.position);
     this.physicsWorld.beginTick();
     for (let y = Math.floor(feet.y) - 1; y <= Math.floor(feet.y + 2); y++) {
       for (let z = Math.floor(feet.z) - 1; z <= Math.floor(feet.z + 1); z++) {
@@ -339,11 +347,8 @@ class BedrockMovementController {
   }
 
   runVerifiedStep(world, target, ticks = 8) {
-    if (this.capability(world) !== 'ready') {
-      const timedOut = this.unconfirmedMovement && this.lastNonNeutralAt != null &&
-        this.clock() - this.lastNonNeutralAt > 7000;
-      return { status: 'rejected', reason: timedOut ? 'server_ack_timeout' : 'movement_unavailable' };
-    }
+    if (this.capability(world) !== 'ready')
+      return { status: 'rejected', reason: 'movement_unavailable' };
     if (!this.preflightTerrain(world) || !finite3(target) ||
         !Number.isInteger(ticks) || ticks < 1 || ticks > 20)
       return { status: 'rejected', reason: 'movement_unavailable' };
@@ -534,6 +539,7 @@ class BedrockMovementController {
       this.unconfirmedMovement = false;
       this.nonNeutralFrames = 0;
       this.lastNonNeutralAt = null;
+      this.lastPredictedAt = null;
       this.lastServerAckAt = observedAt;
       this.lastMovementResult = { status: 'server_position_observed',
         reason: 'authoritative_position_changed' };
@@ -551,6 +557,7 @@ class BedrockMovementController {
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
+    this.lastPredictedAt = null;
     this.lastServerAckAt = this.clock();
     this.lastMovementResult = { status: 'reconciled', reason: 'server_teleport' };
   }
@@ -600,6 +607,7 @@ class BedrockMovementController {
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
+    this.lastPredictedAt = null;
     this.lastServerAckAt = this.clock();
     this.corrections++;
     this.lastCorrection = { tick: tickValue == null ? null : String(tickValue), position: { ...position },
@@ -656,6 +664,7 @@ class BedrockMovementController {
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
+    this.lastPredictedAt = null;
     this.lastServerAckAt = null;
     this.physics = null;
     this.physicsWorld = null;
@@ -681,6 +690,10 @@ class BedrockMovementController {
       unconfirmedMovement: this.unconfirmedMovement,
       nonNeutralFrames: this.nonNeutralFrames,
       lastNonNeutralAt: this.lastNonNeutralAt,
+      lastPredictedAt: this.lastPredictedAt,
+      predictionAgeMs: this.lastPredictedAt == null
+        ? null : Math.max(0, this.clock() - this.lastPredictedAt),
+      predictedPosition: this.state ? feetToWire(this.state.pos) : null,
       lastServerAckAt: this.lastServerAckAt,
       state: this.started ? 'running' : 'stopped',
       active: this.manualHoldActive,
