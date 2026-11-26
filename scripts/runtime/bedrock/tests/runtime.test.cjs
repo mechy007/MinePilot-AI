@@ -41,6 +41,8 @@ test('click and quick-move planners return previews only',()=>{
  assert.equal(half.steps[0].count,3);assert.equal(half.executable,false);
  const moved=planQuickMove([{name:'minecraft:oak_log',count:60},null,{name:'minecraft:stone',count:1}],2,[0,1]);
  assert.equal(moved.status,'preview');assert.equal(moved.remaining,0);
+ const limited=planQuickMove([{name:'minecraft:oak_log',count:20},null],0,[1],{slotLimit:16});
+ assert.equal(limited.steps[0].count,16);assert.equal(limited.remaining,4);
 });
 test('heap A* finds a detour around a verified obstacle',()=>{
  const r=searchGridAStar({start:{x:0,z:0},target:{x:2,z:0},isWalkable:(x,z)=>!(x===1&&z===0),radius:5,maxExpanded:100});

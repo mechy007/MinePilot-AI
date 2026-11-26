@@ -35,7 +35,7 @@ function planHotbarSwap(sourceSlot,hotbarIndex){if(!Number.isInteger(sourceSlot)
 function planQuickMove(slots,sourceSlot,targetSlots,options={}){
   if(!Array.isArray(slots)||!Number.isInteger(sourceSlot)||sourceSlot<0||sourceSlot>=slots.length||!Array.isArray(targetSlots)||targetSlots.length>128)return {status:'rejected',reason:'invalid_quick_move',steps:[],executable:false};
   const item=slots[sourceSlot];if(!validItem(item))return {status:'noop',steps:[],executable:false};
-  const max=options.slotLimit??(()=>64),virtual=slots.map(v=>v?{...v}:null);let left=item.count;const steps=[];
+  const max=typeof options.slotLimit==='function'?options.slotLimit:()=>Number.isInteger(options.slotLimit)?options.slotLimit:64,virtual=slots.map(v=>v?{...v}:null);let left=item.count;const steps=[];
   for(const ix of targetSlots){if(!Number.isInteger(ix)||ix<0||ix>=virtual.length||ix===sourceSlot)continue;const at=virtual[ix];if(!validItem(at)||at.name!==item.name||(at.metadata??0)!==(item.metadata??0))continue;const n=Math.min(Math.max(0,(max(ix)??64)-at.count),left);if(n){steps.push({type:'place',count:n,sourceSlot,destinationSlot:ix});at.count+=n;left-=n;}if(!left)break;}
   if(left)for(const ix of targetSlots){if(!Number.isInteger(ix)||ix<0||ix>=virtual.length||ix===sourceSlot||virtual[ix]!=null)continue;const n=Math.min(max(ix)??64,left);steps.push({type:'place',count:n,sourceSlot,destinationSlot:ix});virtual[ix]={...item,count:n};left-=n;if(!left)break;}
   return steps.length?{...preview(steps,'quick_move_preview'),remaining:left}:{status:'noop',steps:[],executable:false,remaining:left};
