@@ -132,6 +132,9 @@ class BedrockGameplayBridge {
       spawnObserved: false, healthConfirmed: false, position: null, resumeTask: null,
       resumeResult: null, error: null };
     this.watch = null;
+    this.controlWatch = null;
+    this.commandPollMs = Number.isFinite(options.commandPollMs) ? Math.max(10, Math.min(100, Math.round(options.commandPollMs))) : 25;
+    this.controlTickMs = Number.isFinite(options.controlTickMs) ? Math.max(50, Math.min(250, Math.round(options.controlTickMs))) : 100;
     this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
     this.lastIntelligenceDecision = null;
@@ -209,7 +212,18 @@ class BedrockGameplayBridge {
     this.bind('remove_entity', p => this.removeActor(p));
     this.bind('change_dimension', p => this.dimensionChange(p));
     this.bind('close', () => this.stop());
-    if (this.commandPath && this.receiptPath) this.watch = setInterval(() => this.poll(), 100);
+    if (this.commandPath && this.receiptPath) {
+      // Keep file IPC responsive without forcing expensive world/intelligence
+      // work at the same frequency. The gameplay safety loop remains separate.
+      this.watch = setInterval(() => this.poll(), this.commandPollMs);
+      this.controlWatch = setInterval(() => {
+        if (this.closed) return;
+        this.tickControlPlane();
+        this.tickRespawnRecovery();
+      }, this.controlTickMs);
+      this.watch.unref?.();
+      this.controlWatch.unref?.();
+    }
     return this;
   }
   startGame(packet) {
@@ -1674,8 +1688,6 @@ class BedrockGameplayBridge {
   }
   poll() {
     if (this.closed || !this.commandPath || !this.receiptPath) return;
-    this.tickControlPlane();
-    this.tickRespawnRecovery();
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
@@ -1739,7 +1751,9 @@ class BedrockGameplayBridge {
     this.closed = true;
     stopLocalAutopilot(this, 'session_closed');
     if (this.watch) clearInterval(this.watch);
+    if (this.controlWatch) clearInterval(this.controlWatch);
     this.watch = null;
+    this.controlWatch = null;
     this.gameplayAgent?.stop('session_closed');
     this.pendingHotbarSelection = null;
     this.stackRequests.close('bedrock_session_closed');
