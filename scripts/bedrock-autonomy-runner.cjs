@@ -2,17 +2,21 @@
 
 /**
  * Experimental, finite autonomy loop for a standalone Xbox Bedrock player.
- * It executes actual (bounded) auth-input pulses on verified terrain, but NEVER
- * chains them without fresh server-confirmed progress. It also never attacks,
- * breaks or places blocks in this module.
+ * It executes actual (bounded) auth-input pulses on verified terrain. Each step
+ * is reconciled against a server position update when one arrives; if Bedrock
+ * sends no correction, it continues only when local physics predicts real
+ * progress after a grace period. It never attacks, breaks or places blocks.
  */
 const TICK_MS=250;
 const MAX_STEPS=20;
 const MAX_RUN_MS=30000;
-const ACK_MS=4000;
+const CORRECTION_GRACE_MS=1200;
 const MIN_PROGRESS=0.08;
 function distance(a,b) {
   return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+}
+function finite3(p) {
+  return p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
 }
 class VerifiedAutonomyRunner {
   constructor(options={}) {
@@ -29,6 +33,7 @@ class VerifiedAutonomyRunner {
     this.initialDimension=null;
     this.awaiting=null;
     this.verifiedSteps=0;
+    this.predictionSteps=0;
   }
   route(world) {
     const plan=world.layerTwo?.preview(world.gameplayWorld());
@@ -65,7 +70,7 @@ class VerifiedAutonomyRunner {
     const path=this.route(world);
     if(path.status!=='ready')return {status:'rejected',reason:path.reason};
     this.world=world;this.active=true;this.phase='ready';
-    this.stepCount=0;this.verifiedSteps=0;
+    this.stepCount=0;this.verifiedSteps=0;this.predictionSteps=0;
     this.startedAt=this.clock();
     this.initialDimension=world.dimension;
     this.awaiting=null;
@@ -87,34 +92,55 @@ class VerifiedAutonomyRunner {
     if(blocker){this.stop(blocker);return;}
     const movement=w.movement;
     if(this.awaiting){
-      if(movement?.snapshot()?.active)return;
+      const motion=movement?.snapshot?.()??{};
+      if(motion.active)return;
       const observed=w.lastServerPositionAt;
-      const progressed=observed!=null&&observed>this.awaiting.observedAt &&
-        distance(w.position,this.awaiting.position)>=MIN_PROGRESS;
-      if(progressed){
-        this.verifiedSteps++;
-        this.awaiting=null;
-        this.phase='ready';
+      const serverPositionChanged=observed!=null&&observed>this.awaiting.observedAt;
+      if(serverPositionChanged){
+        const serverProgressed=distance(w.position,this.awaiting.position)>=MIN_PROGRESS;
+        if(serverProgressed){
+          this.verifiedSteps++;
+          this.awaiting=null;
+          this.phase='ready';
+          return;
+        }
+        this.stop('server_corrected_without_progress');
         return;
       }
-      if(this.clock()-this.awaiting.startedAt>ACK_MS) {
-        this.stop('server_movement_not_confirmed');return;
+      const predicted=motion.predictedPosition;
+      const predictionProgressed=finite3(predicted)&&finite3(this.awaiting.predictedPosition)&&
+        distance(predicted,this.awaiting.predictedPosition)>=MIN_PROGRESS;
+      if(this.clock()-this.awaiting.startedAt>=CORRECTION_GRACE_MS){
+        if(predictionProgressed){
+          // No correction means the server has not contradicted the submitted
+          // prediction. Continue from that local, collision-checked position;
+          // never label this as server-verified progress.
+          w.position={...predicted};
+          this.predictionSteps++;
+          this.awaiting=null;
+          this.phase='prediction_uncontradicted';
+          return;
+        }
+        this.stop('movement_prediction_no_progress');
+        return;
       }
-      this.phase='awaiting_confirmed_progress';
+      this.phase='awaiting_server_correction';
       return;
     }
     const route=this.route(w);
     if(route.status==='complete') {this.stop('target_reached');return;}
     if(route.status!=='ready'){this.stop(route.reason);return;}
     if(movement?.snapshot()?.active)return;
+    const predictedBefore=movement?.snapshot?.()?.predictedPosition;
     const result=movement?.runVerifiedStep(w,route.waypoint,8);
     if(result?.status!=='accepted'){
       this.stop(result?.reason??'movement_rejected');return;
     }
     this.stepCount++;
     this.phase='moving';
-    this.awaiting={position:{...w.position},observedAt:w.lastServerPositionAt,
-      startedAt:this.clock()};
+    this.awaiting={position:{...w.position},
+      predictedPosition:finite3(predictedBefore)?{...predictedBefore}:{...w.position},
+      observedAt:w.lastServerPositionAt,startedAt:this.clock()};
   }
   stop(reason='user_stopped') {
     if(this.interval) this.clearInterval(this.interval);
@@ -127,7 +153,8 @@ class VerifiedAutonomyRunner {
   }
   snapshot(){
     return {active:this.active,phase:this.phase,attemptedSteps:this.stepCount,
-      serverVerifiedSteps:this.verifiedSteps,stopReason:this.lastReason,
+      serverVerifiedSteps:this.verifiedSteps,predictionSteps:this.predictionSteps,
+      stopReason:this.lastReason,
       maxSteps:MAX_STEPS,executed:this.stepCount>0,
       autonomousMining:false,autonomousCombat:false};
   }

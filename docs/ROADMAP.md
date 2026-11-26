@@ -27,3 +27,34 @@ unacknowledged movement fail closed. CI and Android ARM64 friend-world testing
 are still required before declaring real-world movement verified.
 
 The [Android test guide](ANDROID-APP-STATUS.md) records the current build, verification procedure and limitations. Check [pull requests](https://github.com/mechy007/MinePilot-AI/pulls) and [workflow runs](https://github.com/mechy007/MinePilot-AI/actions) for current commits, CI results, and APK artifacts.
+
+
+## Project-wide redesign and cleanup
+
+The redesign is being carried out on the dedicated `redesign/full-project-overhaul` branch. It preserves the working friend-world connection path and the existing movement implementation while improving the Android control experience and removing obsolete project clutter.
+
+Completed in the first pass:
+- Removed the unused legacy starter activity; DashboardActivity is the only launcher.
+- Added shared Android design tokens.
+- Reworked the dashboard header and navigation surface.
+- Made the joystick/control area vertical and phone-width friendly.
+- Moved experimental visual analytics and the reconstructed voxel view behind an optional disclosure.
+- Rewrote the README around current verified status.
+- Archived superseded transport, dashboard and gameplay phase plans without discarding their historical content.
+
+Remaining:
+- Split the large dashboard activity into maintainable screen/component classes.
+- Audit runtime and TypeScript engine overlap before consolidating.
+- Audit every workflow, test, dataset, vendor file and documentation link before further deletion.
+- Re-run engine, SDK and Android ARM64 build/test workflows after each meaningful phase.
+- Verify joystick movement on a real friend-hosted world before declaring movement complete.
+
+## Movement reliability closure — 2026-11-26
+
+- [x] Remove the false seven-second manual movement timeout that required a positive acknowledgement Bedrock does not promise.
+- [x] Reconcile normal position changes and corrections separately from rotation-only and teleport/reset packets.
+- [x] Keep collision preflight centered on predicted position and retry missing subchunks with per-column throttling.
+- [x] Surface queued-versus-executed command state and unknown collision coordinates in Android diagnostics.
+- [x] Add bounded-autonomy fallback to locally predicted progress only after a correction grace period, with a hard stop when neither server nor physics reports progress.
+- [x] Restore an interrupted user-started friend-world session when Android performs a sticky foreground-service restart and the saved Xbox account remains available.
+- [ ] Complete the on-device acceptance checklist in [Movement reliability validation](MOVEMENT-RELIABILITY-VALIDATION.md) against Bedrock 1.26.66.1 before marking joystick/background behavior release-verified.

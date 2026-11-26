@@ -24,7 +24,68 @@ function initialized(client, bridge) {
   // Strip the two intentional initial loading-screen completion writes;
   // later tests assert zero unsolicited *gameplay* input packets.
   client.sent.length = 0;
-}test('world state mirrors only live packet data, without inventing blocks', () => {
+}
+test('manual move commands reach the active controller and release through the same bridge', () => {
+  const client = new Client();
+  let received = null;
+  let releases = 0;
+  const movement = {
+    capability() { return 'ready'; },
+    runManualHold(world, options) { received = { world, options }; return { status: 'accepted', reason: 'movement_controls_applied' }; },
+    releaseManual() { releases++; return true; },
+    stop() {}, stopPresence() {}, snapshot() { return { capability: 'ready' }; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { movement }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  const result = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'manual-vector', action: 'manual_move',
+    confirmed: true, mode: 'vector', ticks: 8, motionX: 0.4, motionY: 0.7,
+    jump: true, sprint: true, sneak: false
+  });
+  assert.equal(result.status, 'accepted');
+  assert.equal(received.world, bridge);
+  assert.deepEqual(received.options, { mode: 'vector', ticks: 8, vector: { x: 0.4, y: 0.7 },
+    jump: true, sprint: true, sneak: false });
+  const stopped = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'manual-release', action: 'manual_stop'
+  });
+  assert.equal(stopped.status, 'ok');
+  assert.equal(releases, 1);
+  bridge.stop();
+});
+
+test('rotation-only MovePlayer packets never rewrite position or clear movement prediction', () => {
+  const client = new Client();
+  let rotations = 0, observed = 0, teleports = 0;
+  const movement = {
+    observeRotation() { rotations++; },
+    observeServerPosition() { observed++; },
+    teleport() { teleports++; },
+    stop() {}, stopPresence() {}, snapshot() { return {}; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { movement }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  const before = { ...bridge.position };
+  client.emit('move_player', { runtime_entity_id: 123n,
+    position: { x: 999, y: 80, z: 999 }, yaw: 45, pitch: -10, mode: 3 });
+  assert.deepEqual(bridge.position, before);
+  assert.equal(rotations, 1);
+  assert.equal(observed, 0);
+  assert.equal(teleports, 0);
+  client.emit('move_player', { runtime_entity_id: 123n,
+    position: { x: 10, y: 64, z: 11 }, yaw: 90, pitch: 0, mode: 0 });
+  assert.deepEqual(bridge.position, { x: 10, y: 64, z: 11 });
+  assert.equal(observed, 1);
+  assert.equal(teleports, 0);
+  client.emit('move_player', { runtime_entity_id: 123n,
+    position: { x: 20, y: 70, z: 20 }, yaw: 0, pitch: 0, mode: 2 });
+  assert.equal(teleports, 1);
+  bridge.stop();
+});
+
+test('world state mirrors only live packet data, without inventing blocks', () => {
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client).start();
   assert.equal(bridge.snapshot().state, 'awaiting_world');
@@ -63,14 +124,26 @@ test('chunk cache is bounded and ignores invalid/chunkless packets', () => {
   bridge.stop();
 });
 
-test('private single-command inbox handles status, stop and rejected commands', t => {
+test('Android gameplay inbox carries joystick commands through controller execution and receipts', t => {
   const dir = mkdtempSync(join(tmpdir(), 'minepilot-gameplay-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const commandPath = join(dir, 'command.json'), receiptPath = join(dir, 'receipt.json');
-  let stops = 0;
+  let stops = 0, releases = 0;
+  const manualInputs = [];
   const client = new Client();
-  const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath,
-    movement: { stop() { stops++; }, capability() { return 'unavailable'; } } }).start();
+  const movement = {
+    stop() { stops++; },
+    capability() { return 'ready'; },
+    runManualHold(world, options) {
+      manualInputs.push(options);
+      return { status: 'accepted', reason: 'movement_controls_applied' };
+    },
+    releaseManual() { releases++; return true; },
+    snapshot() { return { capability: 'ready', active: true }; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath, movement }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
   const cmd = (requestId, action, rest = {}) => {
     writeFileSync(commandPath, JSON.stringify({
       version: 'minepilot.gameplay.v1', requestId, action, ...rest
@@ -80,13 +153,31 @@ test('private single-command inbox handles status, stop and rejected commands', 
     return JSON.parse(readFileSync(receiptPath, 'utf8'));
   };
   assert.equal(cmd('cmd-1', 'status').status, 'ok');
+  const manual = cmd('cmd-manual', 'manual_move', {
+    confirmed: true, mode: 'vector', ticks: 8, motionX: 0.4, motionY: 0.7,
+    jump: true, sprint: true, sneak: false
+  });
+  assert.equal(manual.status, 'accepted');
+  assert.equal(manual.requestId, 'cmd-manual');
+  assert.equal(manual.dispatchAccepted, true);
+  assert.equal(manual.executionStage, 'movement_controls_applied');
+  assert.equal(manual.serverConfirmation, 'correction_only_if_prediction_differs');
+  assert.deepEqual(manualInputs[0], {
+    mode: 'vector', ticks: 8, vector: { x: 0.4, y: 0.7 },
+    jump: true, sprint: true, sneak: false
+  });
+  const manualStop = cmd('cmd-manual-stop', 'manual_stop');
+  assert.equal(manualStop.status, 'ok');
+  assert.equal(releases, 1);
   assert.equal(cmd('cmd-2', 'stop_movement').reason, 'movement_cancelled');
   assert.equal(stops, 1);
   assert.equal(cmd('cmd-3', 'obsolete_movement_probe', { confirmed: true }).reason, 'invalid_command');
   assert.equal(cmd('cmd-4', 'mine').reason, 'invalid_command');
   writeFileSync(commandPath, '{"version":"minepilot.gameplay.v1","action":"status"');
   bridge.poll();
-  assert.equal(JSON.parse(readFileSync(receiptPath, 'utf8')).reason, 'invalid_command');
+  const last = JSON.parse(readFileSync(receiptPath, 'utf8'));
+  assert.equal(last.reason, 'invalid_command');
+  assert.equal(last.dispatchAccepted, false);
   bridge.stop();
   assert.equal(stops, 2);
 });
@@ -148,6 +239,29 @@ test('nested Bedrock PlayerRecords add/remove resolves names only for visible en
   ] } });
   client.emit('remove_actor', { entity_id: 200n });
   assert.equal(bridge.snapshot().layerTwo.preview.status, 'waiting_for_target');
+  bridge.stop();
+});
+
+test('player names arriving after AddPlayer rehydrate the Follow target cache', async () => {
+  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
+  initialized(client, bridge);
+  client.emit('add_player', {
+    runtime_entity_id: 200n, uuid: 'late-name-uuid',
+    position: { x: 14, y: 64, z: 11 }
+  });
+  assert.deepEqual(bridge.snapshot().layerTwo.visiblePlayerNames, []);
+  client.emit('player_list', { records: { type: 'add', records: [
+    { uuid: 'late-name-uuid', username: 'LateFriend' }
+  ] } });
+  assert.deepEqual(bridge.snapshot().layerTwo.visiblePlayerNames, ['LateFriend']);
+  const plan = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'late-follow',
+    action: 'plan_follow', playerName: 'LateFriend'
+  });
+  assert.equal(plan.status, 'accepted');
+  assert.equal(bridge.snapshot().layerTwo.preview.targetName, 'LateFriend');
   bridge.stop();
 });
 
@@ -289,6 +403,72 @@ test('Bedrock Dedicated Server zero runtime-id respawn packets are accepted for 
   assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
   assert.equal(bridge.snapshot().respawnRecovery.recovered, 1);
   assert.deepEqual(bridge.snapshot().position, { x: 12.5, y: 70, z: 8.5 });
+  bridge.stop();
+});
+
+test('respawn recovery handles three consecutive deaths and server runtime ID changes', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client).start();
+  initialized(client, bridge);
+  const cycles = [
+    { stateZeroId: 0n, stateOneId: 456n, x: 12.5 },
+    { stateZeroId: 789n, stateOneId: 789n, x: 13.5 },
+    { stateZeroId: 0n, stateOneId: 0n, x: 14.5 }
+  ];
+  let recovered = 0;
+  for (const cycle of cycles) {
+    client.emit('set_health', { health: 0 });
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'dead_waiting_for_server');
+    client.emit('respawn', {
+      runtime_entity_id: cycle.stateZeroId, state: 0,
+      position: { x: cycle.x, y: 70, z: 8.5 }
+    });
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'client_ready_sent');
+    client.emit('respawn', {
+      runtime_entity_id: cycle.stateOneId, state: 1,
+      position: { x: cycle.x, y: 70, z: 8.5 }
+    });
+    const activeId = cycle.stateOneId === 0n ? bridge.self : cycle.stateOneId.toString();
+    assert.equal(bridge.self, activeId);
+    const action = client.sent.filter(item => item.packet === 'player_action').at(-1);
+    assert.ok(action, 'server ReadyToSpawn step sends the respawn action');
+    assert.equal(action.value.runtime_entity_id, BigInt(activeId));
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'respawn_action_sent');
+    client.emit('set_health', { health: 20 });
+    recovered++;
+    assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
+    assert.equal(bridge.snapshot().state, 'observing');
+    assert.equal(bridge.snapshot().respawnRecovery.recovered, recovered);
+  }
+  const final = bridge.snapshot();
+  assert.equal(final.respawnRecovery.deaths, 3);
+  assert.equal(final.respawnRecovery.recovered, 3);
+  assert.equal(final.respawnRecovery.actionRequests, 3);
+  bridge.stop();
+});
+
+test('respawn recovery retries are bounded when positive health confirmation is delayed', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  client.emit('set_health', { health: 0 });
+  client.emit('respawn', { runtime_entity_id: 0n, state: 0, position: origin });
+  client.emit('respawn', { runtime_entity_id: 0n, state: 1, position: origin });
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 1);
+  now += 1800;
+  bridge.tickRespawnRecovery();
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 2);
+  now += 1800;
+  bridge.tickRespawnRecovery();
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 3);
+  now += 1800;
+  bridge.tickRespawnRecovery();
+  assert.equal(bridge.snapshot().respawnRecovery.actionRequests, 3,
+    'retry limit prevents an unbounded packet loop');
+  assert.equal(bridge.snapshot().respawnRecovery.error, 'respawn_confirmation_timeout');
+  client.emit('set_health', { health: 20 });
+  assert.equal(bridge.snapshot().respawnRecovery.state, 'alive');
   bridge.stop();
 });
 

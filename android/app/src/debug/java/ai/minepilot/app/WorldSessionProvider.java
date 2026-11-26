@@ -395,8 +395,25 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putBoolean("movement_unconfirmed", movementSystem.optBoolean("unconfirmedMovement", false));
                     JSONObject terrain = movementSystem.optJSONObject("terrain");
                     result.putBoolean("movement_terrain_ready", terrain != null && !terrain.optBoolean("unknown", true));
-                    if (terrain != null)
+                    if (terrain != null) {
                         result.putInt("movement_terrain_queries", Math.max(0, terrain.optInt("queries", 0)));
+                        org.json.JSONArray missingCells = terrain.optJSONArray("unknownCells");
+                        if (missingCells != null && missingCells.length() > 0) {
+                            JSONObject firstMissing = missingCells.optJSONObject(0);
+                            if (firstMissing != null) {
+                                int x = firstMissing.optInt("x", Integer.MIN_VALUE);
+                                int y = firstMissing.optInt("y", Integer.MIN_VALUE);
+                                int z = firstMissing.optInt("z", Integer.MIN_VALUE);
+                                if (Math.abs((long) x) <= 30000000 && y >= -256 && y <= 512 &&
+                                        Math.abs((long) z) <= 30000000) {
+                                    result.putString("movement_unknown_position", x + "," + y + "," + z);
+                                }
+                                String missingReason = firstMissing.optString("reason", "");
+                                if (missingReason.matches("[a-z_]{1,64}"))
+                                    result.putString("movement_unknown_reason", missingReason);
+                            }
+                        }
+                    }
                     JSONObject physics = movementSystem.optJSONObject("physics");
                     if (physics != null) {
                         result.putInt("movement_physics_blocks", Math.max(0, physics.optInt("blocks", 0)));
@@ -567,6 +584,7 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putString("autonomy_reason", autonomy.optString("stopReason", ""));
                     result.putInt("autonomy_attempted", autonomy.optInt("attemptedSteps", 0));
                     result.putInt("autonomy_verified", autonomy.optInt("serverVerifiedSteps", 0));
+                    result.putInt("autonomy_predicted_steps", autonomy.optInt("predictionSteps", 0));
                 }
                 JSONObject navigator = gameplay.optJSONObject("addonNavigation");
                 if (navigator != null) {
@@ -609,6 +627,14 @@ public final class WorldSessionProvider extends ContentProvider {
                 if (command != null) {
                     result.putString("last_command", command.optString("status", "")
                             + ": " + command.optString("reason", ""));
+                    String executionStage = command.optString("executionStage", "");
+                    if (executionStage.matches("[a-z_]{1,64}"))
+                        result.putString("last_command_execution_stage", executionStage);
+                    result.putBoolean("last_command_dispatch_accepted",
+                            command.optBoolean("dispatchAccepted", false));
+                    String serverConfirmation = command.optString("serverConfirmation", "");
+                    if (serverConfirmation.matches("[a-z_]{1,64}"))
+                        result.putString("last_command_server_confirmation", serverConfirmation);
                     String primitive = command.optString("primitive", "");
                     if (primitive.matches("getLogsCount|getPlanksCount|checkBlockAbove|checkBlocksAround|findSuitablePosition")) {
                         result.putString("last_command_primitive", primitive);
@@ -879,6 +905,7 @@ public final class WorldSessionProvider extends ContentProvider {
             Files.move(temporary, inbox, StandardCopyOption.ATOMIC_MOVE);
             result.putString("request_id", requestId);
             result.putBoolean("accepted", true);
+            result.putString("queue_stage", "queued_for_runtime");
         } catch (Exception ignored) {
             // Command is rejected or the session already ended. Never send account data.
         } finally {

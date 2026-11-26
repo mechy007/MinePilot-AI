@@ -125,7 +125,8 @@ class BedrockGameplayBridge {
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.lastRespawnState = null;
     this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
-      actionRequests: 0, recovered: 0, error: null };
+      actionRequests: 0, recovered: 0, attempts: 0, lastActionAt: 0,
+      position: null, error: null };
     this.watch = null;
     this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
@@ -309,11 +310,15 @@ class BedrockGameplayBridge {
     if (this.closed || !Number.isFinite(health) || !this.self) return;
     if (health <= 0) {
       this.cancelPendingBlockPlacement('player_died');
-      // Ignore duplicate zero-health updates and initial login fixtures.
       if (!this.spawned || this.respawnRecovery.state !== 'alive') return;
       this.respawnRecovery.state = 'dead_waiting_for_server';
-      this.gameplayAgent?.stop('player_died');
       this.respawnRecovery.deaths++;
+      this.respawnRecovery.attempts = 0;
+      this.respawnRecovery.lastActionAt = 0;
+      this.respawnRecovery.position = null;
+      this.respawnRecovery.error = null;
+      this.lastRespawnState = null;
+      this.gameplayAgent?.stop('player_died');
       this.spawned = false;
       this.autonomy?.stop('player_died');
       this.blockBreaker?.abort('player_died');
@@ -323,8 +328,7 @@ class BedrockGameplayBridge {
       this.addonNavigation?.emergencyStop?.();
       return;
     }
-    // Positive health after a confirmed death is the evidence of recovery,
-    // not merely seeing a ReadyToSpawn packet.
+    // Positive health is the confirmation that the server restored the player.
     if (this.respawnRecovery.state !== 'alive') {
       const recovering = this.respawnRecovery.state;
       if (recovering === 'respawn_action_sent' ||
@@ -332,17 +336,94 @@ class BedrockGameplayBridge {
           recovering === 'dead_waiting_for_server') {
         this.respawnRecovery.recovered++;
         this.respawnRecovery.state = 'alive';
+        this.respawnRecovery.attempts = 0;
+        this.respawnRecovery.lastActionAt = 0;
+        this.respawnRecovery.position = null;
+        this.respawnRecovery.error = null;
         this.spawned = true;
         this.movement?.startPresence?.(this);
       }
     }
   }
+  sendRespawnAction(position) {
+    const recovery = this.respawnRecovery;
+    if (recovery.attempts >= 3) {
+      recovery.error = 'respawn_confirmation_timeout';
+      return false;
+    }
+    const now = this.clock();
+    const blockPos = {
+      x: Math.floor(position.x), y: Math.floor(position.y), z: Math.floor(position.z)
+    };
+    recovery.attempts++;
+    recovery.lastActionAt = now;
+    try {
+      this.client.queue('player_action', {
+        runtime_entity_id: BigInt(this.self), action: 'respawn',
+        position: blockPos, result_position: blockPos, face: 0
+      });
+      recovery.actionRequests++;
+      recovery.position = safePoint(position);
+      recovery.state = 'respawn_action_sent';
+      recovery.error = null;
+      this.spawnTrace.respawnAcknowledged++;
+      this.position = safePoint(position);
+      this.lastServerPositionAt = now;
+      return true;
+    } catch {
+      this.spawnTrace.handshakeErrors++;
+      recovery.error = 'respawn_action_write_failed';
+      return false;
+    }
+  }
+  tickRespawnRecovery() {
+    const recovery = this.respawnRecovery;
+    if (this.closed) return false;
+    const now = this.clock();
+    if (!Number.isFinite(now)) return false;
+    if (recovery.state === 'client_ready_sent' && this.lastRespawnState === 0) {
+      if (now - recovery.lastActionAt < 1800) return false;
+      if (recovery.requests >= 3) {
+        recovery.error = 'respawn_search_timeout';
+        return false;
+      }
+      const position = recovery.position ?? this.position;
+      if (!finitePosition(position)) {
+        recovery.error = 'server_respawn_position_unavailable';
+        return false;
+      }
+      recovery.requests++;
+      recovery.lastActionAt = now;
+      try {
+        this.client.queue('respawn', {
+          state: 2, position, runtime_entity_id: BigInt(this.self)
+        });
+        recovery.error = null;
+        return true;
+      } catch {
+        this.spawnTrace.handshakeErrors++;
+        recovery.error = 'client_ready_write_failed';
+        return false;
+      }
+    }
+    if ((recovery.state === 'respawn_action_sent' ||
+         (recovery.state === 'client_ready_sent' && this.lastRespawnState === 1)) &&
+        now - recovery.lastActionAt >= 1800) {
+      const position = recovery.position ?? this.position;
+      if (!finitePosition(position)) {
+        recovery.error = 'server_respawn_position_unavailable';
+        return false;
+      }
+      return this.sendRespawnAction(position);
+    }
+    return false;
+  }
   onRespawn(packet) {
     if (this.closed || !packet || !Number.isInteger(packet.state)) return;
     const incomingId = ident(packet.runtime_entity_id);
-    // Bedrock Dedicated Server may encode the Respawn packet's runtime ID as
-    // zero. Treat that protocol sentinel as unspecified, not as another player.
-    if (incomingId && incomingId !== '0' && this.self && incomingId !== this.self) return;
+    // This is a server-originated local-player packet. A new nonzero runtime
+    // ID replaces the old ID; zero is the BDS "unspecified" sentinel.
+    if (incomingId && incomingId !== '0') this.self = incomingId;
     this.spawnTrace.respawnSeen++;
     this.lastRespawnState = packet.state;
     if (!this.self || typeof this.client.queue !== 'function') return;
@@ -354,14 +435,16 @@ class BedrockGameplayBridge {
       return;
     }
     if (packet.state === 0 && recovery.state === 'dead_waiting_for_server') {
-      // Bedrock death handshake: do not reply before the server starts
-      // searching. A state-2 reply requests the server's respawn position.
+      // SearchingForSpawn -> client ReadyToSpawn.
+      recovery.requests++;
+      recovery.position = safePoint(position);
+      recovery.state = 'client_ready_sent';
+      recovery.lastActionAt = this.clock();
       try {
         this.client.queue('respawn', {
           state: 2, position, runtime_entity_id: BigInt(this.self)
         });
-        recovery.requests++;
-        recovery.state = 'client_ready_sent';
+        recovery.error = null;
       } catch {
         this.spawnTrace.handshakeErrors++;
         recovery.error = 'client_ready_write_failed';
@@ -369,37 +452,32 @@ class BedrockGameplayBridge {
       return;
     }
     if (packet.state !== 1) return;
-    // Keep existing spawn/join acknowledgement for non-death respawns.
-    // The additional player_action below is only for a confirmed death.
-    if (recovery.state === 'dead_waiting_for_server' ||
-        recovery.state === 'client_ready_sent') {
+    if (recovery.state === 'dead_waiting_for_server') {
+      // Some hosts omit SearchingForSpawn: still complete ReadyToSpawn.
+      recovery.requests++;
+      recovery.position = safePoint(position);
+      recovery.state = 'client_ready_sent';
+      recovery.lastActionAt = this.clock();
       try {
-        if (recovery.state === 'dead_waiting_for_server') {
-          this.client.queue('respawn', {
-            state: 2, position, runtime_entity_id: BigInt(this.self)
-          });
-          recovery.requests++;
-        }
-        // Protocol 2225 uses the player_action respawn enum. Client-ready
-        // alone does not cause the server to revive the player.
-        const blockPos = {x:Math.floor(position.x), y:Math.floor(position.y),
-          z:Math.floor(position.z)};
-        this.client.queue('player_action', {
-          runtime_entity_id:BigInt(this.self), action:'respawn',
-          position:blockPos, result_position:blockPos, face:0
+        this.client.queue('respawn', {
+          state: 2, position, runtime_entity_id: BigInt(this.self)
         });
-        recovery.actionRequests++;
-        recovery.state = 'respawn_action_sent';
-        this.spawnTrace.respawnAcknowledged++;
-        this.position = safePoint(position);
-        this.lastServerPositionAt = this.clock();
       } catch {
         this.spawnTrace.handshakeErrors++;
-        recovery.error = 'respawn_action_write_failed';
+        recovery.error = 'client_ready_write_failed';
+        return;
       }
+    }
+    if (recovery.state === 'client_ready_sent') {
+      this.sendRespawnAction(position);
+      return;
+    }
+    if (recovery.state === 'respawn_action_sent') {
+      this.tickRespawnRecovery();
       return;
     }
     if (recovery.state !== 'alive') return;
+    // Initial join / non-death respawn: keep the normal client-ready handshake.
     try {
       this.client.queue('respawn', {
         state: 2, position, runtime_entity_id: BigInt(this.self)
@@ -530,24 +608,37 @@ class BedrockGameplayBridge {
   }
   playerList(packet) {
     if (this.closed || !packet || typeof packet !== 'object') return;
-    // Bedrock PlayerRecords is sometimes a nested tagged union, not a flat array.
+    // Bedrock may send AddPlayer before PlayerList. Reconcile both packet
+    // orders so an initially unnamed actor gains its gamertag when available.
     const payload = packet.records ?? packet.entries;
     const entries = Array.isArray(payload) ? payload :
       payload && typeof payload === 'object'
         ? (Array.isArray(payload.records) ? payload.records : payload.entries)
         : null;
     if (!Array.isArray(entries)) return;
-    // Only sanitized player names and UUIDs are cached.
     const action = packet.action_type ?? packet.action ?? payload?.type ?? payload?.action;
     const removal = action === 'remove' || action === 1;
     for (const p of entries.slice(0, MAX_VISIBLE_PLAYERS)) {
       const uuid = typeof p.uuid === 'string' ? p.uuid : null;
       if (!uuid || uuid.length > 64) continue;
-      if (removal) { this.playerNames.delete(uuid); continue; }
+      if (removal) {
+        this.playerNames.delete(uuid);
+        for (const [id, player] of this.players) {
+          if (player.uuid !== uuid) continue;
+          this.players.delete(id);
+          this.layerTwo?.removePlayer(id);
+        }
+        continue;
+      }
       const name = p.username;
       if (typeof name !== 'string' || !/^[a-zA-Z0-9_ #.-]{1,32}$/.test(name)) continue;
       if (this.playerNames.size >= MAX_VISIBLE_PLAYERS && !this.playerNames.has(uuid)) continue;
       this.playerNames.set(uuid, name);
+      for (const [id, player] of this.players) {
+        if (player.uuid !== uuid) continue;
+        player.username = name;
+        this.layerTwo?.observePlayer(id, name, player.position, this.dimension);
+      }
     }
   }
   playerHotbar(packet) {
@@ -691,14 +782,30 @@ class BedrockGameplayBridge {
     const pos = safePoint(packet.position);
     if (!pos) return;
     if (id === this.self) {
+      const rawMode = packet.mode;
+      const modeName = typeof rawMode === 'string'
+        ? rawMode.toLowerCase().replace(/[^a-z]/g, '') : '';
+      const rotationOnly = rawMode === 3 ||
+        ['rotation', 'onlyheadrot', 'onlyheadrotation'].includes(modeName);
+      if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
+      if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
+      // OnlyHeadRot carries a position field for schema compatibility. It
+      // must never move the world anchor or clear pending movement prediction.
+      if (rotationOnly) {
+        this.movement?.observeRotation?.(this.yaw, this.pitch);
+        return;
+      }
       this.position = pos;
       this.lastServerPositionAt = this.clock();
       this.layerOne?.onServerPosition(pos);
-      if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
-      if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
-      if (packet.mode === 'rotation') this.movement?.observeRotation?.(this.yaw, this.pitch);
-      else this.movement?.teleport?.(pos, packet);
-      this.movement?.observeServerPosition?.(pos, this.clock());
+      const normalPosition = rawMode === 0 || modeName === 'normal';
+      if (normalPosition) {
+        this.movement?.observeServerPosition?.(pos, this.clock());
+      } else {
+        // Reset and Teleport are authoritative re-anchors, not positive
+        // acknowledgements of the preceding joystick input.
+        this.movement?.teleport?.(pos, packet);
+      }
     } else if (this.players.has(id)) {
       this.players.get(id).position = pos;
       this.players.get(id).seenAt = this.clock();
@@ -737,10 +844,10 @@ class BedrockGameplayBridge {
     if (this.players.size >= MAX_VISIBLE_PLAYERS && !this.players.has(id)) return;
     const position = safePoint(packet.position);
     if (!position) return;
-    this.players.set(id, { position, seenAt: this.clock() });
-    this.lifeSenses?.observePlayer(id,position);
     const uuid = typeof packet.uuid === 'string' ? packet.uuid : null;
     const name = typeof packet.username === 'string' ? packet.username : this.playerNames.get(uuid);
+    this.players.set(id, { position, seenAt: this.clock(), uuid, username: name ?? null });
+    this.lifeSenses?.observePlayer(id,position);
     this.layerTwo?.observePlayer(id, name, position, this.dimension);
   }
   removeActor(packet) {
@@ -768,6 +875,11 @@ class BedrockGameplayBridge {
     this.movementAuthority = null;
     this.movementAuthoritySource = 'unknown';
     this.spawned = false;
+    this.respawnRecovery.state = 'alive';
+    this.respawnRecovery.attempts = 0;
+    this.respawnRecovery.lastActionAt = 0;
+    this.respawnRecovery.position = null;
+    this.respawnRecovery.error = null;
     this.spawnTrace = { respawnSeen: 0, respawnAcknowledged: 0,
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.receivedChunks.clear();
@@ -1483,6 +1595,7 @@ class BedrockGameplayBridge {
   poll() {
     if (this.closed || !this.commandPath || !this.receiptPath) return;
     this.tickControlPlane();
+    this.tickRespawnRecovery();
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
@@ -1512,6 +1625,13 @@ class BedrockGameplayBridge {
         ? command.requestId : '',
       status: completedPlacement?.status ?? result.status,
       reason: completedPlacement?.reason ?? result.reason,
+      dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
+      executionStage: result.status === 'rejected' ? 'rejected'
+        : command?.action === 'manual_move' ? 'movement_controls_applied'
+        : result.status === 'accepted' ? 'dispatched' : 'completed',
+      ...(command?.action === 'manual_move' ? {
+        serverConfirmation: 'correction_only_if_prediction_differs'
+      } : {}),
       ...(completedPlacement ? { blockPlacement: completedPlacement } : {}),
       ...(command?.action === 'odyssey_execute' ? {
         primitive: command.primitive,

@@ -29,16 +29,40 @@ public final class XboxSignInService extends Service {
     static volatile boolean joining;
     private volatile boolean notifyOnAccountSave;
     private volatile boolean accountReadBack;
+    private volatile int latestStartId;
     private static final int ACTIVE_NOTIFICATION = 6202;
     private static final int SIGN_IN_NOTIFICATION = 6201;
     private static final String SIGN_IN_CHANNEL = "minepilot_sign_in";
+    private static final String WORLD_SESSION_PREFERENCES = "minepilot_world_session";
+    private static final String WORLD_SESSION_ACTIVE = "active";
+    private static final String WORLD_SESSION_HOST = "host_xuid";
 
     @Override public IBinder onBind(Intent intent) { return null; }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (started) return START_NOT_STICKY;
+        latestStartId = startId;
+        if (started) return joining ? START_STICKY : START_NOT_STICKY;
         String host = intent == null ? null : intent.getStringExtra("host");
         boolean friends = intent != null && intent.getBooleanExtra("friends", false) && host == null;
+        if (intent == null) {
+            var savedSession = getSharedPreferences(WORLD_SESSION_PREFERENCES, MODE_PRIVATE);
+            String savedHost = savedSession.getString(WORLD_SESSION_HOST, "");
+            if (savedSession.getBoolean(WORLD_SESSION_ACTIVE, false) &&
+                    BotAccount.saved(this) && savedHost.matches("[a-zA-Z0-9_-]{1,64}")) {
+                host = savedHost;
+            } else {
+                savedSession.edit().remove(WORLD_SESSION_HOST)
+                        .putBoolean(WORLD_SESSION_ACTIVE, false).apply();
+                stopSelf(startId);
+                return START_NOT_STICKY;
+            }
+        }
+        if (host != null) {
+            getSharedPreferences(WORLD_SESSION_PREFERENCES, MODE_PRIVATE).edit()
+                    .putString(WORLD_SESSION_HOST, host)
+                    .putBoolean(WORLD_SESSION_ACTIVE, true).apply();
+        }
+        completedMessage = null;
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(
                 SIGN_IN_CHANNEL, "Xbox sign-in", NotificationManager.IMPORTANCE_LOW));
@@ -57,11 +81,11 @@ public final class XboxSignInService extends Service {
                 .setOngoing(true)
                 .build());
         notifyOnAccountSave = !friends && (host == null || !BotAccount.saved(this));
-        startProbe(host, friends);
-        return START_NOT_STICKY;
+        startProbe(host, friends, startId);
+        return host != null ? START_STICKY : START_NOT_STICKY;
     }
 
-    private void startProbe(String host, boolean friends) {
+    private void startProbe(String host, boolean friends, int startId) {
         joining = host != null;
         if (!joining && !friends) XboxSignInReceiver.record(this, "");
         started = true;
@@ -161,8 +185,18 @@ public final class XboxSignInService extends Service {
                             ? "Sign-in ended without a saved Xbox account." : completedMessage;
                     showSignInCompleteNotification(accountSaved, result);
                 }
+                if (joining) {
+                    var savedSession = getSharedPreferences(WORLD_SESSION_PREFERENCES, MODE_PRIVATE);
+                    if (host != null && host.equals(savedSession.getString(WORLD_SESSION_HOST, ""))) {
+                        savedSession.edit().remove(WORLD_SESSION_HOST)
+                                .putBoolean(WORLD_SESSION_ACTIVE, false).apply();
+                    }
+                }
+                started = false;
+                joining = false;
+                statusPath = null;
                 stopForeground(STOP_FOREGROUND_REMOVE);
-                stopSelf();
+                stopSelfResult(latestStartId);
             }
         }, "minepilot-xbox-auth-probe").start();
     }
