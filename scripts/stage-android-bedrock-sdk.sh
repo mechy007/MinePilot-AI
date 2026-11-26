@@ -333,8 +333,10 @@ const root = process.argv[2];
 const data = require(path.join(root, 'bedrock-collision-data.cjs')).loadBedrockCollisionData();
 assert.equal(data.stateCount, 23948);
 assert.ok(data.blockCount > 1000);
-assert.equal(data.profilesByHash.get(18894)?.name, 'air');
-assert.equal(data.profilesByHash.get(3317)?.name, 'stone');
+assert.equal(data.profilesByHash.get((-604749536) >>> 0)?.name, 'air');
+assert.equal(data.profilesByHash.get((-2144268767) >>> 0)?.name, 'stone');
+assert.equal(data.profilesByStateId.get(18894)?.name, 'air');
+assert.equal(data.profilesByStateId.get(3317)?.name, 'stone');
 require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
 console.log('Verified Bedrock 1.26.60 collision geometry and physics engine');
 JS
