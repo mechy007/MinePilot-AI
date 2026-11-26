@@ -250,10 +250,6 @@ The dashboard is still a large Activity and should be split into screen controll
 | `worldRequest(method, sessionId, extras)` | Call the private provider with a bounded typed payload; catch provider lifecycle/security errors. |
 | `refreshCommandCenter()` | Request one status snapshot off the UI thread and discard stale screen generations. |
 | `showWorldStatus(current)` | Render connection, vitals, gameplay, learning, Autopilot and capability state from one snapshot. |
-| `configureMovementProbe(enable)` | Change the explicitly user-authorized experimental movement setting. |
-| `showMovementDiagnostics()` | Render movement authority, freshness and verified-step diagnostics. |
-| `requestMotionDiagnostic(mode, ticks)` | Request a bounded diagnostic with validated mode/tick count. |
-| `confirmMovementProbe()` | Obtain explicit confirmation before sending an experimental movement probe. |
 | `requestFollowPlan()` | Select/preview a follow target; preview is not movement success. |
 | `showBlockBreakDialog()` | Explain the single-block experimental/manual action and require confirmation. |
 | `chooseIntelligentGameplayGoal()` | Present supported gameplay goals; do not enable actions beyond the selected goal's capabilities. |
