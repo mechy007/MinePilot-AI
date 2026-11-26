@@ -39,7 +39,6 @@ public final class DashboardActivity extends Activity {
     private TextView gameplayStatus;
     private Button telemetryExpand;
     private boolean telemetryExpanded;
-    private final ArrayList<Button> manualControlButtons = new ArrayList<>();
     private final android.os.Handler manualControlHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private String activeManualMode = "";
@@ -51,7 +50,7 @@ public final class DashboardActivity extends Activity {
     private String manualLookMode = "";
     private int manualControlGeneration;
     private boolean manualControlsEnabled;
-    private ManualJoystickView manualJoystick;
+    private ManualControlPanel manualControlPanel;
     private final Runnable repeatManualControl = new Runnable() {
         @Override public void run() {
             if (activeManualMode.isEmpty() || !manualControlsEnabled) return;
@@ -382,7 +381,7 @@ public final class DashboardActivity extends Activity {
 
     private void show(String tab) {
         stopManualControl();
-        manualControlButtons.clear();
+        manualControlPanel = null;
         manualControlsEnabled = false;
         logRefresh.removeCallbacks(updateLogs);
         logRefresh.removeCallbacks(pollWorld);
@@ -776,71 +775,28 @@ public final class DashboardActivity extends Activity {
     }
 
     private void addManualControlPanel() {
-        LinearLayout panel = card();
-        panel.addView(text("MANUAL BOT CONTROLS", 11, GRASS, true));
-        TextView hint = text("Drag the joystick to move the bot. Release to stop. Hold the look buttons to rotate. Manual control pauses whenever the world or screen is not active.", 12, MUTED, false);
-        hint.setPadding(0, dp(7), 0, dp(10));
-        panel.addView(hint);
-
-        // Use a vertical, width-safe layout. Side-by-side controls were too
-        // cramped on common Android phones and made the joystick difficult to use.
-        LinearLayout controls = new LinearLayout(this);
-        controls.setOrientation(LinearLayout.VERTICAL);
-        controls.setGravity(Gravity.CENTER_HORIZONTAL);
-
-        manualJoystick = new ManualJoystickView(this);
-        manualJoystick.setListener(this::onManualJoystickVector);
-        LinearLayout.LayoutParams stickParams = new LinearLayout.LayoutParams(dp(168), dp(168));
-        stickParams.gravity = Gravity.CENTER_HORIZONTAL;
-        stickParams.bottomMargin = dp(12);
-        controls.addView(manualJoystick, stickParams);
-
-        LinearLayout look = new LinearLayout(this);
-        look.setOrientation(LinearLayout.VERTICAL);
-        look.setGravity(Gravity.CENTER);
-        look.addView(text("LOOK / CAMERA", 11, GRASS, true));
-        LinearLayout lookRow = manualControlRow();
-        addManualPadButton(lookRow, "LOOK LEFT", "turn_left", "Look left");
-        addManualPadButton(lookRow, "LOOK RIGHT", "turn_right", "Look right");
-        look.addView(lookRow);
-        LinearLayout verticalLookRow = manualControlRow();
-        addManualPadButton(verticalLookRow, "LOOK UP", "look_up", "Look up while held");
-        addManualPadButton(verticalLookRow, "LOOK DOWN", "look_down", "Look down while held");
-        look.addView(verticalLookRow);
-        LinearLayout actionRow = manualControlRow();
-        addManualPadButton(actionRow, "JUMP", "jump", "Jump while held");
-        addManualPadButton(actionRow, "SPRINT", "sprint", "Sprint while held");
-        addManualPadButton(actionRow, "SNEAK", "sneak", "Sneak while held");
-        look.addView(actionRow);
-        Button stop = actionButton("STOP", true, this::stopManualControl);
-        stop.setTextSize(14);
-        stop.setContentDescription("Stop all manual movement");
-        manualControlButtons.add(stop);
-        look.addView(stop, new LinearLayout.LayoutParams(-1, dp(52)));
-        TextView state = text("Hold to move · release to brake", 11, MUTED, false);
-        state.setPadding(0, dp(8), 0, 0);
-        look.addView(state);
-        controls.addView(look, new LinearLayout.LayoutParams(-1, -2));
-        panel.addView(controls);
-
-        TextView footer = text("Physics-based 360° movement with jump, sprint and sneak. Release controls to stop; movement pauses when terrain or server authority is unavailable.", 11, MUTED, false);
-        footer.setPadding(0, dp(8), 0, 0);
-        panel.addView(footer);
-        body.addView(panel, panelLayout(10));
+        manualControlPanel = new ManualControlPanel(this, new ManualControlPanel.Listener() {
+            @Override public void onVectorChanged(float strafe, float forward) {
+                onManualJoystickVector(strafe, forward);
+            }
+            @Override public void onActionChanged(String mode, boolean pressed) {
+                setManualAction(mode, pressed);
+            }
+            @Override public void onLookChanged(String mode, boolean pressed) {
+                setManualLookAction(mode, pressed);
+            }
+            @Override public void onStop() { stopManualControl(); }
+            @Override public void onUnavailable() {
+                showStatus("Movement is unavailable until the world and collision data are ready.");
+            }
+        });
+        manualControlPanel.setControlEnabled(manualControlsEnabled);
+        body.addView(manualControlPanel, panelLayout(10));
     }
 
-    private LinearLayout manualControlRow() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER);
-        return row;
-    }
 
-    private void addManualPadCell(LinearLayout row, Button button) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(52), 1);
-        params.setMargins(dp(3), dp(3), dp(3), dp(3));
-        row.addView(button, params);
-    }
+
+
 
     private void onManualJoystickVector(float strafe, float forward) {
         manualJoystickX = Math.max(-1f, Math.min(1f, strafe));
@@ -862,6 +818,30 @@ public final class DashboardActivity extends Activity {
             sendManualMotionPulse(nextMode);
             manualControlHandler.removeCallbacks(repeatManualControl);
             manualControlHandler.postDelayed(repeatManualControl, 450);
+        }
+    }
+
+    private void setManualLookAction(String mode, boolean pressed) {
+        if (!manualControlsEnabled || worldSessionId.isEmpty()) {
+            stopManualControl();
+            return;
+        }
+        if (pressed) {
+            manualLookMode = mode;
+            activeManualMode = mode;
+            sendManualMotionPulse(mode);
+            manualControlHandler.removeCallbacks(repeatManualControl);
+            manualControlHandler.postDelayed(repeatManualControl, 450);
+            return;
+        }
+        if (!mode.equals(manualLookMode)) return;
+        manualLookMode = "";
+        if (Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
+                manualJump || manualSprint || manualSneak) {
+            activeManualMode = "vector";
+            sendManualMotionPulse("vector");
+        } else {
+            stopManualControl();
         }
     }
 
@@ -888,49 +868,7 @@ public final class DashboardActivity extends Activity {
         manualControlHandler.postDelayed(repeatManualControl, 450);
     }
 
-    private void addManualPadButton(LinearLayout row, String label, String mode, String description) {
-        Button control = actionButton(label, false, () -> {});
-        control.setTextSize(label.length() > 3 ? 10 : 20);
-        control.setContentDescription(description + ". Press and hold.");
-        control.setOnTouchListener((view, event) -> {
-            int action = event.getActionMasked();
-            if (action == android.view.MotionEvent.ACTION_DOWN) {
-                if (!manualControlsEnabled || worldSessionId.isEmpty()) {
-                    showStatus("Movement is unavailable until the world and collision data are ready.");
-                    return true;
-                }
-                if ("jump".equals(mode) || "sprint".equals(mode) || "sneak".equals(mode)) {
-                    setManualAction(mode, true);
-                } else {
-                    manualLookMode = mode;
-                    activeManualMode = mode;
-                    sendManualMotionPulse(mode);
-                    manualControlHandler.removeCallbacks(repeatManualControl);
-                    manualControlHandler.postDelayed(repeatManualControl, 450);
-                }
-                view.setPressed(true);
-                return true;
-            }
-            if (action == android.view.MotionEvent.ACTION_UP ||
-                    action == android.view.MotionEvent.ACTION_CANCEL) {
-                view.setPressed(false);
-                if ("jump".equals(mode) || "sprint".equals(mode) || "sneak".equals(mode)) {
-                    setManualAction(mode, false);
-                } else if (mode.equals(manualLookMode)) {
-                    manualLookMode = "";
-                    if (Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
-                            manualJump || manualSprint || manualSneak) {
-                        activeManualMode = "vector";
-                        sendManualMotionPulse("vector");
-                    } else stopManualControl();
-                }
-                return true;
-            }
-            return true;
-        });
-        manualControlButtons.add(control);
-        addManualPadCell(row, control);
-    }
+
 
     private void sendManualMotionPulse(String mode) {
         String session = worldSessionId;
@@ -991,8 +929,7 @@ public final class DashboardActivity extends Activity {
         boolean playing = "spawned".equals(phase);
         boolean movementReady = playing && current.getBoolean("movement_ready", false);
         manualControlsEnabled = movementReady;
-        for (Button control : manualControlButtons) control.setEnabled(movementReady);
-        if (manualJoystick != null) manualJoystick.setControlEnabled(movementReady);
+        if (manualControlPanel != null) manualControlPanel.setControlEnabled(movementReady);
         if (!playing) stopManualControl();
         boolean canStop = (playing || "connecting".equals(phase)) && !worldSessionId.isEmpty();
         String assessment = switch (current.getString("assessment", "")) {
