@@ -311,6 +311,10 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
             archive.write(source, source.relative_to(runtime))
 
 with ZipFile(zip_path) as archive:
+    required = {"bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs"}
+    missing = required.difference(archive.namelist())
+    if missing:
+        raise SystemExit(f"Android Bedrock SDK archive missing required modules: {sorted(missing)}")
     archive.extractall(runtime / "verify")
 PY
 mv "$temp/node_modules" "$temp/installed-modules"
