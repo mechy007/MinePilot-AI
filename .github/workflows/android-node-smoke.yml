@@ -20,6 +20,8 @@ on:
       - scripts/bedrock-recipe-catalog.test.cjs
       - scripts/bedrock-intelligence-core.test.cjs
       - scripts/bedrock-manual-terrain.test.cjs
+      - scripts/bedrock-terrain-check.cjs
+      - scripts/bedrock-terrain-check.test.cjs
       - scripts/bedrock-movement-controller.cjs
       - scripts/bedrock-movement-controller.test.cjs
       - scripts/bedrock-collision-data.cjs
