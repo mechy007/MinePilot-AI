@@ -43,18 +43,21 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
     blocksByName[blockName] = entry;
     blocksArray.push(entry);
 
-    const shapeIds = collision.blocks[blockName] ?? collision.blocks[block.name];
-    if (shapeIds === undefined) throw new Error('bedrock_physics_shape_missing:' + blockName);
+    let shapeIds = collision.blocks[blockName] ?? collision.blocks[block.name];
+    const emptyBlock = block.boundingBox === 'empty' || blockName === 'air';
+    if (shapeIds === undefined && !emptyBlock)
+      throw new Error('bedrock_physics_shape_missing:' + blockName);
     for (let stateId = block.minStateId; stateId <= block.maxStateId; stateId++) {
       const state = states[stateId];
       if (!state || String(state.name).replace(/^minecraft:/, '') !== blockName || !Number.isInteger(state.hash)) {
         throw new Error('bedrock_physics_state_registry_invalid:' + blockName);
       }
-      const shapeId = Array.isArray(shapeIds) ? shapeIds[stateId - block.minStateId] : shapeIds;
-      const boxes = collision.shapes[String(shapeId)];
+      const shapeId = shapeIds === undefined ? null :
+        (Array.isArray(shapeIds) ? shapeIds[stateId - block.minStateId] : shapeIds);
+      const boxes = shapeId == null || shapeId === -1 ? [] : collision.shapes[String(shapeId)];
       if (!Array.isArray(boxes) || boxes.some(box =>
         !Array.isArray(box) || box.length !== 6 || box.some(v => !Number.isFinite(v)))) {
-        throw new Error('bedrock_physics_collision_shape_invalid:' + block.name);
+        throw new Error('bedrock_physics_collision_shape_invalid:' + blockName);
       }
       const properties = Object.create(null);
       for (const [key, raw] of Object.entries(state.states ?? {})) {
