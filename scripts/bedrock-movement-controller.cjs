@@ -135,7 +135,6 @@ class BedrockMovementController {
       const inputFlags = Array.isArray(packet.input_data) ? packet.input_data : [];
       this.lastInput = { tick: String(tick), position: packet.position, delta: packet.delta,
         input: inputFlags };
-      const vector = packet.move_vector ?? {};
       const position = packet.position;
       const predictedDisplacement = finite3(position) && finite3(this.lastServerPosition)
         ? Math.hypot(position.x - this.lastServerPosition.x,
