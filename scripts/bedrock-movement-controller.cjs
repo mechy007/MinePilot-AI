@@ -106,13 +106,15 @@ class BedrockMovementController {
   constructor(client, options = {}) {
     if (!client || typeof client.queue !== 'function') throw new TypeError('Bedrock client is required');
     this.client = client;
+    this.clock = options.clock ?? Date.now;
+    this.blockExecutor = options.blockExecutor ?? null;
     this.terrain = options.terrain ?? null;
     this.collisionData = options.collisionData ?? null;
     this.physics = null;
     this.physicsWorld = null;
     this.queueBot = { _client: client, emit: () => {} };
     this.inputQueue = createInputQueue(this.queueBot, {
-      now: options.clock ?? Date.now,
+      now: this.clock,
       maxCatchupTicks: 4,
       timers: options.timers
     });
@@ -143,18 +145,24 @@ class BedrockMovementController {
       const inputFlags = Array.isArray(packet.input_data) ? packet.input_data : [];
       this.lastInput = { tick: String(tick), position: packet.position, delta: packet.delta,
         input: inputFlags };
+      this.blockExecutor?.pulseTimeout?.();
       const position = packet.position;
       const predictedDisplacement = finite3(position) && finite3(this.lastServerPosition)
         ? Math.hypot(position.x - this.lastServerPosition.x,
             position.y - this.lastServerPosition.y, position.z - this.lastServerPosition.z)
         : 0;
       if (predictedDisplacement > 0.02) {
-        if (!this.unconfirmedMovement) this.lastNonNeutralAt = Date.now();
+        if (!this.unconfirmedMovement) this.lastNonNeutralAt = this.clock();
         this.unconfirmedMovement = true;
         this.nonNeutralFrames++;
         this.lastMovementResult = { status: 'awaiting_server_ack', reason: 'awaiting_server_position' };
       }
     });
+  }
+
+  setBlockExecutor(executor) {
+    this.blockExecutor = executor ?? null;
+    return true;
   }
 
   loadPhysics() {
@@ -179,7 +187,7 @@ class BedrockMovementController {
         world.terrain.dimension !== world.dimension || world.receivedChunks?.size === 0) return 'unavailable';
     if (!this.collisionData || !this.physics || !this.physicsWorld) return 'unavailable';
     if (this.unconfirmedMovement && this.lastNonNeutralAt != null &&
-        Date.now() - this.lastNonNeutralAt > 7000) return 'unavailable';
+        this.clock() - this.lastNonNeutralAt > 7000) return 'unavailable';
     return this.physicsWorld.unknown ? 'unavailable' : 'ready';
   }
 
@@ -195,15 +203,15 @@ class BedrockMovementController {
     this.physicsWorld.hashedIds = world.blockNetworkIdsAreHashes === true ||
       (world.blockNetworkIdsAreHashes !== false && this.terrain.registry?.has(hashedAirId) === true);
     this.lastServerPosition = { ...world.position };
-    this.lastServerPositionAt = world.lastServerPositionAt ?? Date.now();
+    this.lastServerPositionAt = world.lastServerPositionAt ?? this.clock();
     this.lastServerTick = world.serverTick;
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
-    this.lastServerAckAt = Date.now();
+    this.lastServerAckAt = this.clock();
     if (!this.started || !this.state) this.resetFromServer(world.position, world.yaw, world.pitch, false);
     this.preflightTerrain(world);
-    this.inputQueue.anchor(world.serverTick, world.serverTickObservedAt ?? Date.now());
+    this.inputQueue.anchor(world.serverTick, world.serverTickObservedAt ?? this.clock());
     this.inputQueue.start();
     this.started = true;
     this.lastMovementResult = { status: 'ready', reason: 'server_tick_stream_started' };
@@ -243,11 +251,11 @@ class BedrockMovementController {
     this.previousInput = null;
     this.history = [];
     this.lastServerPosition = { ...position };
-    this.lastServerPositionAt = Date.now();
+    this.lastServerPositionAt = this.clock();
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
-    this.lastServerAckAt = Date.now();
+    this.lastServerAckAt = this.clock();
     return true;
   }
 
@@ -287,7 +295,7 @@ class BedrockMovementController {
       return { status: 'rejected', reason: 'invalid_manual_duration' };
     if (this.capability(world) !== 'ready') {
       const timedOut = this.unconfirmedMovement && this.lastNonNeutralAt != null &&
-        Date.now() - this.lastNonNeutralAt > 7000;
+        this.clock() - this.lastNonNeutralAt > 7000;
       return { status: 'rejected', reason: this.lastError ? 'physics_data_unavailable' :
         (timedOut ? 'server_ack_timeout' : 'movement_unavailable') };
     }
@@ -314,7 +322,7 @@ class BedrockMovementController {
     }
     this.manualHoldActive = Math.hypot(vector.x, vector.z) > 0 || options.jump === true ||
       options.sprint === true || options.sneak === true;
-    this.manualHoldDeadline = Date.now() + 1100;
+    this.manualHoldDeadline = this.clock() + 1100;
     this.lastMovementResult = { status: 'accepted', reason: 'movement_controls_applied' };
     return this.lastMovementResult;
   }
@@ -322,7 +330,7 @@ class BedrockMovementController {
   runVerifiedStep(world, target, ticks = 8) {
     if (this.capability(world) !== 'ready') {
       const timedOut = this.unconfirmedMovement && this.lastNonNeutralAt != null &&
-        Date.now() - this.lastNonNeutralAt > 7000;
+        this.clock() - this.lastNonNeutralAt > 7000;
       return { status: 'rejected', reason: timedOut ? 'server_ack_timeout' : 'movement_unavailable' };
     }
     if (!this.preflightTerrain(world) || !finite3(target) ||
@@ -338,7 +346,7 @@ class BedrockMovementController {
     if (this.state) this.state.yaw = fromWireYaw(yawDegrees);
     this.setControls({ x: 0, z: 1 });
     this.manualHoldActive = true;
-    this.manualHoldDeadline = Date.now() + ticks * TICK_MS;
+    this.manualHoldDeadline = this.clock() + ticks * TICK_MS;
     this.lastMovementResult = { status: 'accepted', reason: 'verified_navigation_step' };
     return this.lastMovementResult;
   }
@@ -358,6 +366,9 @@ class BedrockMovementController {
 
   stopPresence(reason = 'stopped') {
     this.releaseManual();
+    this.inputQueue.stop();
+    this.started = false;
+    this.blockExecutor?.abort?.(reason);
     this.lastMovementResult = { status: 'idle', reason };
   }
 
@@ -367,7 +378,7 @@ class BedrockMovementController {
         ![1, 2].includes(world.movementAuthority) || !this.state || !this.physicsWorld) {
       return this.idleFrame(world, tick);
     }
-    const now = Date.now();
+    const now = this.clock();
     let serverAckTimedOut = false;
     if (this.unconfirmedMovement && this.lastNonNeutralAt != null &&
         now - this.lastNonNeutralAt > 7000) {
@@ -385,7 +396,10 @@ class BedrockMovementController {
       sprint: this.controls.sprint && this.controls.z > 0.08 && !this.controls.sneak,
       sneak: this.controls.sneak
     };
-    const raw = { x: -this.controls.x, z: this.controls.z };
+    const raw = {
+      x: this.controls.x === 0 ? 0 : -this.controls.x,
+      z: this.controls.z === 0 ? 0 : this.controls.z
+    };
     const magnitude = Math.hypot(raw.x, raw.z);
     const processed = magnitude > 1 ? { x: raw.x / magnitude, z: raw.z / magnitude } : { ...raw };
     if (control.sneak && !this.state.flying) {
@@ -445,6 +459,11 @@ class BedrockMovementController {
       play_mode: 'normal',
       interaction_model: 'crosshair'
     };
+    const blockAction = this.blockExecutor?.next?.(world);
+    if (blockAction) {
+      frame.input_data = [...frame.input_data, 35];
+      frame.block_action = [blockAction];
+    }
     this.previousInput = current;
     this.history.push({ tick, input: this.captureInput(input), state: cloneState(this.state) });
     if (this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
@@ -496,7 +515,7 @@ class BedrockMovementController {
     };
   }
 
-  observeServerPosition(position, observedAt = Date.now()) {
+  observeServerPosition(position, observedAt = this.clock()) {
     if (!finite3(position)) return;
     this.lastServerPosition = { ...position };
     this.lastServerPositionAt = observedAt;
@@ -516,7 +535,7 @@ class BedrockMovementController {
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
-    this.lastServerAckAt = Date.now();
+    this.lastServerAckAt = this.clock();
     this.lastMovementResult = { status: 'reconciled', reason: 'server_teleport' };
   }
 
@@ -561,11 +580,11 @@ class BedrockMovementController {
       this.history = [];
     }
     this.lastServerPosition = { ...position };
-    this.lastServerPositionAt = Date.now();
+    this.lastServerPositionAt = this.clock();
     this.unconfirmedMovement = false;
     this.nonNeutralFrames = 0;
     this.lastNonNeutralAt = null;
-    this.lastServerAckAt = Date.now();
+    this.lastServerAckAt = this.clock();
     this.corrections++;
     this.lastCorrection = { tick: tickValue == null ? null : String(tickValue), position: { ...position },
       velocity: { x: corrected.vel.x, y: corrected.vel.y, z: corrected.vel.z },
@@ -609,6 +628,7 @@ class BedrockMovementController {
   resetSession() {
     this.releaseManual();
     this.inputQueue.stop();
+    this.blockExecutor?.abort?.('session_reset');
     this.started = false;
     this.world = null;
     this.state = null;
