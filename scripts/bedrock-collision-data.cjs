@@ -36,18 +36,19 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
         block.maxStateId >= states.length) {
       throw new Error('bedrock_physics_block_registry_invalid');
     }
+    const blockName = block.name.replace(/^minecraft:/, '');
     const friction = Number.isFinite(block.friction) ? block.friction : 0.6;
-    const entry = { id: block.id, name: block.name, friction };
-    if (blocksByName[block.name]) throw new Error('bedrock_physics_duplicate_block');
-    blocksByName[block.name] = entry;
+    const entry = { id: block.id, name: blockName, friction };
+    if (blocksByName[blockName]) throw new Error('bedrock_physics_duplicate_block');
+    blocksByName[blockName] = entry;
     blocksArray.push(entry);
 
-    const shapeIds = collision.blocks[block.name];
-    if (shapeIds === undefined) throw new Error('bedrock_physics_shape_missing:' + block.name);
+    const shapeIds = collision.blocks[blockName] ?? collision.blocks[block.name];
+    if (shapeIds === undefined) throw new Error('bedrock_physics_shape_missing:' + blockName);
     for (let stateId = block.minStateId; stateId <= block.maxStateId; stateId++) {
       const state = states[stateId];
-      if (!state || state.name !== block.name || !Number.isInteger(state.hash)) {
-        throw new Error('bedrock_physics_state_registry_invalid:' + block.name);
+      if (!state || String(state.name).replace(/^minecraft:/, '') !== blockName || !Number.isInteger(state.hash)) {
+        throw new Error('bedrock_physics_state_registry_invalid:' + blockName);
       }
       const shapeId = Array.isArray(shapeIds) ? shapeIds[stateId - block.minStateId] : shapeIds;
       const boxes = collision.shapes[String(shapeId)];
@@ -64,7 +65,7 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
       if (profilesByHash.has(hash)) throw new Error('bedrock_physics_duplicate_state_hash');
       const profile = {
         id: block.id,
-        name: block.name,
+        name: blockName,
         boundingBox: block.boundingBox ?? (boxes.length ? 'block' : 'empty'),
         friction,
         shapes: boxes,
