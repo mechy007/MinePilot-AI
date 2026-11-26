@@ -71,14 +71,13 @@ function createHashedRuntimeRegistry(startGame) {
   if (!isProtocol2225(serverVersion) ||
       startGame?.block_network_ids_are_hashes !== true) return null;
   if (cachedHashed) {
-    const knownNames = new Set([...cachedHashed.values()].map(value => value.name));
-    return hasOnlyKnownBlocks(startGame, knownNames) ? cachedHashed : null;
+    // Hashed runtime IDs are content-derived; add-on blocks do not renumber vanilla states.
+    // Unknown add-on hashes remain absent from this vanilla-only map.
+    return cachedHashed;
   }
 
   const physicsData = loadBedrockPhysicsData();
   if (physicsData) {
-    const knownNames = knownPhysicsNames(physicsData);
-    if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
     const map = registryFromProfiles(physicsData.profilesByHash, true);
     if (map.size !== physicsData.stateCount ||
         map.get((-2144268767) >>> 0)?.name !== 'minecraft:stone' ||
@@ -143,7 +142,9 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   if (!protocol2225 && (typeof serverVersion !== 'string' ||
       !/^1\.26\.60(?:\.|$)/.test(serverVersion))) return null;
 
-  const physicsData = protocol2225 ? loadBedrockPhysicsData() : null;
+  // Injected loaders are test/adapter contracts; do not bypass them with the packaged dataset.
+  const physicsData = protocol2225 && loadMinecraftData == null
+    ? loadBedrockPhysicsData() : null;
   if (physicsData) {
     const knownNames = knownPhysicsNames(physicsData);
     if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
