@@ -127,7 +127,7 @@ class BedrockGameplayBridge {
     this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
       actionRequests: 0, recovered: 0, attempts: 0, lastActionAt: 0,
       firstRequestAt: 0, nextActionAt: 0, serverState: null,
-      spawnObserved: false, position: null, resumeTask: null,
+      spawnObserved: false, healthConfirmed: false, position: null, resumeTask: null,
       resumeResult: null, error: null };
     this.watch = null;
     this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
@@ -259,7 +259,7 @@ class BedrockGameplayBridge {
     this.respawnRecovery = { state: 'alive', deaths: 0, requests: 0,
       actionRequests: 0, recovered: 0, attempts: 0, lastActionAt: 0,
       firstRequestAt: 0, nextActionAt: 0, serverState: null,
-      spawnObserved: false, position: null, resumeTask: null,
+      spawnObserved: false, healthConfirmed: false, position: null, resumeTask: null,
       resumeResult: null, error: null };
     // Protocol 1.26.60 uses server-authoritative movement; the old
     // set_movement_authority packet was deprecated in 1.21.90.
@@ -376,7 +376,8 @@ class BedrockGameplayBridge {
     if (this.closed || recovery.state === 'alive') return false;
     const now = this.clock();
     if (!Number.isFinite(now) || now < recovery.firstRequestAt) return false;
-    const position = recovery.position ?? this.position;
+    const position = recovery.position;
+    if (!finitePosition(position)) return false;
     if (recovery.state === 'dead_waiting_for_server') {
       if (now < recovery.nextActionAt ||
           (recovery.serverState !== 0 && recovery.serverState !== 1)) return false;
@@ -421,6 +422,34 @@ class BedrockGameplayBridge {
     recovery.resumeResult = 'navigation_plan_restored';
     return true;
   }
+  completeRespawnRecovery() {
+    const recovery = this.respawnRecovery;
+    if (this.closed || recovery.state === 'alive' || !recovery.healthConfirmed ||
+        !finitePosition(recovery.position) ||
+        (recovery.serverState !== 1 && !recovery.spawnObserved)) return false;
+    const position = safePoint(recovery.position);
+    const resumeTask = recovery.resumeTask;
+    this.position = position;
+    this.lastServerPositionAt = this.clock();
+    this.layerOne?.onServerPosition(this.position);
+    recovery.recovered++;
+    recovery.state = 'alive';
+    recovery.attempts = 0;
+    recovery.requests = 0;
+    recovery.lastActionAt = 0;
+    recovery.firstRequestAt = 0;
+    recovery.nextActionAt = 0;
+    recovery.serverState = null;
+    recovery.spawnObserved = false;
+    recovery.healthConfirmed = false;
+    recovery.position = null;
+    recovery.resumeTask = null;
+    recovery.error = null;
+    this.spawned = true;
+    this.movement?.startPresence?.(this);
+    this.restoreRespawnTask(resumeTask);
+    return true;
+  }
   observeHealth(health) {
     if (this.closed || !Number.isFinite(health) || !this.self) return;
     if (health <= 0) {
@@ -441,6 +470,7 @@ class BedrockGameplayBridge {
       this.respawnRecovery.nextActionAt = this.respawnRecovery.firstRequestAt;
       this.respawnRecovery.serverState = null;
       this.respawnRecovery.spawnObserved = false;
+      this.respawnRecovery.healthConfirmed = false;
       this.respawnRecovery.position = null;
       this.respawnRecovery.resumeTask = resumeTask;
       this.respawnRecovery.resumeResult = null;
@@ -457,34 +487,10 @@ class BedrockGameplayBridge {
       return;
     }
     if (this.respawnRecovery.state !== 'alive') {
-      const recovery = this.respawnRecovery;
-      const resumeTask = recovery.resumeTask;
-      const position = finitePosition(recovery.position) ? safePoint(recovery.position) : null;
-      if (position) {
-        this.position = position;
-        this.lastServerPositionAt = this.clock();
-        this.layerOne?.onServerPosition(this.position);
-      }
-      recovery.recovered++;
-      recovery.state = 'alive';
-      recovery.attempts = 0;
-      recovery.requests = 0;
-      recovery.lastActionAt = 0;
-      recovery.firstRequestAt = 0;
-      recovery.nextActionAt = 0;
-      recovery.serverState = null;
-      recovery.spawnObserved = false;
-      recovery.position = null;
-      recovery.resumeTask = null;
-      recovery.error = null;
-      if (position) {
-        this.spawned = true;
-        this.movement?.startPresence?.(this);
-        this.restoreRespawnTask(resumeTask);
-      } else {
-        this.spawned = false;
-        recovery.resumeResult = 'waiting_for_server_respawn_position';
-      }
+      // Health and Respawn packets may arrive in either order. Health alone
+      // cannot release movement; wait for this death's server spawn position.
+      this.respawnRecovery.healthConfirmed = true;
+      this.completeRespawnRecovery();
     }
   }
   onRespawn(packet) {
@@ -502,6 +508,7 @@ class BedrockGameplayBridge {
       if (position) {
         recovery.position = position;
         if (packet.state === 1) {
+          recovery.spawnObserved = true;
           this.position = { ...position };
           this.lastServerPositionAt = this.clock();
           this.layerOne?.onServerPosition(this.position);
@@ -509,6 +516,12 @@ class BedrockGameplayBridge {
       } else {
         recovery.error = 'server_respawn_position_unavailable';
       }
+      if (packet.state === 0 && recovery.state !== 'dead_waiting_for_server') {
+        // The host returned to SearchingForSpawn. Re-enter the ready phase
+        // instead of resending PlayerAction(respawn) forever.
+        recovery.state = 'dead_waiting_for_server';
+      }
+      if (this.completeRespawnRecovery()) return;
       this.tickRespawnRecovery();
       return;
     }
@@ -528,6 +541,7 @@ class BedrockGameplayBridge {
     if (this.closed) return;
     if (this.respawnRecovery.state !== 'alive') {
       this.respawnRecovery.spawnObserved = true;
+      this.completeRespawnRecovery();
       return;
     }
     this.spawned = true;
