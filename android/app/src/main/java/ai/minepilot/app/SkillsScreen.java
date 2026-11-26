@@ -40,7 +40,7 @@ public final class SkillsScreen {
         heading.setPadding(0, dp(context, 5), 0, dp(context, 4));
         panel.addView(heading);
         panel.addView(text(context, detail, 13, MinePilotTheme.TEXT_SECONDARY, false));
-        LayoutParams params = new LayoutParams(-1, -2);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(context, 14);
         body.addView(panel, params);
     }
