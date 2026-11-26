@@ -14,6 +14,44 @@
 let cachedNumeric = null;
 let cachedHashed = null;
 
+function loadBedrockPhysicsData() {
+  try {
+    return require('./bedrock-collision-data.cjs').loadBedrockCollisionData();
+  } catch {
+    // Source-tree tests may not have the staged gzip datasets; retain the
+    // pinned JSON fallback for those environments.
+    return null;
+  }
+}
+
+function isFullCube(profile) {
+  const shapes = profile?.shapes;
+  return Array.isArray(shapes) && shapes.length === 1 &&
+    Array.isArray(shapes[0]) && shapes[0].length === 6 &&
+    shapes[0][0] === 0 && shapes[0][1] === 0 && shapes[0][2] === 0 &&
+    shapes[0][3] === 1 && shapes[0][4] === 1 && shapes[0][5] === 1;
+}
+
+function registryFromProfiles(profiles, hashed) {
+  const map = new Map();
+  for (const [rawId, profile] of profiles) {
+    const id = hashed ? (Number(rawId) >>> 0) : Number(rawId);
+    const name = profile.name.startsWith('minecraft:')
+      ? profile.name : 'minecraft:' + profile.name;
+    map.set(id, {
+      name,
+      boundingBox: profile.boundingBox ?? null,
+      fullCube: isFullCube(profile)
+    });
+  }
+  return map;
+}
+
+function knownPhysicsNames(data) {
+  return new Set(Object.keys(data.blocksByName).map(name =>
+    name.startsWith('minecraft:') ? name : 'minecraft:' + name));
+}
+
 function isProtocol2225(serverVersion) {
   return typeof serverVersion === 'string' &&
     /^1\.26\.(?:60|61|62|65|66)(?:\.|$)/.test(serverVersion);
@@ -32,7 +70,24 @@ function createHashedRuntimeRegistry(startGame) {
   const serverVersion = startGame?.server_version ?? startGame?.engine;
   if (!isProtocol2225(serverVersion) ||
       startGame?.block_network_ids_are_hashes !== true) return null;
-  if (cachedHashed) return cachedHashed;
+  if (cachedHashed) {
+    const knownNames = new Set([...cachedHashed.values()].map(value => value.name));
+    return hasOnlyKnownBlocks(startGame, knownNames) ? cachedHashed : null;
+  }
+
+  const physicsData = loadBedrockPhysicsData();
+  if (physicsData) {
+    const knownNames = knownPhysicsNames(physicsData);
+    if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
+    const map = registryFromProfiles(physicsData.profilesByHash, true);
+    if (map.size !== physicsData.stateCount ||
+        map.get((-2144268767) >>> 0)?.name !== 'minecraft:stone' ||
+        map.get((-604749536) >>> 0)?.name !== 'minecraft:air' ||
+        map.get(203547508)?.name !== 'minecraft:brown_mushroom_block' ||
+        map.get(1659726445)?.name !== 'minecraft:pointed_dripstone') return null;
+    cachedHashed = map;
+    return map;
+  }
 
   let data;
   try {
@@ -90,6 +145,18 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   if (loadMinecraftData == null && cachedNumeric) {
     const knownNames = new Set([...cachedNumeric.values()].map(v => v.name));
     return hasOnlyKnownBlocks(startGame, knownNames) ? cachedNumeric : null;
+  }
+
+  const physicsData = loadBedrockPhysicsData();
+  if (physicsData) {
+    const knownNames = knownPhysicsNames(physicsData);
+    if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
+    const map = registryFromProfiles(physicsData.profilesByStateId, false);
+    if (map.size !== physicsData.stateCount ||
+        map.get(18894)?.name !== 'minecraft:air' ||
+        map.get(3317)?.name !== 'minecraft:stone') return null;
+    cachedNumeric = map;
+    return map;
   }
 
   // Reject custom block registrations before loading and expanding the
