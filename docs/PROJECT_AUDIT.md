@@ -30,13 +30,14 @@ Status: active audit on `redesign/full-project-overhaul`.
 
 1. Removed the unused legacy `MainActivity` starter screen and its manifest registration. `DashboardActivity` is the actual launcher.
 2. Removed the diagnostic-only `MinePilotService` stub, which was launched only by the retired starter screen and did not own a Minecraft session; retained the foreground-service permissions needed by the isolated Xbox sign-in runtime.
-3. Reworked the dashboard header and navigation container.
-4. Extracted the joystick, camera and touch-action UI into a reusable `ManualControlPanel`; it uses a centered vertical layout, a larger joystick and full-width controls for phone screens.
-5. Rewrote the README to distinguish owner-confirmed world joining from movement and autonomous gameplay, which still need validation.
-6. Archived superseded connection/dashboard/gameplay planning documents under docs/archive/legacy-plans and docs/archive/phase-notes; removed one obsolete Voyager pointer that only redirected to the current guide.
-7. Added a shared Android design-token class and collapsed experimental visualizations behind an optional control.
-8. Removed the overlapping Android ARM64 APK workflow after confirming the Android Node Runtime Probe workflow already stages the SDK, runs the contract suite, builds the same debug APK and verifies 16 KB alignment.
-9. Archived three superseded experimental movement/spawn-probe notes after checking that the current README, roadmap, architecture and runtime-contract docs do not link to them.
+3. Extracted the branded app shell, safe-area handling and bottom navigation into DashboardShell.
+4. Reworked the dashboard header and navigation container.
+5. Extracted the joystick, camera and touch-action UI into a reusable `ManualControlPanel`; it uses a centered vertical layout, a larger joystick and full-width controls for phone screens.
+6. Rewrote the README to distinguish owner-confirmed world joining from movement and autonomous gameplay, which still need validation.
+7. Archived superseded connection/dashboard/gameplay planning documents under docs/archive/legacy-plans and docs/archive/phase-notes; removed one obsolete Voyager pointer that only redirected to the current guide.
+8. Added a shared Android design-token class and collapsed experimental visualizations behind an optional control.
+9. Removed the overlapping Android ARM64 APK workflow after confirming the Android Node Runtime Probe workflow already stages the SDK, runs the contract suite, builds the same debug APK and verifies 16 KB alignment.
+10. Archived three superseded experimental movement/spawn-probe notes after checking that the current README, roadmap, architecture and runtime-contract docs do not link to them.
 
 ## High-priority redesign work
 
