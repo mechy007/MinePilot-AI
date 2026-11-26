@@ -111,6 +111,26 @@ test('movement controller sends physics-backed forward input on the server tick 
   controller.stop('session_closed');
 });
 
+test('analog diagonal movement combines jump and sprint flags and supports sneak', () => {
+  const { controller, world } = movementWorld();
+  controller.startPresence(world);
+  assert.equal(controller.runManualHold(world, {
+    mode: 'vector', vector: { x: 0.6, y: 0.8 }, jump: true, sprint: true, ticks: 8
+  }).status, 'accepted');
+  const moving = controller.tick(101n);
+  assert.ok(moving.input_data.includes('up'));
+  assert.ok(moving.input_data.includes('right'));
+  assert.ok(moving.input_data.includes('jumping'));
+  assert.ok(moving.input_data.includes('sprinting'));
+  assert.ok(Math.hypot(moving.move_vector.x, moving.move_vector.z) <= 1.001);
+  assert.equal(controller.runManualHold(world, {
+    mode: 'sneak', vector: { x: 0, y: 0 }, sneak: true, ticks: 8
+  }).status, 'accepted');
+  const sneaking = controller.tick(102n);
+  assert.ok(sneaking.input_data.includes('sneaking'));
+  controller.stop('session_closed');
+});
+
 test('movement controller refuses to predict through an unknown terrain cell', () => {
   const { controller, world } = movementWorld(true);
   assert.equal(controller.startPresence(world), true);
