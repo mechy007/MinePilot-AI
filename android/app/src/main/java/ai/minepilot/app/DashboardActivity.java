@@ -115,20 +115,16 @@ public final class DashboardActivity extends Activity {
     private boolean pendingAuthSwitch;
     private boolean pendingBotFlow;
     private static final int NOTIFICATION_REQUEST = 101;
-    private static final int BG = 0xff0d121b;
-    private static final int PANEL = 0xff171f2e;
-    private static final int GRASS = 0xff65e4ad;
-    private static final int INK = 0xffeef4ff;
-    private static final int BORDER = 0xff303d52;
-    private static final int MUTED = 0xffadb9cd;
-    private static final int AMBER = 0xffffc07a;
-    private int dp(int value) { return (int)(getResources().getDisplayMetrics().density * value + .5f); }
+    private static final int BG = MinePilotTheme.BACKGROUND;
+    private static final int PANEL = MinePilotTheme.SURFACE;
+    private static final int GRASS = MinePilotTheme.ACCENT;
+    private static final int INK = MinePilotTheme.TEXT_PRIMARY;
+    private static final int BORDER = MinePilotTheme.BORDER;
+    private static final int MUTED = MinePilotTheme.TEXT_SECONDARY;
+    private static final int AMBER = MinePilotTheme.WARNING;
+    private int dp(int value) { return MinePilotTheme.dp(this, value); }
     private GradientDrawable surface(int color, int radius) {
-        GradientDrawable d = new GradientDrawable();
-        d.setColor(color);
-        d.setCornerRadius(dp(radius));
-        d.setStroke(dp(1), BORDER);
-        return d;
+        return MinePilotTheme.surface(this, color, radius);
     }
     private TextView text(String value, int size, int color, boolean bold) {
         TextView t = new TextView(this); t.setText(value); t.setTextSize(size);
