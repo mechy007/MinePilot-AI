@@ -829,10 +829,13 @@ public final class DashboardActivity extends Activity {
             if ("vector".equals(activeManualMode)) stopManualControl();
             return;
         }
+        boolean startPulse = !"vector".equals(activeManualMode);
         activeManualMode = "vector";
-        sendManualMotionPulse("vector");
-        manualControlHandler.removeCallbacks(repeatManualControl);
-        manualControlHandler.postDelayed(repeatManualControl, 450);
+        if (startPulse) {
+            sendManualMotionPulse("vector");
+            manualControlHandler.removeCallbacks(repeatManualControl);
+            manualControlHandler.postDelayed(repeatManualControl, 450);
+        }
     }
 
     private void setManualAction(String mode, boolean pressed) {
