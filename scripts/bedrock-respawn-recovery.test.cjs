@@ -12,20 +12,21 @@ const initial={runtime_entity_id:123n,player_position:{x:8.5,y:65,z:10.5},
 function fixture() {
   const client=new Client();
   const called=[];
+  let now=1000;
   const movement={
     stopPresence(reason){called.push('presence:'+reason);},
     stop(reason){called.push('movement:'+reason);},
     startPresence(){called.push('presence:started');}
   };
   const autonomy={stop(reason){called.push('autonomy:'+reason);}, snapshot(){return {active:false};}};
-  const bridge=new BedrockGameplayBridge(client,{movement,autonomy}).start();
+  const bridge=new BedrockGameplayBridge(client,{movement,autonomy,clock:()=>now}).start();
   client.emit('start_game',initial);
   client.emit('spawn');
   client.sent.length=0;
-  return {client,bridge,called};
+  return {client,bridge,called,advance(ms){now+=ms;}};
 }
 test('dead bot requests respawn once after server state 0 then action after state 1',()=>{
-  const {client,bridge,called}=fixture();
+  const {client,bridge,called,advance}=fixture();
   client.emit('update_attributes',{runtime_entity_id:123n,
     attributes:[{name:'minecraft:health',current:0}]});
   assert.equal(bridge.snapshot().respawnRecovery.state,'dead_waiting_for_server');
@@ -39,6 +40,9 @@ test('dead bot requests respawn once after server state 0 then action after stat
   client.emit('respawn',{runtime_entity_id:123n,state:0,position:pos});
   client.emit('respawn',{runtime_entity_id:123n,state:1,position:pos});
   client.emit('respawn',{runtime_entity_id:123n,state:1,position:pos});
+  assert.deepEqual(client.sent,[],'no packet may be sent during the four-second delay');
+  advance(4000);
+  bridge.tickRespawnRecovery();
   assert.deepEqual(client.sent.map(x=>x.name),['respawn','player_action']);
   assert.equal(client.sent[0].value.state,2);
   assert.equal(client.sent[1].value.action,'respawn');
@@ -68,10 +72,13 @@ test('foreign health and respawn packets never trigger self-respawn',()=>{
   bridge.stop();
 });
 test('death followed directly by server state 1 requests only one revival',()=>{
-  const {client,bridge}=fixture();
+  const {client,bridge,advance}=fixture();
   client.emit('set_health',{health:0});
   client.emit('respawn',{runtime_entity_id:123n,state:1,
     position:{x:0.5,y:66,z:0.5}});
+  assert.deepEqual(client.sent,[],'the server state cannot bypass the four-second delay');
+  advance(4000);
+  bridge.tickRespawnRecovery();
   assert.deepEqual(client.sent.map(x=>x.name),['respawn','player_action']);
   assert.equal(bridge.snapshot().respawnRecovery.requests,1);
   assert.equal(bridge.snapshot().respawnRecovery.actionRequests,1);

@@ -895,7 +895,7 @@ public final class DashboardActivity extends Activity {
         if (!manualMovementReady) {
             if (!manualQueueNoticeShown) {
                 manualQueueNoticeShown = true;
-                showStatus("Controls are active, but movement is waiting for verified physics and terrain data.");
+                showStatus("Touch input is captured locally; movement commands are withheld until physics and terrain readiness is verified.");
             }
             return;
         }
@@ -959,10 +959,13 @@ public final class DashboardActivity extends Activity {
         String phase = current.getString("phase", "");
         worldSessionId = current.getString("session_id", "");
         boolean playing = "spawned".equals(phase);
+        boolean dead = "dead".equals(current.getString("assessment", ""));
         boolean movementReady = playing && current.getBoolean("movement_ready", false);
-        manualControlsEnabled = movementReady;
-        if (manualControlPanel != null) manualControlPanel.setControlEnabled(movementReady);
-        if (!playing) stopManualControl();
+        boolean connectedAndAlive = playing && !dead && !worldSessionId.isEmpty();
+        manualMovementReady = movementReady;
+        manualControlsEnabled = connectedAndAlive;
+        if (manualControlPanel != null) manualControlPanel.setControlEnabled(connectedAndAlive);
+        if (!connectedAndAlive) stopManualControl();
         boolean canStop = (playing || "connecting".equals(phase)) && !worldSessionId.isEmpty();
         String assessment = switch (current.getString("assessment", "")) {
             case "dead" -> "Bot is down";
