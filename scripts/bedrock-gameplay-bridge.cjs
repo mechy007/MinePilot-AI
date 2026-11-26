@@ -15,7 +15,7 @@ const { BedrockRecipeCatalog, sumItem } = require('./bedrock-recipe-catalog.cjs'
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 const { BedrockTerrainCheck } = require('./bedrock-terrain-check.cjs');
 const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill, learningEngineFor, evaluateCapabilities, startBedrockNativeSkill } = require('./bedrock-skill-manifest.cjs');
-const { createRuntimeExtensions } = require('./runtime/bedrock');
+const { createRuntimeExtensions } = require('./runtime/bedrock/index.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
