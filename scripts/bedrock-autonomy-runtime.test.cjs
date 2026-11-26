@@ -126,10 +126,11 @@ test('bounded autonomy continues from an uncontradicted local prediction when no
   assert.equal(runner.snapshot().active,true);
   assert.equal(runner.snapshot().serverVerifiedSteps,0);
   assert.equal(runner.snapshot().predictionSteps,1);
-  assert.deepEqual(world.position,predicted);
+  const firstPredictedPosition={...predicted};
+  assert.deepEqual(world.position,firstPredictedPosition);
   now+=250;beat();
   assert.equal(movement.calls,2,'the next route step starts at the predicted position');
-  assert.deepEqual(lastStepOrigin,predicted);
+  assert.deepEqual(lastStepOrigin,firstPredictedPosition);
   runner.stop('test_cleanup');
 });
 
