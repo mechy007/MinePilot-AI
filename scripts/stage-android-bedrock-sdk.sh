@@ -327,7 +327,20 @@ assert.equal(map.get(18894)?.name,'minecraft:air');
 assert.equal(map.get(3317)?.name,'minecraft:stone');
 console.log('Verified vanilla Bedrock runtime block-state registry in extracted Android SDK');
 JS
+node - "$temp/verify" <<'JS'
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = process.argv[2];
+const data = require(path.join(root, 'bedrock-collision-data.cjs')).loadBedrockCollisionData();
+assert.equal(data.stateCount, 23948);
+assert.ok(data.blockCount > 1000);
+assert.ok(data.profilesByHash.get(18894)?.name === 'air' || data.registry.blocksByName.air);
+require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
+console.log('Verified Bedrock 1.26.60 collision geometry and physics engine');
+JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
+cp "$root/scripts/bedrock-player-input.cjs" "$temp/verify/bedrock-player-input.cjs"
+cp "$root/scripts/bedrock-auth-input-clock.cjs" "$temp/verify/bedrock-auth-input-clock.cjs"
 cp "$root/scripts/bedrock-movement-controller.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-manual-terrain.test.cjs" "$temp/verify/"
