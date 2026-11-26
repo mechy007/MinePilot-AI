@@ -57,10 +57,10 @@ test('skeleton LevelChunk requests five nearby server subchunks and rate-limits 
   assert.equal(sent[0].value.dimension, 0);
   assert.deepEqual(sent[0].value.origin, { x: 2, y: 4, z: -2 });
   assert.deepEqual(sent[0].value.requests, [
-    { x: 2, y: -2, z: 1 },
-    { x: 2, y: -1, z: 1 },
     { x: 2, y: 0, z: 1 },
+    { x: 2, y: -1, z: 1 },
     { x: 2, y: 1, z: 1 },
+    { x: 2, y: -2, z: 1 },
     { x: 2, y: 2, z: 1 }
   ]);
   client.emit('level_chunk', header);
@@ -179,4 +179,63 @@ test('numeric palette is exact-version only and fails closed on custom block reg
   assert.ok(map instanceof Map);
   assert.equal(map.get(0).name, 'minecraft:air');
   clearRuntimeRegistryCache();
+});
+
+
+test('1.26.60 negative polling counts and the optional request limit are honored', () => {
+  const client = new FakeClient();
+  const bridge = new BedrockGameplayBridge(client).start();
+  initialize(client, bridge);
+  client.emit('level_chunk', {
+    x: 4, z: -1, dimension: 0,
+    sub_chunk_count: -2,
+    highest_subchunk_count: 2
+  });
+  const packet = client.sent.find(item => item.packet === 'subchunk_request');
+  assert.ok(packet, 'negative request-mode count must trigger subchunk polling');
+  assert.equal(packet.value.requests.length, 2,
+    'the optional per-chunk request limit must cap each request batch');
+  assert.deepEqual(packet.value.requests, [
+    { x: 2, y: 0, z: 1 },
+    { x: 2, y: -1, z: 1 }
+  ]);
+  assert.equal(bridge.snapshot().subchunksRequested, 2);
+  bridge.stop();
+});
+
+test('terrain recovery requests the exact missing vertical section', () => {
+  const client = new FakeClient();
+  const movement = {
+    capability: () => 'unavailable',
+    snapshot: () => ({ unknownCells: [
+      { x: 80, y: 130, z: -16, reason: 'block_not_observed' }
+    ] })
+  };
+  const bridge = new BedrockGameplayBridge(client, { movement }).start();
+  initialize(client, bridge);
+  client.emit('level_chunk', {
+    x: 5, z: -1, dimension: 0, sub_chunk_count: -1
+  });
+  client.sent.length = 0;
+
+  const readiness = bridge.checkTerrainReadiness();
+  assert.equal(readiness.state, 'requesting_terrain');
+  assert.equal(readiness.requestableSections, 1);
+  const request = client.sent.find(item => item.packet === 'subchunk_request');
+  assert.ok(request);
+  assert.deepEqual(request.value.origin, { x: 2, y: 4, z: -2 });
+  assert.deepEqual(request.value.requests, [{ x: 3, y: 4, z: 1 }],
+    'block Y=130 belongs to subchunk Y=8, four sections above the player center');
+
+  client.emit('subchunk', {
+    dimension: 0,
+    origin: { x: 2, y: 4, z: -2 },
+    entries: [{ dx: 3, dy: 4, dz: 1, result: 'success', payload: Buffer.from([9, 1, 8, 1, 1, 0]) }]
+  });
+  assert.equal(bridge.subchunkResponsePackets, 1);
+  assert.equal(bridge.subchunkResponseEntries, 1);
+  assert.equal(bridge.subchunkResponseSuccesses, 1);
+  assert.equal(bridge.subchunkRequestKeys.has('0:5:8:-1'), false,
+    'a response clears the pending request for that exact section');
+  bridge.stop();
 });
