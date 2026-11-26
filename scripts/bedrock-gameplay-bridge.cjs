@@ -18,7 +18,7 @@ const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearni
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'probe_step', 'motion_diagnostic', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -153,6 +153,7 @@ class BedrockGameplayBridge {
     this.bind('sub_chunk', p => this.terrain?.subChunk(p));
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
+    this.bind('set_entity_motion', p => this.motion(p));
     this.bind('inventory_slot', p => {
       this.inventoryLedger?.observeSlot(p);
       this.layerThree?.observeInventorySlot(p);
@@ -691,9 +692,11 @@ class BedrockGameplayBridge {
       this.position = pos;
       this.lastServerPositionAt = this.clock();
       this.layerOne?.onServerPosition(pos);
-      this.movement?.observeServerPosition?.(pos, this.clock());
       if (Number.isFinite(packet.yaw)) this.yaw = packet.yaw;
       if (Number.isFinite(packet.pitch)) this.pitch = packet.pitch;
+      if (packet.mode === 'rotation') this.movement?.observeRotation?.(this.yaw, this.pitch);
+      else this.movement?.teleport?.(pos, packet);
+      this.movement?.observeServerPosition?.(pos, this.clock());
     } else if (this.players.has(id)) {
       this.players.get(id).position = pos;
       this.players.get(id).seenAt = this.clock();
@@ -717,7 +720,13 @@ class BedrockGameplayBridge {
       this.serverTick = tick;
       this.serverTickObservedAt = this.clock();
     }
-    this.movement?.correct?.(pos, tick);
+    this.movement?.observeRotation?.(this.yaw, this.pitch);
+    this.movement?.correct?.(pos, tick, packet);
+  }
+  motion(packet) {
+    if (this.closed || !packet || this.self == null ||
+        ident(packet.runtime_entity_id) !== this.self) return;
+    this.movement?.knockback?.(packet);
   }
   addPlayer(packet) {
     if (!packet || this.closed) return;
@@ -1198,11 +1207,11 @@ class BedrockGameplayBridge {
       this.addonNavigation?.emergencyStop();
       this.autonomy?.stop('user_stop');
       this.blockBreaker?.abort('user_stop');
-      this.movement?.stop?.();
+      this.movement?.releaseManual?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
     if (raw.action === 'manual_stop') {
-      this.movement?.stop?.('manual_control_released');
+      this.movement?.releaseManual?.();
       return { status: 'ok', reason: 'manual_control_released' };
     }
     if (raw.action === 'manual_move') {
@@ -1219,7 +1228,7 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: 'survival_hold' };
       if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
         return { status: 'rejected', reason: 'autonomous_controller_busy' };
-      if (!this.movement || this.movement.capability(this) !== 'experimental' ||
+      if (!this.movement || this.movement.capability(this) !== 'ready' ||
           typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
       // Every refresh updates the existing manual hold. The input writer keeps
