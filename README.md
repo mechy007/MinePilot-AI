@@ -122,3 +122,7 @@ Gameplay actions must remain bounded and capability-gated. Critical safety condi
 ## Development policy
 
 Work on feature branches, preserve main, keep tests with behavior changes, and verify Android builds. Keep useful implementation history and licensed vendor notices. Remove files only after checking imports, runtime packaging, manifests, CI workflows, tests and documentation links. Merge only after review and explicit project-owner approval.
+
+## Movement reliability status
+
+The movement pipeline has been hardened for Bedrock server-authoritative prediction: sustained manual input no longer depends on a positive acknowledgement packet, rotation-only packets no longer overwrite position, bounded autonomy can continue only from collision-checked predicted progress after a correction grace period, and missing terrain subchunks are retried with throttling. Android diagnostics now distinguish queued commands from runtime execution and show the first missing collision cell. **Live friend-world movement and Android background recovery still require device validation.** See [Movement reliability validation](docs/MOVEMENT-RELIABILITY-VALIDATION.md) for the acceptance checklist and remaining limits.
