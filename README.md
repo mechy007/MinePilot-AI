@@ -40,10 +40,10 @@ The status descriptions below distinguish repository code from verified device f
 | Microsoft/Xbox login | Device-code sign-in in the runtime-enabled build | User approval and real-account validation required |
 | Xbox Live / XSTS exchange | Packaged experimental authentication runtime | Not yet confirmed end-to-end on device |
 | Friend identification | Gamertag or numeric host XUID accepted | Requires live Xbox account verification |
-| Friend activity / world discovery | Experimental SDK join path | Real Xbox presence and permissions unverified |
+| Friend activity / world discovery | Phase 0 confirmed complete | Preserve the confirmed Android/networking milestone; continue regression testing |
 | NetherNet / WebRTC transport | Bundled diagnostic dependencies | Real host interoperability unverified |
-| Spawn and sustained connection | Instrumentation / test scaffolding | Requires host-observed live join, chunks and duration |
-| Gameplay actions | Planning / engine foundations | Real-world follow, move, mine, build and inventory actions not validated |
+| Spawn and sustained connection | Phase 0 confirmed complete | Phase 0 is accepted as complete; ongoing QA still protects reconnect and stability |
+| Gameplay actions | Physics movement integration in progress | New movement controller and Bedrock collision data are in the integration branch; real-device movement validation remains |
 | Autonomous tasks | Planned and partial foundations | No verified autonomous gameplay |
 | Background bot service | Android service scaffolding | Sustained connection, notifications and recovery not validated |
 | Production release | Not ready | Requires real-account, real-device and world tests |
@@ -57,7 +57,7 @@ The status descriptions below distinguish repository code from verified device f
 5. Keep the bot connected in the background and issue gameplay tasks.
 6. Stop the bot, disconnect, switch accounts or sign out securely.
 
-**This is the product goal. A real Android friend-world join still needs host-confirmed testing.**
+**Phase 0 is confirmed complete. Phase 1 now focuses on making the bot move reliably in the joined world.**
 
 ## Xbox sign-in and bot account
 
@@ -105,13 +105,38 @@ Long-running operation requires lifecycle-safe foreground service behavior, a us
 
 | Phase | Status | What completion requires |
 | --- | --- | --- |
-| **0 — Authentication and connection** | In progress | Xbox login, exact friend discovery, successful live join, spawn, sustained session and secure account lifecycle |
-| **1 — Gameplay controls** | In progress / foundations | Real-time world/player state, navigation, follow/stop, block interactions, inventory and reliable recovery |
+| **0 — Android and networking** | Complete (owner-confirmed) | Preserve the confirmed Android/networking milestone and prevent regressions |
+| **1 — Gameplay controls** | In progress | Physics-backed movement, analog joystick, jump/sprint/sneak, navigation, follow/stop, block interactions and server reconciliation |
 | **2 — Autonomous planning** | In progress / foundations | Connect task planner to verified game actions, multi-step goals, persistent world memory and recovery |
 | **3 — Advanced gameplay** | Not started | Test building, mining, survival, defense, farming, exploration and storage |
 | **4 — Android experience** | In progress | World selection, account controls, task reporting, notifications, accessibility and emergency stop |
 | **5 — Stability and optimization** | Not started | Long-duration Android tests, battery/memory profiling, reconnection and resource cleanup |
 | **6 — Release and QA** | In progress | Green CI, verified device/world tests, security review and installable signed release |
+
+### Physics-based movement system
+
+The replacement movement architecture is being integrated on
+`feature/complete-bedrock-movement`:
+
+- A Bedrock physics simulator handles acceleration, gravity, jumping, friction,
+  collision and liquid movement.
+- A version-pinned Bedrock 1.26.60 block-state/collision dataset supplies
+  per-state collision boxes. Unknown or unloaded blocks stop prediction rather
+  than being treated as air.
+- A single 20 Hz `PlayerAuthInput` stream carries simulated position, velocity,
+  look direction and movement flags.
+- Server corrections re-anchor predicted state and replay retained inputs.
+- The analog joystick supports 360-degree movement; jump, sprint and sneak
+  controls share the same controller used by autonomous navigation.
+- The previous experimental movement opt-in and fixed-step input writer are
+  removed from the active runtime path.
+
+The vendored physics source is from [LiteLDev/bedboo](https://github.com/LiteLDev/bedboo),
+pinned in `vendor/bedboo-physics/NOTICE.md` and distributed under LGPL-3.0.
+The collision data retains its Minecraft-data and CloudburstMC attribution.
+The upstream physics fixtures are recorded against BDS 1.26.51.1; MinePilot's
+protocol-2225 target still needs Android ARM64 and friend-world movement
+validation before this system can be described as verified.
 
 Read the [detailed roadmap](docs/ROADMAP.md), the [architecture rebuild and subsystem contracts](docs/ARCHITECTURE_REBUILD.md), and the [runtime function catalog](docs/FUNCTION_CONTRACTS.md). Features such as automatic mining, building, combat, navigation, friend selection and AI decisions are **goals or partial foundations**, not promises about the current APK.
 
