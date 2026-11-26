@@ -50,8 +50,9 @@ public final class ManualJoystickView extends View {
 
     public void setListener(Listener value) { listener = value; }
     public void setControlEnabled(boolean enabled) {
+        boolean wasEnabled = isEnabled();
         setEnabled(enabled);
-        if (!enabled) {
+        if (!enabled && (wasEnabled || trackingTouch)) {
             disallowParentInterception(false);
             trackingTouch = false;
             release();
