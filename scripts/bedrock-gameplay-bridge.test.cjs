@@ -24,7 +24,68 @@ function initialized(client, bridge) {
   // Strip the two intentional initial loading-screen completion writes;
   // later tests assert zero unsolicited *gameplay* input packets.
   client.sent.length = 0;
-}test('world state mirrors only live packet data, without inventing blocks', () => {
+}
+test('manual move commands reach the active controller and release through the same bridge', () => {
+  const client = new Client();
+  let received = null;
+  let releases = 0;
+  const movement = {
+    capability() { return 'ready'; },
+    runManualHold(world, options) { received = { world, options }; return { status: 'accepted', reason: 'movement_controls_applied' }; },
+    releaseManual() { releases++; return true; },
+    stop() {}, stopPresence() {}, snapshot() { return { capability: 'ready' }; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { movement }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  const result = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'manual-vector', action: 'manual_move',
+    confirmed: true, mode: 'vector', ticks: 8, motionX: 0.4, motionY: 0.7,
+    jump: true, sprint: true, sneak: false
+  });
+  assert.equal(result.status, 'accepted');
+  assert.equal(received.world, bridge);
+  assert.deepEqual(received.options, { mode: 'vector', ticks: 8, vector: { x: 0.4, y: 0.7 },
+    jump: true, sprint: true, sneak: false });
+  const stopped = bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'manual-release', action: 'manual_stop'
+  });
+  assert.equal(stopped.status, 'ok');
+  assert.equal(releases, 1);
+  bridge.stop();
+});
+
+test('rotation-only MovePlayer packets never rewrite position or clear movement prediction', () => {
+  const client = new Client();
+  let rotations = 0, observed = 0, teleports = 0;
+  const movement = {
+    observeRotation() { rotations++; },
+    observeServerPosition() { observed++; },
+    teleport() { teleports++; },
+    stop() {}, stopPresence() {}, snapshot() { return {}; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { movement }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  const before = { ...bridge.position };
+  client.emit('move_player', { runtime_entity_id: 123n,
+    position: { x: 999, y: 80, z: 999 }, yaw: 45, pitch: -10, mode: 3 });
+  assert.deepEqual(bridge.position, before);
+  assert.equal(rotations, 1);
+  assert.equal(observed, 0);
+  assert.equal(teleports, 0);
+  client.emit('move_player', { runtime_entity_id: 123n,
+    position: { x: 10, y: 64, z: 11 }, yaw: 90, pitch: 0, mode: 0 });
+  assert.deepEqual(bridge.position, { x: 10, y: 64, z: 11 });
+  assert.equal(observed, 1);
+  assert.equal(teleports, 0);
+  client.emit('move_player', { runtime_entity_id: 123n,
+    position: { x: 20, y: 70, z: 20 }, yaw: 0, pitch: 0, mode: 2 });
+  assert.equal(teleports, 1);
+  bridge.stop();
+});
+
+test('world state mirrors only live packet data, without inventing blocks', () => {
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client).start();
   assert.equal(bridge.snapshot().state, 'awaiting_world');
@@ -86,7 +147,9 @@ test('private single-command inbox handles status, stop and rejected commands', 
   assert.equal(cmd('cmd-4', 'mine').reason, 'invalid_command');
   writeFileSync(commandPath, '{"version":"minepilot.gameplay.v1","action":"status"');
   bridge.poll();
-  assert.equal(JSON.parse(readFileSync(receiptPath, 'utf8')).reason, 'invalid_command');
+  const last = JSON.parse(readFileSync(receiptPath, 'utf8'));
+  assert.equal(last.reason, 'invalid_command');
+  assert.equal(last.dispatchAccepted, false);
   bridge.stop();
   assert.equal(stops, 2);
 });
