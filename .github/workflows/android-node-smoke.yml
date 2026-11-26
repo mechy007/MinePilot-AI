@@ -27,6 +27,8 @@ on:
       - scripts/bedrock-autonomy-runner.cjs
       - scripts/bedrock-gameplay-agent.cjs
       - vendor/bedboo-physics/**
+      - 'vendor/bedboo-agent/**'
+      - 'scripts/runtime/bedrock/**'
       - scripts/bedrock-runtime-registry.cjs
       - scripts/bedrock-vanilla-12660-states.json
       - scripts/bedrock-vanilla-12660-hashed-states.json
@@ -134,7 +136,13 @@ jobs:
               with ZipFile(BytesIO(apk.read("assets/bedrock-sdk.zip"))) as sdk:
                   for entry in ("node-smoke.cjs", "xbox-auth-probe.cjs",
                                 "friend-world-session.cjs", "bedrock-inventory-ledger.cjs",
-                                "prismarine-world-client.mjs"):
+                                "prismarine-world-client.mjs", "runtime/bedrock/index.cjs",
+                                "runtime/bedrock/planning/obtain.cjs",
+                                "runtime/bedrock/navigation/astar.cjs",
+                                "vendor/bedboo-agent/planner.cjs",
+                                "vendor/bedboo-agent/COPYING",
+                                "vendor/bedboo-agent/COPYING.LESSER",
+                                "vendor/bedboo-agent/NOTICE.md"):
                       assert sdk.getinfo(entry).file_size > 0, entry
           PY
       - uses: actions/upload-artifact@v4

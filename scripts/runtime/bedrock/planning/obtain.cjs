@@ -1,5 +1,23 @@
 'use strict';
-const {plan:bedbooPlan}=require('../../../../vendor/bedboo-agent/planner.cjs');
+function loadBedbooPlanner() {
+  const candidates = [
+    '../../../../vendor/bedboo-agent/planner.cjs',
+    '../../../vendor/bedboo-agent/planner.cjs'
+  ];
+  let lastError;
+  for (const candidate of candidates) {
+    try {
+      const planner = require(candidate);
+      if (typeof planner.plan === 'function') return planner.plan;
+      throw new TypeError('Bedboo planner does not export plan()');
+    } catch (error) {
+      if (error.code !== 'MODULE_NOT_FOUND') throw error;
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error('Pinned Bedboo planner is missing');
+}
+const bedbooPlan = loadBedbooPlanner();
 const {snapshotInventory}=require('../inventory/containers.cjs');
 class BedrockObtainPlanner {
   constructor(options={}){this.clock=options.clock??Date.now;this.maxAgeMs=options.maxAgeMs??10000;}

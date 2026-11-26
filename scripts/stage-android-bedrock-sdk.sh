@@ -251,6 +251,10 @@ cp "$root/scripts/bedrock-odyssey-bedrock-adapter.cjs" "$temp/bedrock-odyssey-be
 cp "$root/scripts/bedrock-odyssey-observation-executor.cjs" "$temp/bedrock-odyssey-observation-executor.cjs"
 cp "$root/scripts/bedrock-odyssey-skill-catalog.json" "$temp/bedrock-odyssey-skill-catalog.json"
 cp "$root/scripts/bedrock-first-person-scene.cjs" "$temp/bedrock-first-person-scene.cjs"
+# Preserve the modular runtime's relative imports inside the flattened APK bundle.
+mkdir -p "$temp/runtime" "$temp/vendor"
+cp -R "$root/scripts/runtime/bedrock" "$temp/runtime/bedrock"
+cp -R "$root/vendor/bedboo-agent" "$temp/vendor/bedboo-agent"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
 mkdir -p "$temp/gameplay"
@@ -298,6 +302,12 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for source in sorted((runtime / "vendor" / "bedboo-physics").rglob("*")):
         if source.is_file():
             archive.write(source, source.relative_to(runtime))
+    for source in sorted((runtime / "vendor" / "bedboo-agent").rglob("*")):
+        if source.is_file():
+            archive.write(source, source.relative_to(runtime))
+    for source in sorted((runtime / "runtime" / "bedrock").rglob("*")):
+        if source.is_file():
+            archive.write(source, source.relative_to(runtime))
     for source in sorted((runtime / "bedrock-physics-data").rglob("*")):
         if source.is_file():
             archive.write(source, source.relative_to(runtime))
@@ -311,7 +321,24 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
             archive.write(source, source.relative_to(runtime))
 
 with ZipFile(zip_path) as archive:
-    required = {"bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs"}
+    required = {
+        "bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs",
+        "runtime/bedrock/index.cjs",
+        "runtime/bedrock/actions/envelope.cjs",
+        "runtime/bedrock/actions/outcomes.cjs",
+        "runtime/bedrock/inventory/containers.cjs",
+        "runtime/bedrock/navigation/astar.cjs",
+        "runtime/bedrock/planning/goap.cjs",
+        "runtime/bedrock/planning/obtain.cjs",
+        "runtime/bedrock/safety/policy.cjs",
+        "runtime/bedrock/tasks/runner.cjs",
+        "runtime/bedrock/learning/curriculum.cjs",
+        "runtime/bedrock/diagnostics/recorder.cjs",
+        "vendor/bedboo-agent/planner.cjs",
+        "vendor/bedboo-agent/COPYING",
+        "vendor/bedboo-agent/COPYING.LESSER",
+        "vendor/bedboo-agent/NOTICE.md",
+    }
     missing = required.difference(archive.namelist())
     if missing:
         raise SystemExit(f"Android Bedrock SDK archive missing required modules: {sorted(missing)}")
