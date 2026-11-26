@@ -88,7 +88,9 @@ test('runtime facade declares target Bedrock version unverified',()=>{
 
 test('live bridge exposes Bedboo obtain planning as a non-executing command',()=>{
  const clock=()=>1000;
- const bridge=new BedrockGameplayBridge(new EventEmitter(),{
+ const client=new EventEmitter();
+ client.queue=()=>{};
+ const bridge=new BedrockGameplayBridge(client,{
   clock,
   inventoryLedger:{playerInventory:()=>({known:true,fresh:true,registryKnown:true,unresolvedItemCount:0,observedAt:1000,revision:1,generation:1,items:[{empty:false,itemName:'minecraft:oak_log',count:1}]})},
   recipeCatalog:{snapshot:()=>({observedAt:1000,generation:1,recipes:[{supported:true,id:'oak_planks',resultItem:'minecraft:oak_planks',resultCount:4,ingredients:[{name:'minecraft:oak_log',count:1}]}]})}
