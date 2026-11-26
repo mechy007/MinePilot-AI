@@ -111,7 +111,7 @@ test('agent is opt-in and cannot run without experimental movement, live world, 
   assert.equal(f.agent.start(f.world,{confirmed:true,goal:'fight'}).reason,'unsupported_goal');
   f.setMovementEnabled(false);
   assert.equal(f.agent.start(f.world,{confirmed:true,goal:'explore'}).reason,
-    'experimental_movement_not_enabled');
+    'movement_unavailable');
   f.setMovementEnabled(true);
   f.world.autonomy.snapshot=()=>({active:true});
   assert.equal(f.agent.start(f.world,{confirmed:true,goal:'explore'}).reason,
