@@ -5,7 +5,9 @@ The Bedrock player physics implementation in `lib/physics/` is vendored from
 `1d8d2ae4e7b5c062f71a6373b7aede65d6810bb9`.
 
 - The Bedrock physics fork is distributed under LGPL-3.0-only; see `COPYING` and
-  `COPYING.LESSER`.
+  `COPYING.LESSER`. MinePilot changed the engine's vector import to use the
+  repository's small local `Vec3` compatibility helper; the physics algorithms
+  remain the pinned upstream source.
 - Its AABB and attribute helpers are derived from PrismarineJS
   [prismarine-physics](https://github.com/PrismarineJS/prismarine-physics), MIT.
 - The versioned Bedrock collision data in `BEDROCK-DATA-NOTICE.md` includes
