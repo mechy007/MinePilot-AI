@@ -73,6 +73,7 @@ function movementWorld(unknown = false) {
   const data = fixture();
   const terrain = {
     dimension: 0,
+    registry: new Map([[100, { name: 'minecraft:air' }], [101, { name: 'minecraft:stone' }]]),
     blockId(dimension, x, y, z) {
       if (unknown && x > 1) return null;
       return y < 0 ? 101 : 100;
@@ -84,7 +85,7 @@ function movementWorld(unknown = false) {
   const world = {
     closed: false, spawned: true, position: { x: 0, y: 1.62, z: 0 }, yaw: 0, pitch: 0,
     self: { runtimeId: 1 }, movementAuthority: 1, serverTick: 100n,
-    serverTickObservedAt: Date.now(), dimension: 0, terrain,
+    serverTickObservedAt: Date.now(), dimension: 0, blockNetworkIdsAreHashes: true, terrain,
     receivedChunks: new Map([['0:0', true]])
   };
   return { data, terrain, client, controller, world };
