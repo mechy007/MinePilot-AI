@@ -97,3 +97,19 @@ Do not create parallel implementations of these systems without first proving th
 - No arbitrary upstream JavaScript execution, shell access or raw packet execution from an LLM.
 - No declaring a skill ready based only on catalog metadata, simulated tests or generated plans.
 - No automatic local AI fallback when Remote AI is disabled or unavailable.
+
+
+### 5. Additional language and mobile platforms discovered
+
+| Source | Platform / language | Reusable value | Limits / decision |
+|---|---|---|---|
+| [BedrockSharp](https://github.com/BedrockSharp/bedrock-protocol) | C# / .NET, MIT | Independent packet codec and RakNet implementation for protocol cross-checks and fixture generation. | No reason to add a .NET runtime to MinePilot Android; use as a second implementation for protocol validation. |
+| [CloudburstMC/Protocol](https://github.com/CloudburstMC/Protocol) | Java, Apache-2.0 | Bedrock codec, connection and version-specific serializers; useful as an independent Java-side packet schema check. | Check exact supported version before relying on it for 1.26.66.1; avoid a second networking stack. |
+| [Bedwire](https://github.com/Bedrock-Phanatics/bedwire) | Zig, Apache-2.0 | Session framing, compression, encryption, login/session state, bounded buffers and RakNet/NetherNet transport adapters. | Strong protocol architecture reference; not a gameplay bot and would require a new Zig/NDK integration. |
+| [LeviBatone](https://github.com/sang765/levibatone) | C++ native Android ARM64 client mod, LGPL-3.0 | Bedrock 1.26.60 client-side Baritone pathing, movement costs, jump/fall/swim/climb/bridge movement and touch HUD ideas. | Injected in-process mod for LeviLauncher, not an independent Xbox friend-world bot. Reuse algorithms only; LGPL and game-version-specific offsets make direct copying unsuitable. |
+| [chase-west/minecraft-bot](https://github.com/chase-west/minecraft-bot) | TypeScript / Node, MIT | Bedrock protocol agent with 20 Hz PlayerAuthInput, 3D A*, GOAP, ONNX DQN, rollout recording and optional LLM goal selection. | Dedicated-server / offline-mode test assumptions must be checked; adapt its controller separation, observation encoding and evaluation ideas, not its account/session code. |
+| [JNbot Mobile](https://github.com/JNbot-app/JNbot-mobile) | React Native / Expo, MIT | Mobile bot profile management, secure tokens, remote WebRTC connection, logs and action-chain UX. | App/controller architecture reference only until its actual bot backend and Bedrock compatibility are verified. Do not replace MinePilot's native Android UI/runtime. |
+| [EndstoneMC/bedrock-protocol](https://github.com/EndstoneMC/bedrock-protocol) | C++, Python, Java, MIT | Independent multi-language packet codecs and protocol version tables. | Protocol conformance and fixture-generation reference; not a replacement for the existing Android session. |
+| [PyBedrock Net](https://pypi.org/project/pybedrock-net/) | Python, MIT (package metadata) | Layered RakNet, packet, auth, world, inventory and bot APIs. | Secondary research/test implementation; confirm repository provenance and exact version support before using any code. |
+
+The additional survey confirms that the ecosystem spans Rust, JavaScript/TypeScript, Python, C#, Java, C++, Go and Zig. It does not imply all projects are suitable runtime dependencies. MinePilot should stay on its existing Android + embedded Node path and use other language implementations as algorithm, protocol and test references unless a measured gap justifies a native module.
