@@ -104,6 +104,9 @@ test('food emergency refuses unrelated drops and never emits use-item or guessed
 });
 test('manifest never labels unsupported food, attacks, recipes or building as executable',()=>{
   const f=setup();
+  // The manifest intentionally exposes the experimental capability tier;
+  // the autonomous agent readiness tests above require the production 'ready' tier.
+  f.world.movement.capability=()=> 'experimental';
   const catalog=gameplaySkillManifest(f.world);
   assert.equal(catalog.version,'minepilot.gameplay.skills.v1');
   assert.equal(catalog.rawPacketAccess,false);
