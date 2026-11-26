@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 
-const EXPECTED_STATES = 23948;
+const EXPECTED_STATES = 23960;
+let cachedDefaultData = null;
 
 function readGzipJson(directory, name) {
   const file = path.join(directory, name + '.json.gz');
@@ -13,10 +14,15 @@ function readGzipJson(directory, name) {
 }
 
 function loadBedrockCollisionData(directory = path.join(__dirname, 'bedrock-physics-data')) {
+  const defaultDirectory = path.join(__dirname, 'bedrock-physics-data');
+  if (cachedDefaultData && path.resolve(directory) === path.resolve(defaultDirectory))
+    return cachedDefaultData;
   const blocks = readGzipJson(directory, 'blocks');
   const states = readGzipJson(directory, 'blockStates');
   const collision = readGzipJson(directory, 'blockCollisionShapes');
-  return buildBedrockCollisionData({ blocks, states, collision });
+  const data = buildBedrockCollisionData({ blocks, states, collision });
+  if (path.resolve(directory) === path.resolve(defaultDirectory)) cachedDefaultData = data;
+  return data;
 }
 
 function buildBedrockCollisionData({ blocks, states, collision }, expectedStates = EXPECTED_STATES) {
