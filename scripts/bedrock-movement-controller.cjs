@@ -455,6 +455,7 @@ class BedrockMovementController {
         pos: corrected.pos.clone(), vel: corrected.vel.clone(), onGround: corrected.onGround
       });
       let state = cloneState(this.history[index].state);
+      let replayFailed = false;
       for (let i = index + 1; i < this.history.length; i++) {
         const entry = this.history[i];
         this.applyInput(state, entry.input);
@@ -465,11 +466,12 @@ class BedrockMovementController {
           this.state = cloneState(this.history[index].state);
           this.history.splice(index + 1);
           this.lastMovementResult = { status: 'unavailable', reason: 'terrain_not_fully_observed' };
+          replayFailed = true;
           break;
         }
         entry.state = cloneState(state);
       }
-      this.state = state;
+      if (!replayFailed) this.state = state;
     } else {
       this.state.pos = corrected.pos;
       this.state.vel = corrected.vel;
