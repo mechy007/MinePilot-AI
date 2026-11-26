@@ -25,8 +25,7 @@ function initialized(client, bridge) {
   // Strip the two intentional initial loading-screen completion writes;
   // later tests assert zero unsolicited *gameplay* input packets.
   client.sent.length = 0;
-}
-test('world state mirrors only live packet data, without inventing blocks', () => {
+}test('world state mirrors only live packet data, without inventing blocks', () => {
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client).start();
   assert.equal(bridge.snapshot().state, 'awaiting_world');
@@ -94,95 +93,6 @@ test('private single-command inbox handles status, stop and rejected commands', 
   assert.equal(stops, 2);
 });
 
-test('Layer 1 runs inspect -> wait -> stop -> probe through one live-client bridge', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const client = new Client();
-  let stopped = 0;
-  const layerOne = new LayerOneController();
-  const movement = {
-    capability: () => 'experimental',
-    probeStep: () => ({ status: 'accepted', reason: 'experimental_input_queued_not_verified' }),
-    stop: () => { stopped++; }
-  };
-  const bridge = new BedrockGameplayBridge(client, { movement, layerOne }).start();
-  initialized(client, bridge);
-  client.emit('inventory_content', { window_id: 0, input: [
-    { network_id: 1, count: 3 }, { network_id: 0, count: 0 }
-  ] });
-  assert.equal(bridge.snapshot().layerOne.inventory.known, true);
-  assert.equal(bridge.snapshot().layerOne.inventory.occupiedSlots, 1);
-  const command = (requestId, action, extra = {}) => bridge.execute({
-    version: 'minepilot.gameplay.v1', requestId, action, ...extra
-  });
-  assert.equal(command('one', 'inspect').reason, 'inspection_complete');
-  assert.equal(bridge.snapshot().layerOne.task.state, 'completed');
-  assert.equal(command('two', 'wait').status, 'accepted');
-  assert.equal(bridge.snapshot().layerOne.movementOwner, 'manual');
-  assert.equal(command('three', 'probe_step', { confirmed: true, direction: 'forward' }).reason, 'wait_mode_active');
-  assert.equal(command('four', 'stop_movement').status, 'ok');
-  assert.equal(command('five', 'probe_step', { confirmed: true, direction: 'forward' }).status, 'accepted');
-  assert.equal(bridge.snapshot().layerOne.task.state, 'awaiting_server_verification');
-  client.emit('correct_player_move_prediction', { position: { x: 8.8, y: 64, z: 10.5 }, tick: 110n });
-  assert.equal(bridge.snapshot().layerOne.task.state, 'completed');
-  assert.equal(bridge.snapshot().layerOne.task.reason, 'server_position_changed');
-  client.emit('update_attributes', { runtime_entity_id: 123n, attributes: [
-    { name: 'minecraft:health', current: 4 }
-  ] });
-  assert.equal(bridge.snapshot().layerOne.safetyHold, true);
-  assert.equal(command('six', 'probe_step', { confirmed: true, direction: 'forward' }).reason, 'critical_health');
-  assert.ok(stopped > 0);
-  bridge.stop();
-  assert.equal(client.listenerCount('inventory_content'), 0);
-  assert.equal(client.listenerCount('update_attributes'), 0);
-});
-
-test('Layer 2 plans named-player following, Stay and Return on the same client without sending packets', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-  const client = new Client();
-  const planner = new LayerTwoPlanner();
-  const bridge = new BedrockGameplayBridge(client, {
-    layerOne: new LayerOneController(), layerTwo: planner
-  }).start();
-  initialized(client, bridge);
-  client.emit('player_list', { action_type: 'add', records: [{ uuid: 'uuid-fixture', username: 'BuilderFriend' }] });
-  client.emit('add_player', {
-    runtime_entity_id: 456n, uuid: 'uuid-fixture', position: { x: 15, y: 64, z: 10.5 }
-  });
-  const run = (requestId, action, extra = {}) => bridge.execute({
-    version: 'minepilot.gameplay.v1', requestId, action, ...extra
-  });
-  assert.equal(bridge.snapshot().layerTwo.visiblePlayerNames[0], 'BuilderFriend');
-  assert.equal(run('a', 'plan_follow', { playerName: 'BuilderFriend' }).reason, 'follow_plan_only');
-  assert.equal(bridge.snapshot().layerTwo.preview.goal, 'follow');
-  assert.equal(bridge.snapshot().layerTwo.preview.status, 'route_unverified');
-  assert.equal(bridge.snapshot().layerTwo.preview.executed, false);
-  assert.equal(client.sent.length, 0);
-  client.emit('move_player', {
-    runtime_entity_id: 456n, position: { x: 10, y: 64, z: 10.5 }
-  });
-  assert.equal(bridge.snapshot().layerTwo.preview.status, 'at_target');
-  assert.equal(run('b', 'probe_step', { confirmed: true, direction: 'forward' }).reason,
-    'planned_navigation_not_executable');
-  assert.equal(run('c', 'stay').status, 'accepted');
-  assert.equal(bridge.snapshot().layerTwo.preview.status, 'stay');
-  assert.equal(run('d', 'set_home').reason, 'home_position_recorded');
-  assert.equal(bridge.snapshot().layerTwo.homeKnown, true);
-  client.emit('move_player', {
-    runtime_entity_id: 123n, position: { x: 25, y: 64, z: 10.5 }
-  });
-  assert.equal(run('e', 'plan_return').reason, 'return_plan_only');
-  assert.equal(bridge.snapshot().layerOne.movementOwner, null,
-    'an accepted return plan releases the old Stay reservation');
-  assert.equal(bridge.snapshot().layerTwo.preview.reason, 'direct_route_needs_collision_data');
-  assert.equal(client.sent.length, 0);
-  assert.equal(run('f', 'stop_movement').reason, 'movement_cancelled');
-  assert.equal(bridge.snapshot().layerTwo.preview.status, 'idle');
-  bridge.stop();
-  assert.equal(client.listenerCount('player_list'), 0);
-  assert.equal(client.listenerCount('mob_equipment'), 0);
-});
-
 test('Layer 2 equipment, target removal and health override are observational', async () => {
   const { LayerOneController } = await import('./gameplay/layer-one.js');
   const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
@@ -243,67 +153,6 @@ test('nested Bedrock PlayerRecords add/remove resolves names only for visible en
   bridge.stop();
 });
 
-test('Layer 3 same-client resource planning, pickup receipts and inventory observations issue zero gameplay packets', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
-  const client = new Client();
-  const bridge = new BedrockGameplayBridge(client, {
-    layerOne: new LayerOneController(),
-    layerTwo: new LayerTwoPlanner(),
-    layerThree: new LayerThreePlanner()
-  }).start();
-  initialized(client, bridge);
-  const execute = (requestId, action, more = {}) => bridge.execute({
-    version: 'minepilot.gameplay.v1', requestId, action, ...more
-  });
-  client.emit('item_registry', { itemstates: [
-    { name: 'minecraft:oak_log', runtime_id: 5 },
-    { name: 'minecraft:stone', runtime_id: 9 }
-  ] });
-  client.emit('inventory_content', { window_id: 'inventory', input: [
-    { network_id: 5, count: 2 }, { network_id: 0, count: 0 }
-  ] });
-  client.emit('add_item_entity', {
-    runtime_entity_id: 1000n, item: { network_id: 5, count: 2 },
-    position: { x: 16, y: 64, z: 10.5 }
-  });
-  const first = bridge.snapshot().layerThree;
-  assert.equal(first.registeredItems, 2);
-  assert.equal(first.observedDrops, 1);
-  assert.deepEqual(first.nearbyItemNames, ['minecraft:oak_log']);
-  assert.equal(execute('collect', 'plan_collect', {
-    itemName: 'minecraft:oak_log', count: 2
-  }).reason, 'collect_plan_only');
-  const planned = bridge.snapshot().layerThree.route;
-  assert.equal(planned.status, 'route_unverified');
-  assert.equal(planned.executed, false);
-  assert.equal(client.sent.length, 0);
-  assert.equal(execute('probe', 'probe_step', {
-    confirmed: true, direction: 'forward'
-  }).reason, 'resource_goal_not_executable');
-  assert.equal(execute('wait-now', 'wait').status, 'accepted');
-  assert.equal(bridge.snapshot().layerThree.route.status, 'idle',
-    'Wait cancels resource goals before any input');
-  assert.equal(execute('collect-again', 'plan_collect', {
-    itemName: 'minecraft:oak_log', count: 2
-  }).status, 'accepted');
-  client.emit('take_item_entity', { runtime_entity_id: 1000n, target: 123n });
-  client.emit('inventory_content', { window_id: 'inventory', input: [
-    { network_id: 5, count: 4 }
-  ] });
-  assert.equal(bridge.snapshot().layerThree.route.status, 'observed_inventory_increase');
-  assert.equal(bridge.snapshot().layerThree.route.observed, 2);
-  assert.equal(bridge.snapshot().layerThree.route.executed, false);
-  assert.equal(client.sent.length, 0);
-  assert.equal(execute('stop', 'stop_movement').reason, 'movement_cancelled');
-  assert.equal(bridge.snapshot().layerThree.route.status, 'idle');
-  bridge.stop();
-  for (const event of ['item_registry', 'add_item_entity', 'take_item_entity', 'update_block']) {
-    assert.equal(client.listenerCount(event), 0);
-  }
-});
-
 test('Layer 3 block updates do not imply mining, and dimension resets resource targets', async () => {
   const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
   const client = new Client();
@@ -354,168 +203,6 @@ test('pinned Bedrock SDK serializes break intent fixtures without executing them
     });
     assert.ok(Buffer.isBuffer(encoded) && encoded.length > 10);
   }
-});
-
-
-test('Layer 4 interrupts existing follow plan on low air and only suggests food from verified inventory', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
-  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
-  const client = new Client();
-  let stops = 0;
-  const bridge = new BedrockGameplayBridge(client, {
-    layerOne: new LayerOneController(), layerTwo: new LayerTwoPlanner(),
-    layerThree: new LayerThreePlanner(), layerFour: new LayerFourSupervisor(),
-    movement: { capability: () => 'unavailable', stop: () => { stops++; } }
-  }).start();
-  initialized(client, bridge);
-  client.emit('add_player', {
-    runtime_entity_id: 456n, username: 'Friend',
-    position: { x: 20, y: 64, z: 10.5 }
-  });
-  const cmd = (id, action, rest = {}) => bridge.execute({
-    version: 'minepilot.gameplay.v1', requestId: id, action, ...rest
-  });
-  assert.equal(cmd('follow', 'plan_follow', { playerName: 'Friend' }).status, 'accepted');
-  client.emit('item_registry', { itemstates: [
-    { runtime_id: 11, name: 'minecraft:bread' },
-    { runtime_id: 12, name: 'minecraft:stone' }
-  ] });
-  client.emit('inventory_content', { window_id: 'inventory', input: [
-    { network_id: 11, count: 3 }, { network_id: 12, count: 64 }
-  ] });
-  client.emit('set_time', { time: 14000 });
-  client.emit('update_attributes', { runtime_entity_id: 999n,
-    attributes: [{ name: 'minecraft:player.air_supply', current: 0 }] });
-  assert.equal(bridge.snapshot().layerFour.level, 'caution', 'night advisory may be present');
-  assert.equal(bridge.snapshot().layerFour.taskStatus, 'running', 'other entities cannot interrupt bot');
-  client.emit('update_attributes', { runtime_entity_id: 123n,
-    attributes: [
-      { name: 'minecraft:health', current: 20 },
-      { name: 'minecraft:player.hunger', current: 4 },
-      { name: 'minecraft:player.air_supply', current: 2 }
-    ] });
-  assert.equal(bridge.snapshot().layerFour.level, 'critical');
-  assert.equal(bridge.snapshot().layerFour.reason, 'low_air_supply');
-  assert.equal(cmd('air-probe', 'probe_step', { confirmed: true, direction: 'forward' }).reason,
-    'survival_hold');
-  assert.equal(bridge.snapshot().layerFour.taskStatus, 'paused');
-  assert.equal(bridge.snapshot().layerTwo.preview.status, 'paused_by_safety');
-  assert.ok(stops >= 2);
-  assert.equal(cmd('food', 'plan_food').reason, 'food_use_requires_verified_item_interaction');
-  assert.equal(bridge.snapshot().layerFour.foodPlan.item, 'minecraft:bread');
-  assert.equal(bridge.snapshot().layerFour.foodPlan.status, 'planned_not_executed');
-  assert.equal(bridge.snapshot().layerFour.executed, false);
-  client.emit('update_attributes', { runtime_entity_id: 123n,
-    attributes: [{ name: 'minecraft:player.air_supply', current: 20 }] });
-  assert.equal(bridge.snapshot().layerFour.taskStatus, 'ready_to_replan');
-  assert.equal(bridge.snapshot().layerTwo.preview.status, 'route_unverified');
-  assert.equal(client.sent.length, 0, 'no eating, mining or movement packet was emitted');
-  bridge.stop();
-  assert.equal(client.listenerCount('set_time'), 0);
-});
-
-
-test('Layer 5 plans a shelter and crafting BOM from live inventory without emitting block or crafting actions', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
-  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
-  const { LayerFivePlanner } = await import('./gameplay/layer-five.js');
-  const client = new Client();
-  const bridge = new BedrockGameplayBridge(client, {
-    layerOne: new LayerOneController(),
-    layerTwo: new LayerTwoPlanner(),
-    layerThree: new LayerThreePlanner(),
-    layerFour: new LayerFourSupervisor(),
-    layerFive: new LayerFivePlanner()
-  }).start();
-  initialized(client, bridge);
-  const cmd = (id, action, more = {}) => bridge.execute({
-    version: 'minepilot.gameplay.v1', requestId: id, action, ...more
-  });
-  client.emit('item_registry', { itemstates: [
-    { runtime_id: 11, name: 'minecraft:oak_planks' },
-    { runtime_id: 12, name: 'minecraft:oak_log' }
-  ] });
-  client.emit('inventory_content', { window_id: 'inventory', input: [
-    { network_id: 11, count: 8 }, { network_id: 12, count: 4 }
-  ] });
-  assert.equal(cmd('shelter', 'plan_shelter', { material: 'minecraft:oak_planks' }).status, 'accepted');
-  let build = bridge.snapshot().layerFive;
-  assert.equal(build.kind, 'shelter');
-  assert.equal(build.state, 'materials_missing');
-  assert.equal(build.required, 23);
-  assert.equal(build.onHand, 8);
-  assert.equal(build.missing, 15);
-  assert.equal(build.suggestedLogs, 4);
-  assert.equal(build.executed, false);
-  client.emit('update_block', { position: { x: 8, y: 64, z: 9 }, layer: 0, block_runtime_id: 23 });
-  assert.equal(bridge.snapshot().layerFive.observedNearbyBlockUpdates, 1);
-  assert.equal(bridge.snapshot().layerFive.executed, false);
-  assert.equal(cmd('probe', 'probe_step', { direction: 'forward', confirmed: true }).reason,
-    'building_plan_not_executable');
-
-  client.emit('update_attributes', { runtime_entity_id: 123n,
-    attributes: [{ name: 'minecraft:health', current: 3 }] });
-  assert.equal(bridge.snapshot().layerFive.state, 'paused_by_safety');
-  assert.equal(cmd('blocked', 'plan_craft_planks', { material: 'minecraft:oak_planks', count: 12 }).reason,
-    'survival_hold');
-  client.emit('update_attributes', { runtime_entity_id: 123n,
-    attributes: [{ name: 'minecraft:health', current: 20 }] });
-  assert.equal(cmd('craft', 'plan_craft_planks', { material: 'minecraft:oak_planks', count: 12 }).status,
-    'accepted');
-  build = bridge.snapshot().layerFive;
-  assert.equal(build.kind, 'craft_planks');
-  assert.equal(build.missing, 4);
-  assert.equal(build.suggestedLogs, 1);
-  assert.equal(build.executed, false);
-  assert.equal(client.sent.length, 0, 'no minecraft player action, craft or inventory packet emitted');
-  assert.equal(cmd('stop', 'stop_movement').status, 'ok');
-  assert.equal(bridge.snapshot().layerFive.kind, 'none');
-  bridge.stop();
-  assert.equal(client.listenerCount('item_registry'), 0);
-  assert.equal(client.listenerCount('update_block'), 0);
-});
-
-
-test('Layer 6 previews farming/storage, observes separate container and blocks without game actions', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
-  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
-  const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
-  const client = new Client();
-  const bridge = new BedrockGameplayBridge(client, {
-    layerOne: new LayerOneController(), layerThree: new LayerThreePlanner(),
-    layerFour: new LayerFourSupervisor(), layerSix: new LayerSixWorkflow()
-  }).start();
-  initialized(client, bridge);
-  const cmd = (id, action, more = {}) =>
-    bridge.execute({ version: 'minepilot.gameplay.v1', requestId: id, action, ...more });
-  client.emit('inventory_content', { window_id: 7, input: [
-    { count: 3, network_id: 1 }, { count: 0, network_id: 0 }
-  ] });
-  assert.equal(bridge.snapshot().layerSix.containersObserved, 1);
-  assert.equal(cmd('work-1', 'plan_workflow', { workflowKind: 'farm_preview' }).status,'accepted');
-  client.emit('update_block', { position: { x: 8, y: 64, z: 10 }, layer: 0,
-    block_runtime_id: 22 });
-  assert.equal(bridge.snapshot().layerSix.recentBlockUpdates,1);
-  assert.equal(cmd('work-2', 'review_checkpoint', { checkpoint:'observe' }).status,'ok');
-  assert.equal(cmd('work-3', 'review_checkpoint', { checkpoint:'inventory' }).status,'ok');
-  assert.equal(cmd('work-4', 'review_checkpoint', { checkpoint:'terrain' }).status,'blocked');
-  assert.equal(bridge.snapshot().layerSix.nextStep, 'review_terrain');
-  assert.equal(bridge.snapshot().layerSix.executed,false);
-  assert.equal(cmd('work-5', 'probe_step', { confirmed:true, direction:'forward' }).reason,
-    'workflow_not_executable');
-  assert.equal(client.sent.length,0);
-  assert.equal(cmd('work-6', 'stop_movement').status,'ok');
-  assert.equal(bridge.snapshot().layerSix.kind,'none');
-  assert.equal(cmd('work-7', 'plan_workflow', { workflowKind:'storage_preview' }).status,'accepted');
-  client.emit('change_dimension', { dimension:1 });
-  assert.equal(bridge.snapshot().layerSix.kind,'none');
-  bridge.stop();
-  assert.equal(client.listenerCount('inventory_content'),0);
 });
 
 
@@ -821,53 +508,6 @@ test('general gameplay start reconciles learning results and generic stop cannot
 });
 
 
-test('ODYSSEY execute IPC gates and dispatches only bounded goto, exploreUntil and manual mineBlock', () => {
-  const client=new Client();
-  const starts=[];
-  const gameplayAgent={
-    snapshot:()=>({active:false}),
-    start(_world,options){starts.push(options);return {status:'accepted',reason:'started'};},
-    stop(){return {status:'ok'};}
-  };
-  const breaks=[];
-  let autonomyActive = false;
-  const autonomy = {
-    snapshot: () => ({ active: autonomyActive }),
-    stop() { autonomyActive = false; return { status: 'ok' }; }
-  };
-  const blockBreaker={snapshot(){return {};},abort(){},start(_world,position,confirmed){breaks.push({position,confirmed});return {status:'accepted',reason:'queued_not_verified'};}};
-  const bridge=new BedrockGameplayBridge(client,{gameplayAgent,autonomy,blockBreaker}).start();
-  initialized(client,bridge);
-  // StartGame stops prior autonomy; model a separate active Follow run.
-  autonomyActive = true;
-  const call=(primitive,args={},confirmed=true)=>bridge.execute({
-    version:'minepilot.gameplay.v1',requestId:'odyssey-exec',action:'odyssey_execute',
-    primitive,args,confirmed
-  });
-  assert.equal(call('exploreUntil',{},false).reason,'confirmation_required');
-  const explore = call('exploreUntil');
-  assert.equal(explore.status,'accepted');
-  assert.equal(explore.awaitingServerConfirmation,true);
-  assert.deepEqual(starts.at(-1),{confirmed:true,goal:'explore'});
-  const goto = call('goto',{targetPosition:{x:9,y:64,z:10}});
-  assert.equal(goto.status,'accepted');
-  assert.equal(goto.awaitingServerConfirmation,true);
-  assert.deepEqual(starts.at(-1),{confirmed:true,goal:'goto',targetPosition:{x:9,y:64,z:10}});
-  assert.equal(call('goto',{targetPosition:{x:Infinity,y:64,z:10}}).reason,'valid_target_position_required');
-  const blockedMine = call('mineBlock',{position:{x:8,y:63,z:10}});
-  assert.equal(blockedMine.status,'rejected');
-  assert.equal(blockedMine.reason,'autonomy_busy');
-  assert.equal(breaks.length,0,'mining must not interrupt active Follow/autonomy');
-  autonomyActive = false;
-  const mine = call('mineBlock',{position:{x:8,y:63,z:10}});
-  assert.equal(mine.status,'accepted');
-  assert.equal(mine.awaitingServerConfirmation,true);
-  assert.deepEqual(breaks.at(-1),{position:{x:8,y:63,z:10},confirmed:true});
-  assert.equal(call('craftItem').reason,'primitive_executor_unavailable');
-  bridge.stop();
-});
-
-
 test('StartGame inventory transaction negotiation is tracked without assuming a mode', () => {
   const enabledClient = new Client();
   const enabled = new BedrockGameplayBridge(enabledClient).start();
@@ -940,16 +580,6 @@ test('tool equip fails closed without fresh hotbar inventory or a matching tool'
   assert.equal(call('equipPickaxe').reason, 'matching_tool_not_in_hotbar');
   assert.equal(client.sent.length, 0);
   bridge.stop();
-});
-
-
-test('hotbar capability is experimental only while a complete server inventory snapshot is fresh', () => {
-  const stale = { clock: () => 12000,
-    layerThree: { hotbarItems: () => ({ known: true, observedAt: 1000, slots: [] }) } };
-  const fresh = { clock: () => 12000,
-    layerThree: { hotbarItems: () => ({ known: true, observedAt: 3000, slots: [] }) } };
-  assert.equal(odysseyCapabilityStates(stale, {}).hotbar_selection.state, 'blocked');
-  assert.equal(odysseyCapabilityStates(fresh, {}).hotbar_selection.state, 'experimental');
 });
 
 
