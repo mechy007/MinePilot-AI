@@ -551,23 +551,36 @@ public final class DashboardActivity extends Activity {
 
         addManualControlPanel();
 
-        // Lightweight live visualization of packet-confirmed observations.
-        // This is not a streamed game camera or guessed voxel map.
+        // Keep experimental visualizations available without letting them
+        // dominate the primary movement/control screen.
+        LinearLayout visualizations = new LinearLayout(this);
+        visualizations.setOrientation(LinearLayout.VERTICAL);
+        visualizations.setVisibility(View.GONE);
+
         LinearLayout analytics = card();
-        analytics.addView(text("VISUAL ANALYTICS  ·  LIVE SURVIVAL", 11, GRASS, true));
+        analytics.addView(text("VISUAL ANALYTICS · LIVE SURVIVAL", 11, GRASS, true));
         lifeAnalytics = new LifeAnalyticsView(this);
         analytics.addView(lifeAnalytics, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(280)));
-        body.addView(analytics, panelLayout(10));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(240)));
+        visualizations.addView(analytics, panelLayout(10));
 
         LinearLayout povCard = card();
-        povCard.addView(text("BOT CAMERA  ·  FIRST PERSON (EXPERIMENTAL)", 11, GRASS, true));
+        povCard.addView(text("BOT CAMERA · EXPERIMENTAL RECONSTRUCTION", 11, GRASS, true));
         firstPersonView = new FirstPersonVoxelView(this);
-        povCard.addView(firstPersonView,new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(210)));
-        povCard.addView(text("Reconstructed 3D view of decoded blocks only. Not a live Minecraft screen stream.",
+        povCard.addView(firstPersonView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(190)));
+        povCard.addView(text("Reconstructed from decoded block observations; this is not a live Minecraft video stream.",
                 11, MUTED, false));
-        body.addView(povCard, panelLayout(10));
+        visualizations.addView(povCard, panelLayout(10));
+
+        Button visualToggle = actionButton("Show world visualizations · Experimental", false, () -> {});
+        visualToggle.setOnClickListener(view -> {
+            boolean visible = visualizations.getVisibility() != View.VISIBLE;
+            visualizations.setVisibility(visible ? View.VISIBLE : View.GONE);
+            visualToggle.setText(visible ? "Hide world visualizations" : "Show world visualizations · Experimental");
+        });
+        body.addView(visualToggle, panelLayout(8));
+        body.addView(visualizations, panelLayout(10));
 
         LinearLayout intelligencePanel = card();
         intelligencePanel.addView(text("AI BRAIN  ·  LIVE DECISIONS", 11, GRASS, true));
