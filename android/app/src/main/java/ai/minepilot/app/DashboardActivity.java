@@ -916,7 +916,8 @@ public final class DashboardActivity extends Activity {
         extras.putBoolean("confirmed", true);
         boolean hasAnalog = Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
                 manualJump || manualSprint || manualSneak;
-        String effectiveMode = hasAnalog && !mode.startsWith("turn_") ? "vector" : mode;
+        boolean lookControl = mode.startsWith("turn_") || mode.startsWith("look_");
+        String effectiveMode = hasAnalog && !lookControl ? "vector" : mode;
         extras.putString("motion_mode", effectiveMode);
         extras.putFloat("motion_x", manualJoystickX);
         extras.putFloat("motion_y", manualJoystickY);
