@@ -209,7 +209,9 @@ test('terrain recovery requests the exact missing vertical section', () => {
     capability: () => 'unavailable',
     snapshot: () => ({ unknownCells: [
       { x: 80, y: 130, z: -16, reason: 'block_not_observed' }
-    ] })
+    ] }),
+    stop() {},
+    stopPresence() {}
   };
   const bridge = new BedrockGameplayBridge(client, { movement }).start();
   initialize(client, bridge);
