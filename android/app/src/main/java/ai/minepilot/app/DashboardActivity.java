@@ -781,6 +781,10 @@ public final class DashboardActivity extends Activity {
         addManualPadButton(lookRow, "LOOK LEFT", "turn_left", "Look left");
         addManualPadButton(lookRow, "LOOK RIGHT", "turn_right", "Look right");
         look.addView(lookRow);
+        LinearLayout verticalLookRow = manualControlRow();
+        addManualPadButton(verticalLookRow, "LOOK UP", "look_up", "Look up while held");
+        addManualPadButton(verticalLookRow, "LOOK DOWN", "look_down", "Look down while held");
+        look.addView(verticalLookRow);
         LinearLayout actionRow = manualControlRow();
         addManualPadButton(actionRow, "JUMP", "jump", "Jump while held");
         addManualPadButton(actionRow, "SPRINT", "sprint", "Sprint while held");
