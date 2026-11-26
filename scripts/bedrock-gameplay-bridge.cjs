@@ -1220,7 +1220,7 @@ class BedrockGameplayBridge {
     if (raw.action === 'manual_move') {
       if (raw.confirmed !== true)
         return { status: 'rejected', reason: 'confirmation_required' };
-      if (!['vector','forward','backward','strafe_left','strafe_right','turn_left','turn_right','jump','sprint','sneak'].includes(raw.mode) ||
+      if (!['vector','forward','backward','strafe_left','strafe_right','turn_left','turn_right','look_up','look_down','jump','sprint','sneak'].includes(raw.mode) ||
           !Number.isInteger(raw.ticks) || raw.ticks < 1 || raw.ticks > 8)
         return { status: 'rejected', reason: 'unsupported_manual_input' };
       if (raw.mode === 'vector' && (!Number.isFinite(raw.motionX) || !Number.isFinite(raw.motionY) ||
