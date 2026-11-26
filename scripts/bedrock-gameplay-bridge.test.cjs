@@ -124,14 +124,24 @@ test('chunk cache is bounded and ignores invalid/chunkless packets', () => {
   bridge.stop();
 });
 
-test('private single-command inbox handles status, stop and rejected commands', t => {
+test('Android gameplay inbox carries joystick commands through controller execution and receipts', t => {
   const dir = mkdtempSync(join(tmpdir(), 'minepilot-gameplay-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const commandPath = join(dir, 'command.json'), receiptPath = join(dir, 'receipt.json');
-  let stops = 0;
+  let stops = 0, releases = 0;
+  const manualInputs = [];
   const client = new Client();
-  const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath,
-    movement: { stop() { stops++; }, capability() { return 'unavailable'; } } }).start();
+  const movement = {
+    stop() { stops++; },
+    capability() { return 'ready'; },
+    runManualHold(world, options) {
+      manualInputs.push(options);
+      return { status: 'accepted', reason: 'movement_controls_applied' };
+    },
+    releaseManual() { releases++; return true; },
+    snapshot() { return { capability: 'ready', active: true }; }
+  };
+  const bridge = new BedrockGameplayBridge(client, { commandPath, receiptPath, movement }).start();
   const cmd = (requestId, action, rest = {}) => {
     writeFileSync(commandPath, JSON.stringify({
       version: 'minepilot.gameplay.v1', requestId, action, ...rest
@@ -141,6 +151,22 @@ test('private single-command inbox handles status, stop and rejected commands', 
     return JSON.parse(readFileSync(receiptPath, 'utf8'));
   };
   assert.equal(cmd('cmd-1', 'status').status, 'ok');
+  const manual = cmd('cmd-manual', 'manual_move', {
+    confirmed: true, mode: 'vector', ticks: 8, motionX: 0.4, motionY: 0.7,
+    jump: true, sprint: true, sneak: false
+  });
+  assert.equal(manual.status, 'accepted');
+  assert.equal(manual.requestId, 'cmd-manual');
+  assert.equal(manual.dispatchAccepted, true);
+  assert.equal(manual.executionStage, 'movement_controls_applied');
+  assert.equal(manual.serverConfirmation, 'correction_only_if_prediction_differs');
+  assert.deepEqual(manualInputs[0], {
+    mode: 'vector', ticks: 8, vector: { x: 0.4, y: 0.7 },
+    jump: true, sprint: true, sneak: false
+  });
+  const manualStop = cmd('cmd-manual-stop', 'manual_stop');
+  assert.equal(manualStop.status, 'ok');
+  assert.equal(releases, 1);
   assert.equal(cmd('cmd-2', 'stop_movement').reason, 'movement_cancelled');
   assert.equal(stops, 1);
   assert.equal(cmd('cmd-3', 'obsolete_movement_probe', { confirmed: true }).reason, 'invalid_command');
