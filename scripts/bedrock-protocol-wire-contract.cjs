@@ -25,11 +25,25 @@ const subchunkRequest = serializer.createPacketBuffer({
 assert.ok(Buffer.isBuffer(subchunkRequest));
 assert.ok(subchunkRequest.length > 10, 'subchunk request has a non-empty wire payload');
 
-const { buildInputPacket } = require('./bedrock-player-input.cjs');
-const movement = buildInputPacket(
-  { x: 33.25, y: 70.5, z: -17.75 }, 0, 101n, true,
-  { moveVector: { x: 1, z: 0 }, inputFlag: 13 }
-);
+// Bedrock 1.26.60 PlayerAuthInput shape emitted by the physics controller.
+// Position and delta are simulator output, not a fixed-step prediction.
+const movement = {
+  pitch: 0,
+  yaw: 0,
+  head_yaw: 0,
+  position: { x: 33.25, y: 70.5, z: -17.75 },
+  move_vector: { x: 1, z: 0 },
+  input_data: ['right'],
+  input_mode: 'touch',
+  play_mode: 'normal',
+  interaction_model: 'crosshair',
+  interact_rotation: { x: 0, z: 0 },
+  tick: 101n,
+  delta: { x: 0, y: 0, z: 0 },
+  analogue_move_vector: { x: 1, z: 0 },
+  camera_orientation: { x: 0, y: 0, z: 1 },
+  raw_move_vector: { x: 1, z: 0 }
+};
 const input = serializer.createPacketBuffer({
   name: 'player_auth_input',
   params: movement
