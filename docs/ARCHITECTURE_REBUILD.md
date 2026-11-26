@@ -249,3 +249,10 @@ Until all seven gates pass, expose the composition as preview/blocked and tell t
 ### Release acceptance
 
 A full APK must include the ARM64 Node runtime and pinned Bedrock SDK bundle, pass APK native-library and 16 KB alignment checks, and pass Android unit tests. A live-play claim additionally needs a real device joining a permitted friend world, host-observed spawn, sustained session, verified action outcomes, and successful stop/reconnect. A CI artifact alone is never proof of live gameplay.
+
+
+## Modular external-source integration
+
+The modular Bedrock extension package lives under scripts/runtime/bedrock/. Its source map, responsibilities and compatibility boundaries are documented in INTEGRATION_RESTRUCTURE.md. The package is created by the existing BedrockGameplayBridge; it does not create another client, inventory ledger or movement authority. The Bedboo-backed plan_obtain action is preview-only and consumes the existing server-observed inventory and recipe snapshots. Manual movement passes through the action-envelope preflight while the existing physics controller remains its executor.
+
+The requested Bedrock 1.26.66.1 target remains unverified. The known protocol baseline remains Bedrock 1.26.60 / protocol 2225; exact-version fixtures and live Android friend-world tests are required before marking 1.26.66.1 supported.
