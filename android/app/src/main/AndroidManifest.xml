@@ -12,6 +12,5 @@
             </intent-filter>
         </activity>
         <provider android:name=".BotSessionProvider" android:authorities="${applicationId}.bot-session" android:exported="false"/>
-        <service android:name=".MinePilotService" android:exported="false" android:foregroundServiceType="dataSync"/>
     </application>
 </manifest>
