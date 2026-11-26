@@ -90,19 +90,23 @@ test('vanilla registry uses state ID ranges while unknown custom and hashed stat
   assert.equal(createVanillaRuntimeRegistry({server_version:'1.27.0'},()=>fake),null);
   clearRuntimeRegistryCache();
 });
-test('bounded autonomy performs a real step but never chains without host progress',()=>{
-  let now=1000,beat;
+test('bounded autonomy continues from an uncontradicted local prediction when no positive ack is sent',()=>{
+  let now=1000,beat,lastStepOrigin=null;
+  const t=terrain();
+  const point={x:.5,y:65.62,z:.5};
+  let predicted={...point};
   const movement={
     busy:false,calls:0,
     capability:()=> 'ready',
-    snapshot(){return {active:this.busy};},
-    runVerifiedStep(){this.busy=true;this.calls++;return {status:'accepted'};},
+    snapshot(){return {active:this.busy,predictedPosition:{...predicted}};},
+    runVerifiedStep(world,target){
+      this.busy=true;this.calls++;lastStepOrigin={...world.position};
+      predicted={...target};return {status:'accepted'};
+    },
     stop(){this.busy=false;}
   };
-  const t=terrain();
-  const point={x:.5,y:65.62,z:.5};
   const world={
-    movement,terrain:t,dimension:0,position:point,closed:false,spawned:true,
+    movement,terrain:t,dimension:0,position:{...point},closed:false,spawned:true,
     movementAuthority:1,lastServerPositionAt:1000,
     layerTwo:{preview:()=>({goal:'follow',status:'route_unverified',
       nextPoint:{x:2.5,y:65.62,z:.5}})},
@@ -118,12 +122,41 @@ test('bounded autonomy performs a real step but never chains without host progre
   assert.equal(movement.calls,1);
   assert.equal(runner.snapshot().attemptedSteps,1);
   movement.busy=false;
-  now+=3500;beat();
-  assert.equal(movement.calls,1,'no blind second step while server position unchanged');
-  now+=600;beat();
-  assert.equal(runner.snapshot().active,false);
-  assert.equal(runner.snapshot().stopReason,'server_movement_not_confirmed');
+  now+=1300;beat();
+  assert.equal(runner.snapshot().active,true);
   assert.equal(runner.snapshot().serverVerifiedSteps,0);
+  assert.equal(runner.snapshot().predictionSteps,1);
+  assert.deepEqual(world.position,predicted);
+  now+=250;beat();
+  assert.equal(movement.calls,2,'the next route step starts at the predicted position');
+  assert.deepEqual(lastStepOrigin,predicted);
+  runner.stop('test_cleanup');
+});
+
+test('bounded autonomy stops when neither the server nor local physics shows progress',()=>{
+  let now=1000,beat;
+  const point={x:.5,y:65.62,z:.5};
+  const movement={
+    busy:false,capability:()=> 'ready',
+    snapshot(){return {active:this.busy,predictedPosition:{...point}};},
+    runVerifiedStep(){this.busy=true;return {status:'accepted'};},
+    stop(){this.busy=false;}
+  };
+  const world={
+    movement,terrain:terrain(),dimension:0,position:{...point},closed:false,spawned:true,
+    movementAuthority:1,lastServerPositionAt:1000,
+    layerTwo:{preview:()=>({goal:'follow',status:'route_unverified',
+      nextPoint:{x:2.5,y:65.62,z:.5}})},
+    gameplayWorld:()=>({safetyHold:false}),routePlanner:planLocalRoute
+  };
+  const runner=new VerifiedAutonomyRunner({
+    clock:()=>now,setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}
+  });
+  assert.equal(runner.enable(world,{confirmed:true}).status,'accepted');
+  beat();movement.busy=false;now+=1300;beat();
+  assert.equal(runner.snapshot().active,false);
+  assert.equal(runner.snapshot().stopReason,'movement_prediction_no_progress');
+  assert.equal(runner.snapshot().predictionSteps,0);
 });
 test('autonomy requires movement capability, verified route and safety hold',()=>{
   const t=terrain();
