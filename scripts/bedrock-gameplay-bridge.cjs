@@ -1220,9 +1220,12 @@ class BedrockGameplayBridge {
     if (raw.action === 'manual_move') {
       if (raw.confirmed !== true)
         return { status: 'rejected', reason: 'confirmation_required' };
-      if (!['forward','backward','strafe_left','strafe_right','turn_left','turn_right'].includes(raw.mode) ||
+      if (!['vector','forward','backward','strafe_left','strafe_right','turn_left','turn_right','jump','sprint','sneak'].includes(raw.mode) ||
           !Number.isInteger(raw.ticks) || raw.ticks < 1 || raw.ticks > 8)
         return { status: 'rejected', reason: 'unsupported_manual_input' };
+      if (raw.mode === 'vector' && (!Number.isFinite(raw.motionX) || !Number.isFinite(raw.motionY) ||
+          Math.abs(raw.motionX) > 1 || Math.abs(raw.motionY) > 1))
+        return { status: 'rejected', reason: 'invalid_analog_vector' };
       if (this.blockBreaker?.snapshot()?.active)
         return { status: 'rejected', reason: 'block_action_busy' };
       if (this.layerOne?.snapshot()?.safetyHold)
@@ -1237,7 +1240,12 @@ class BedrockGameplayBridge {
       // Every refresh updates the existing manual hold. The input writer keeps
       // one prediction origin and one server-tick stream until explicit STOP
       // or the 1.1s UI keepalive watchdog expires.
-      return this.movement.runManualHold(this, { mode: raw.mode, ticks: raw.ticks });
+      return this.movement.runManualHold(this, {
+        mode: raw.mode, ticks: raw.ticks,
+        vector: Number.isFinite(raw.motionX) && Number.isFinite(raw.motionY)
+          ? { x: raw.motionX, y: raw.motionY } : undefined,
+        jump: raw.jump === true, sprint: raw.sprint === true, sneak: raw.sneak === true
+      });
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
