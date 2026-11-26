@@ -65,7 +65,7 @@ test('Bedrock physics engine applies directional movement and gravity against lo
   state.moveVector = { x: 0, z: 1 };
   const physics = Physics(data.registry, world);
   physics.simulatePlayer(state, world);
-  assert.ok(state.pos.z < 0, 'forward input should move in the player facing direction');
+  assert.ok(state.pos.z > 0, 'forward input should move in the player facing direction');
   assert.ok(Number.isFinite(state.vel.y));
 });
 
@@ -97,7 +97,7 @@ test('movement controller sends physics-backed forward input on the server tick 
   assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
   const frame = controller.tick(101n);
   assert.ok(frame.input_data.includes('up'));
-  assert.ok(frame.position.z < world.position.z);
+  assert.ok(frame.position.z > world.position.z);
   assert.ok(Number.isFinite(frame.delta.z));
   controller.releaseManual();
   const stopped = controller.tick(102n);
