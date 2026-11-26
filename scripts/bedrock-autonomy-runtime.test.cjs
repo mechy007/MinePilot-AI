@@ -133,7 +133,7 @@ test('autonomy requires movement capability, verified route and safety hold',()=
     layerTwo:{preview:()=>({goal:'follow',status:'route_unverified',
       nextPoint:{x:2.5,y:65.62,z:.5}})},routePlanner:planLocalRoute};
   const a=new VerifiedAutonomyRunner();
-  assert.equal(a.enable(world,{confirmed:true}).reason,'experimental_movement_not_enabled');
+  assert.equal(a.enable(world,{confirmed:true}).reason,'movement_unavailable');
   world.movement.capability=()=> 'experimental';
   world.gameplayWorld=()=>({safetyHold:true});
   assert.equal(a.enable(world,{confirmed:true}).reason,'survival_safety_override');
