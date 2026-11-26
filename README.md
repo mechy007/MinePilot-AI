@@ -104,6 +104,7 @@ Gameplay engine
 The Android runtime is the live execution path. The TypeScript engine provides tested connection, orchestration and planning contracts; it must not be mistaken for a second independently verified Android runtime.
 
 ## Project documentation
+- [Cross-platform source audit](docs/CROSS_PLATFORM_SOURCE_AUDIT.md) — researched upstream implementations, exact source paths, licenses and MinePilot integration priorities.
 
 - [Development roadmap](docs/ROADMAP.md) — phases and acceptance criteria.
 - [Architecture rebuild](docs/ARCHITECTURE_REBUILD.md) — subsystem boundaries and design decisions.
