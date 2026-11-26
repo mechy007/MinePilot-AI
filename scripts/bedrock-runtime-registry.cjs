@@ -138,17 +138,11 @@ function createHashedRuntimeRegistry(startGame) {
 
 function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   const serverVersion = startGame?.server_version ?? startGame?.engine;
-  if (typeof serverVersion !== 'string' ||
-      !/^1\.26\.60(?:\.|$)/.test(serverVersion) ||
-      startGame?.block_network_ids_are_hashes === true) return null;
-
-  if (loadMinecraftData == null && cachedNumeric) {
-    const knownNames = new Set([...cachedNumeric.values()].map(v => v.name));
-    return hasOnlyKnownBlocks(startGame, knownNames) ? cachedNumeric : null;
-  }
+  if (startGame?.block_network_ids_are_hashes === true) return null;
 
   const physicsData = loadBedrockPhysicsData();
   if (physicsData) {
+    if (!isProtocol2225(serverVersion)) return null;
     const knownNames = knownPhysicsNames(physicsData);
     if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
     const map = registryFromProfiles(physicsData.profilesByStateId, false);
@@ -157,6 +151,14 @@ function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
         map.get(3317)?.name !== 'minecraft:stone') return null;
     cachedNumeric = map;
     return map;
+  }
+
+  if (typeof serverVersion !== 'string' ||
+      !/^1\.26\.60(?:\.|$)/.test(serverVersion)) return null;
+
+  if (loadMinecraftData == null && cachedNumeric) {
+    const knownNames = new Set([...cachedNumeric.values()].map(v => v.name));
+    return hasOnlyKnownBlocks(startGame, knownNames) ? cachedNumeric : null;
   }
 
   // Reject custom block registrations before loading and expanding the
