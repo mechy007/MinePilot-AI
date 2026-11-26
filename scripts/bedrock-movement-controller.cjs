@@ -77,9 +77,10 @@ class BedrockPhysicsWorld {
       ? this.collisionData.profilesByHash.get(key)
       : this.collisionData.profilesByStateId.get(key);
     const registered = this.terrain?.registry?.get(key);
+    const profileName = profile?.name?.replace(/^minecraft:/, '');
     const expectedName = profile?.name?.startsWith('minecraft:')
       ? profile.name : 'minecraft:' + (profile?.name ?? '');
-    if (!profile || !registered || registered.name !== expectedName) {
+    if (!profile || profileName === 'unknown' || !registered || registered.name !== expectedName) {
       this.unknown = true;
       this.blockCache.set(cacheKey, null);
       return null;
