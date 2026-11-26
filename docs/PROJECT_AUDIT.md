@@ -24,7 +24,7 @@ Status: active audit on `redesign/full-project-overhaul`.
 | Protocol/state datasets | Keep | Required by movement and terrain decoding |
 | GitHub Actions workflows | Keep pending workflow-level overlap audit | They cover different engine, SDK, Android packaging and connection checks |
 | Detailed architecture/function-contract documents | Keep | They describe safety and runtime contracts |
-| Historical phase/PR implementation notes | Candidate to archive | Useful history, but not current user-facing documentation |
+| Historical phase/PR implementation notes | Archived | Preserved under docs/archive/phase-notes; current docs are linked from docs/archive/README.md |
 
 ## Changes already made on this branch
 
@@ -32,6 +32,8 @@ Status: active audit on `redesign/full-project-overhaul`.
 2. Reworked the dashboard header and navigation container.
 3. Changed the movement panel to a centered vertical layout with a larger joystick and full-width camera/action controls so it fits phone screens more reliably.
 4. Rewrote the README to distinguish owner-confirmed world joining from movement and autonomous gameplay, which still need validation.
+5. Archived seven superseded connection/dashboard/gameplay planning documents under docs/archive/legacy-plans and docs/archive/phase-notes; removed one obsolete Voyager pointer that only redirected to the current guide.
+6. Added a shared Android design-token class and collapsed experimental visualizations behind an optional control.
 
 ## High-priority redesign work
 
