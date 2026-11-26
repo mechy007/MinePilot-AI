@@ -200,10 +200,10 @@ class BedrockMovementController {
         !validTick(world.serverTick) || !world.terrain ||
         world.terrain.dimension !== world.dimension || world.receivedChunks?.size === 0) return 'unavailable';
     if (!this.collisionData || !this.physics || !this.physicsWorld) return 'unavailable';
-    // Server-authoritative Bedrock does not send a positive acknowledgement
-    // for every accepted input frame. A correction is sent when prediction
-    // differs, so absence of a correction must not disable manual movement.
-    return this.physicsWorld.unknown ? 'unavailable' : 'ready';
+    // A previous physics tick may have encountered a chunk that was not
+    // decoded yet. Re-sample the current collision envelope before reporting
+    // capability; otherwise UI and bridge can deadlock on a stale unknown flag.
+    return this.preflightTerrain(world) ? 'ready' : 'unavailable';
   }
 
   startPresence(world) {
@@ -312,14 +312,11 @@ class BedrockMovementController {
       return { status: 'rejected', reason: 'invalid_analog_vector' };
     if (options.ticks != null && (!Number.isInteger(options.ticks) || options.ticks < 1 || options.ticks > 20))
       return { status: 'rejected', reason: 'invalid_manual_duration' };
-    // Refresh the terrain gate before checking capability. A previous tick
-    // may have encountered an unloaded cell that has since arrived.
-    this.physicsWorld?.beginTick();
+    // capability() now refreshes the local collision envelope.
     if (this.capability(world) !== 'ready')
       return { status: 'rejected', reason: this.lastError
-        ? 'physics_data_unavailable' : 'movement_unavailable' };
-    if (!this.preflightTerrain(world))
-      return { status: 'rejected', reason: 'terrain_not_fully_observed' };
+        ? 'physics_data_unavailable'
+        : this.physicsWorld?.unknown ? 'terrain_not_fully_observed' : 'movement_unavailable' };
     const modes = {
       forward: { x: 0, z: 1 }, backward: { x: 0, z: -1 },
       strafe_left: { x: -1, z: 0 }, strafe_right: { x: 1, z: 0 },
@@ -682,9 +679,10 @@ class BedrockMovementController {
   }
 
   snapshot() {
+    const capability = this.capability();
     return {
-      available: this.capability() === 'ready',
-      capability: this.capability(),
+      available: capability === 'ready',
+      capability,
       presenceActive: this.started && this.inputQueue.isRunning(),
       presenceFrames: this.framesSent,
       unconfirmedMovement: this.unconfirmedMovement,
