@@ -52,7 +52,11 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
       throw new Error('bedrock_physics_block_registry_invalid');
     }
     const blockName = block.name.replace(/^minecraft:/, '');
-    const friction = Number.isFinite(block.friction) ? block.friction : 0.6;
+    if (!Number.isFinite(block.friction))
+      throw new Error('bedrock_physics_friction_missing:' + blockName);
+    if (![undefined, null, 'block', 'empty'].includes(block.boundingBox))
+      throw new Error('bedrock_physics_bounding_box_invalid:' + blockName);
+    const friction = block.friction;
     const entry = { id: block.id, name: blockName, friction };
     if (blocksByName[blockName]) throw new Error('bedrock_physics_duplicate_block');
     blocksByName[blockName] = entry;
