@@ -1,262 +1,124 @@
 # MinePilot-AI
 
-**Standalone Android Minecraft Bedrock bot — active development**
+**An Android-first Minecraft Bedrock companion bot.**
 
-MinePilot-AI aims to run an independent Minecraft Bedrock player from an Android app, using a separate Microsoft/Xbox account to discover and join a friend's multiplayer world **without opening Minecraft or installing Termux on the phone**.
+MinePilot runs a separate bot player from an ARM64 Android app. It uses its own Microsoft/Xbox account to find and join a friend's Bedrock world, then provides manual controls and a growing gameplay/AI system. The phone does not need Minecraft or Termux installed.
 
-> **Project maturity: experimental.** The repository includes an Android shell, a packaged Node/Bedrock SDK runtime, gameplay foundations and Xbox authentication. **Phase 0 (Android and networking) has been explicitly confirmed complete by the project owner.** A successful Phase 0 connection does not by itself establish that gameplay movement or autonomous tasks work.
+> **Current state:** The project owner has confirmed that MinePilot can join a friend's world and remain connected. The immediate unfinished area is reliable in-world movement: the physics-backed controller and redesigned touch controls are under active validation. A green APK build does not by itself prove movement or autonomous gameplay.
 
-## Using a dedicated Xbox bot account on Android
+## Product goals
 
-In the runtime-enabled ARM64 debug build, open **Xbox → Sign in with Microsoft** and choose the personal Microsoft account that should appear in Minecraft as the bot. Return to Xbox, enter the host’s gamertag or numeric XUID and tap **Join friend’s world** while the host has multiplayer open and allows that account to join. **Switch Xbox account** starts a new approval flow for another account. **Forget bot account** clears the locally saved credential.
+- **Connect:** sign in with a dedicated Microsoft/Xbox account, find a selected friend and join their Bedrock world.
+- **Control:** move with a responsive 360-degree joystick; turn the camera; jump, sprint, sneak and stop.
+- **Understand:** observe server-confirmed position, health, hunger, players, inventory and nearby world data.
+- **Assist:** plan bounded tasks such as follow, return, gather, shelter and survival routines.
+- **Act safely:** use explicit capability checks, user confirmation for consequential actions, server acknowledgements and an emergency stop.
+- **Run on Android:** ARM64 first, with attention to memory, battery, lifecycle and background limits.
 
-MinePilot uses Microsoft device-code sign-in. No Entra application ID or payment card is needed.
+## Platform
 
-The account session is encrypted with Android Keystore-backed storage. Tokens pass to Android through a private pipe for encryption. The runner checks the Xbox and Bedrock identities, resolves the host and attempts the existing NetherNet join. Phase 0 has been accepted as complete by the project owner; device/host checks remain part of regression testing.
+| Item | Target |
+|---|---|
+| App | Native Android |
+| ABI | ARM64 (arm64-v8a) |
+| Android minimum | API 28 |
+| Primary test device | Vivo V2544, 8 GB RAM |
+| Minecraft | Bedrock 1.26.66.1 |
+| Protocol baseline | 2225 / Bedrock 1.26.60 codec |
+| App ID | ai.minepilot.app |
+| Status | Experimental development build |
 
-## Project at a glance
+## Feature status
 
-| Property | Target / current scope |
-| --- | --- |
-| Platform | Android, ARM64 |
-| Primary device | Vivo V2544, 8 GB RAM |
-| Minecraft target | Bedrock 1.26.66.1 |
-| Primary use case | Bot joins a consenting friend's hosted Bedrock world |
-| Bot identity | Its **own** Microsoft/Xbox account, separate from the host |
-| Phone requirements | No Termux or locally running Minecraft intended |
-| Android app ID | `ai.minepilot.app` in current source |
-| Development status | Experimental, not production-ready |
-| Repository | [mechy007/MinePilot-AI](https://github.com/mechy007/MinePilot-AI) |
+| Area | Current state |
+|---|---|
+| Microsoft/Xbox account | Device-code sign-in and encrypted local account storage implemented |
+| Friend discovery and world join | Owner-confirmed working on device |
+| Sustained world session | Owner-confirmed working |
+| Android ARM64 runtime | Packaged and CI-tested |
+| Manual movement | Physics controller and analog joystick implemented; live movement validation in progress |
+| World observations | Health, hunger, player, inventory and terrain observation foundations |
+| AI/gameplay planning | Foundations and guarded previews; not all plans are executable |
+| Autonomous gameplay | Experimental; not release-ready |
+| Background reliability | Lifecycle and long-duration validation still required |
+| Production release | Not ready |
 
-## What is implemented, experimental, and planned?
+Do not interpret a skill label, plan preview, simulated test or CI pass as proof that the bot can perform that action in a live world. Only server-confirmed outcomes count as completed gameplay.
 
-The status descriptions below distinguish repository code from verified device functionality.
+## Android app navigation
 
-| Area | Current state | Verification / limitation |
-| --- | --- | --- |
-| Android dashboard | Implemented; Xbox sign-in and join flow in PR #61 | APK build and on-device UX are separate checks |
-| ARM64 Node.js packaging | Implemented diagnostic build path | CI packaging/smoke tests; live device runtime needs validation |
-| Bedrock SDK integration | Packaged experimental SDK and transport dependencies | Does not establish a successful friend-world join |
-| Microsoft/Xbox login | Phase 0 complete (owner-confirmed) | Preserve account-identity and sign-in regression coverage |
-| Xbox Live / XSTS exchange | Phase 0 complete (owner-confirmed) | Preserve authentication and token-refresh regression coverage |
-| Friend identification | Phase 0 complete (owner-confirmed) | Preserve exact gamertag/XUID resolution regression coverage |
-| Friend activity / world discovery | Phase 0 confirmed complete | Preserve the confirmed Android/networking milestone; continue regression testing |
-| NetherNet / WebRTC transport | Phase 0 complete (owner-confirmed) | Preserve reconnect and host-interoperability regression coverage |
-| Spawn and sustained connection | Phase 0 confirmed complete | Phase 0 is accepted as complete; ongoing QA still protects reconnect and stability |
-| Gameplay actions | Physics movement integration in progress | New movement controller and Bedrock collision data are in the integration branch; real-device movement validation remains |
-| Autonomous tasks | Planned and partial foundations | No verified autonomous gameplay |
-| Background bot service | Android service scaffolding | Sustained connection, notifications and recovery not validated |
-| Production release | Not ready | Requires real-account, real-device and world tests |
+The app is organized around five areas:
 
-### Intended end-user experience
+- **Control** — world status, manual movement, vitals and active task controls.
+- **Friends** — Xbox account, friend list and join flow.
+- **Skills** — available, experimental and planned capabilities.
+- **Activity** — connection and runtime event history.
+- **Settings** — account management and diagnostics.
 
-1. Install MinePilot on Android.
-2. Tap **Sign in with Microsoft** and approve the bot’s separate Xbox account on Microsoft’s sign-in page.
-3. Enter the friend’s gamertag or Xbox XUID.
-4. Tap **Join friend’s world**. MinePilot discovers the friend’s open world and reports connection stages.
-5. Keep the bot connected in the background and issue gameplay tasks.
-6. Stop the bot, disconnect, switch accounts or sign out securely.
+The UI is being redesigned for phone-sized screens. Movement controls must remain touch-friendly, responsive, and safe when the app loses focus or the world session ends.
 
-**Phase 0 is confirmed complete. Phase 1 now focuses on making the bot move reliably in the joined world.**
-
-## Xbox sign-in and bot account
-
-MinePilot uses Microsoft’s device-code sign-in through its packaged Xbox authentication library. A new user taps **Sign in with Microsoft** or **Join friend’s world**. MinePilot automatically opens Microsoft’s official sign-in page with the approval code filled in, displays the code in the app, and waits for the user to approve the account. Xbox authentication and the friend-world attempt then continue automatically. No Entra application ID or payment card is required.
-
-Microsoft approval is still required. MinePilot never asks for the Microsoft password. After successful Xbox and Bedrock identity checks, MinePilot encrypts the account refresh token and gamertag with Android Keystore-backed storage. Later joins attempt to refresh the saved session automatically. **Switch Xbox account** clears the saved identity and starts a fresh sign-in. **Forget saved account** deletes the encrypted account data.
-
-The interactive flow is available in the runtime-enabled ARM64 debug APK. Standard shell builds without the embedded Node runtime cannot complete Xbox sign-in or join a world. Authentication success does not by itself prove a live world join. The host must be online, allow multiplayer, and permit the bot account to join.
-
-## Friend discovery and joining
-
-A **gamertag** is a human-readable Xbox account name. An **XUID** is the numeric Xbox account identifier. The join flow accepts a gamertag or XUID and resolves a gamertag to its Xbox XUID before searching for the friend’s world.
-
-For an eventual join, the bot account must be permitted to play multiplayer and access the host's session. The friend must have the target Bedrock world open with multiplayer enabled. Discovery depends on Xbox activity/presence availability and any applicable platform or service permissions.
-
-### Phase 0 regression checklist
-
-Phase 0 is owner-confirmed complete. Keep these checks as regression coverage when the Android runtime or network stack changes:
-
-1. The bot authenticates as the intended **separate** Xbox account.
-2. The exact host is found, with no wrong-account selection.
-3. A joinable friend-world session is discovered.
-4. NetherNet/WebRTC negotiation and Bedrock login complete.
-5. The host independently confirms the bot in the player list.
-6. Spawn/start-game and subsequent world/chunk updates are received.
-7. The bot remains connected for a sustained session, including background and screen-lock checks.
-8. Disconnect, reconnect, account expiry and cleanup behave correctly.
-
-The existing [friend-world integration guide](docs/friend-world-live-join.md) documents a development-workstation diagnostic; it is not evidence that Android joining is production-ready.
-
-## Android app, UI and background operation
-
-The project targets a standalone Android interface with account, friend/world, commands, tasks, settings and diagnostic views. The dashboard includes a bot account card, account switching, friend entry and a prominent join action. The packaged runtime diagnostic executes in an isolated Android process.
-
-Long-running operation requires lifecycle-safe foreground service behavior, a user-visible ongoing notification, explicit stop controls, network/battery handling, recovery after interruption, and secure session cleanup. These are acceptance requirements, **not verified features**.
-
-### Target device considerations
-
-- **Vivo V2544 / 8 GB RAM:** profile sustained memory use, CPU load, thermal behavior and battery impact.
-- **ARM64:** use only compatible packaged runtime binaries and dependencies.
-- **Android background limits:** test with the app minimized, screen locked and manufacturer battery restrictions applied.
-- **Minecraft 1.26.66.1:** confirm protocol and transport interoperability on an actual friend-hosted world.
-
-## AI and gameplay roadmap
-
-| Phase | Status | What completion requires |
-| --- | --- | --- |
-| **0 — Android and networking** | Complete (owner-confirmed) | Preserve the confirmed Android/networking milestone and prevent regressions |
-| **1 — Gameplay controls** | In progress | Physics-backed movement, analog joystick, jump/sprint/sneak, navigation, follow/stop, block interactions and server reconciliation |
-| **2 — Autonomous planning** | In progress / foundations | Connect task planner to verified game actions, multi-step goals, persistent world memory and recovery |
-| **3 — Advanced gameplay** | Not started | Test building, mining, survival, defense, farming, exploration and storage |
-| **4 — Android experience** | In progress | World selection, account controls, task reporting, notifications, accessibility and emergency stop |
-| **5 — Stability and optimization** | Not started | Long-duration Android tests, battery/memory profiling, reconnection and resource cleanup |
-| **6 — Release and QA** | In progress | Green CI, verified device/world tests, security review and installable signed release |
-
-### Physics-based movement system
-
-The replacement movement architecture is being integrated on
-`feature/complete-bedrock-movement`:
-
-- A Bedrock physics simulator handles acceleration, gravity, jumping, friction,
-  collision and liquid movement.
-- A version-pinned Bedrock 1.26.60 block-state/collision dataset supplies
-  per-state collision boxes. Unknown or unloaded blocks stop prediction rather
-  than being treated as air.
-- A single 20 Hz `PlayerAuthInput` stream carries simulated position, velocity,
-  look direction and movement flags.
-- Server corrections re-anchor predicted state and replay retained inputs.
-- The analog joystick supports 360-degree movement; jump, sprint and sneak
-  controls share the same controller used by autonomous navigation.
-- The previous experimental movement opt-in and fixed-step input writer are
-  removed from the active runtime path.
-
-The vendored physics source is from [LiteLDev/bedboo](https://github.com/LiteLDev/bedboo),
-pinned in `vendor/bedboo-physics/NOTICE.md` and distributed under LGPL-3.0.
-The collision data retains its Minecraft-data and CloudburstMC attribution.
-The upstream physics fixtures are recorded against BDS 1.26.51.1; MinePilot's
-protocol-2225 target still needs Android ARM64 and friend-world movement
-validation before this system can be described as verified.
-
-Read the [detailed roadmap](docs/ROADMAP.md), the [architecture rebuild and subsystem contracts](docs/ARCHITECTURE_REBUILD.md), and the [runtime function catalog](docs/FUNCTION_CONTRACTS.md). Features such as automatic mining, building, combat, navigation, friend selection and AI decisions are **goals or partial foundations**, not promises about the current APK.
-
-## Download and install an Android APK
-
-1. Open the [GitHub Actions runs](https://github.com/mechy007/MinePilot-AI/actions).
-2. Select a successful **Android Node Runtime Probe** workflow run.
-3. Expand **Artifacts** and download `minepilot-android-arm64-friend-world-debug`.
-4. Extract the ZIP and install the contained APK on a compatible ARM64 Android phone.
-5. Record the workflow run, commit SHA and app behavior when reporting an issue.
-
-The artifact is a **debug/test APK**, not a production release. GitHub may require sign-in to download artifacts. Confirm the workflow SHA before installing because a successful build may not contain an unmerged pull request.
-
-## Build and test locally
-
-### Development prerequisites
-
-- Node.js 24 for the engine and Bedrock SDK tooling.
-- JDK 17, Android SDK 35, Gradle 8.9, Android NDK 28.0.13004108 and CMake 3.22.1 for the Android CI-compatible environment.
-- ARM64 Android device for runtime verification.
-- Separate bot and friend/host Xbox accounts for real multiplayer tests.
+## Build and test
 
 ### Engine tests
+
+Requires Node.js 24.
 
 ```bash
 npm install --ignore-scripts --omit=optional
 npm test
 ```
 
-### Android runtime test build
+### Android runtime-enabled debug APK
 
-The [runtime packaging guide](docs/ANDROID-RUNTIME-PACKAGING.md) describes the staging scripts and required Android toolchain. After staging dependencies:
+The CI-compatible toolchain uses JDK 17, Android SDK 35, Gradle 8.9, NDK 28.0.13004108 and CMake 3.22.1.
 
-```bash
-cd android
-gradle -PminepilotNodeSmoke=true :app:assembleDebug :app:testDebugUnitTest
-```
+The Android runtime staging and packaging details are in [Android runtime packaging](docs/ANDROID-RUNTIME-PACKAGING.md). The CI workflow builds the ARM64 debug APK and checks its contents and 16 KB alignment.
 
-The Android runtime pipeline stages Node.js Mobile, the Bedrock SDK, and the JavaScript WebRTC transport. Dependencies documented in the packaging guide include `bedrock-protocol` **3.61.0**, `minecraft-data` **3.119.0**, and the 1.26.60 codec used for protocol 2225. Exact interoperability with the target 1.26.66.1 world still requires a live test.
-
-### CI and build artifacts
-
-- [All GitHub Actions workflows](https://github.com/mechy007/MinePilot-AI/actions)
-- [Android Node Runtime Probe](https://github.com/mechy007/MinePilot-AI/actions/workflows/android-node-smoke.yml)
+- [GitHub Actions](https://github.com/mechy007/MinePilot-AI/actions)
+- [Android Node Runtime Probe workflow](https://github.com/mechy007/MinePilot-AI/actions/workflows/android-node-smoke.yml)
 - [Open pull requests](https://github.com/mechy007/MinePilot-AI/pulls)
 
-CI checks can validate builds, packaging, code and synthetic SDK behavior. **They cannot replace a real Xbox login and host-observed Minecraft join test.**
+Workflow artifacts are debug/test builds, not production releases. Install an APK only after checking the workflow run and commit SHA.
 
-## Architecture overview
+## Architecture at a glance
 
 ```text
-Android dashboard / account UI
-           |
-           +--> Microsoft device-code sign-in
-           |         |
-           |         +--> Microsoft account --> Xbox Live --> XSTS
-           |
-           +--> Android service / lifecycle (partial)
-                       |
-                       +--> Embedded ARM64 Node runtime (diagnostic)
-                                   |
-                                   +--> Bedrock SDK / Xbox friend activity
-                                   +--> NetherNet / Werift WebRTC
-                                   +--> Bedrock protocol state
-                                   |
-                                   +--> Gameplay engine and task planner
+Android UI
+  ├─ Account and friend-world flow
+  ├─ Manual controls, status and diagnostics
+  └─ User-approved gameplay tasks
+       │
+Isolated Android Bedrock runtime
+  ├─ Microsoft / Xbox identity
+  ├─ Bedrock SDK and NetherNet transport
+  ├─ Server packet observation
+  └─ Shared physics movement controller
+       │
+Gameplay engine
+  ├─ World and inventory observations
+  ├─ Capability and safety gates
+  ├─ Navigation and task planning
+  └─ Skills, learning and outcome verification
 ```
 
-The diagram describes the intended integration boundaries. Real-account joining and sustained Android connection still require live device and host verification.
+The Android runtime is the live execution path. The TypeScript engine provides tested connection, orchestration and planning contracts; it must not be mistaken for a second independently verified Android runtime.
 
-## Troubleshooting
+## Project documentation
 
-| Symptom | Meaning / next action |
-| --- | --- |
-Use the runtime-enabled ARM64 APK and tap **Sign in with Microsoft**.
-| Microsoft page does not open | Return to MinePilot and tap **Open Microsoft sign-in**. The code can also be copied. |
-| Saved account stops authenticating | Use **Switch Xbox account** to approve the bot account again. |
-| Gamertag cannot join | Check the spelling and Xbox visibility of the friend’s gamertag. |
-| Friend/world not found | Check host online status, multiplayer settings, bot account permissions, and Xbox presence visibility |
-| SDK smoke tests pass but bot does not join | Packaging tests do not establish live transport interoperability |
-| App disconnects when backgrounded | Background session lifecycle and battery/notification behavior still require implementation and testing |
-| Sign-in does not finish | Keep MinePilot open until Microsoft approval completes, then check the account’s multiplayer permissions |
+- [Development roadmap](docs/ROADMAP.md) — phases and acceptance criteria.
+- [Architecture rebuild](docs/ARCHITECTURE_REBUILD.md) — subsystem boundaries and design decisions.
+- [Unified gameplay engine](docs/UNIFIED_GAMEPLAY_ENGINE.md) — gameplay, safety and action contracts.
+- [Function contracts](docs/FUNCTION_CONTRACTS.md) — runtime interfaces and behavior.
+- [Android app status](docs/ANDROID-APP-STATUS.md) — device verification and movement test procedure.
+- [Android runtime packaging](docs/ANDROID-RUNTIME-PACKAGING.md) — SDK staging, native runtime and licenses.
+- [Friend-world live join](docs/friend-world-live-join.md) — connection diagnostics.
 
-For deeper diagnostics see [Android app test guide](docs/ANDROID-APP-STATUS.md) and [desktop integration guide](docs/friend-world-live-join.md). The linked desktop integration guide describes a workstation test, not a verified Android release.
+## Security and account handling
 
-## Security, privacy and responsible testing
+MinePilot uses a separate bot account. Microsoft approval happens on Microsoft's sign-in page; the app does not ask for the account password. Saved account credentials are encrypted using Android Keystore-backed storage. Never share sign-in codes, refresh tokens, XUIDs or private runtime logs publicly.
 
-- Sign in only through Microsoft's official authentication page.
-- Never send Microsoft passwords, access tokens, refresh tokens or device codes to maintainers or issue trackers.
-- MinePilot does not require an app-registration ID or client secret for device-code sign-in.
-- Test only with Xbox accounts and friend-hosted worlds you are authorized to access.
-- Do not interpret a mock identity, CI pass or client-side “connected” message as proof that a host accepted the bot.
-- Treat debug artifacts as experimental and avoid using valuable accounts until account/session handling is validated.
+Gameplay actions must remain bounded and capability-gated. Critical safety conditions and the user's stop command take priority over autonomy.
 
-## Known blockers and next engineering priorities
+## Development policy
 
-1. **Live Xbox verification:** validate sign-in, account refresh and friend-world joining on the target Android device.
-2. **Authenticated runtime handoff:** implement a secure Xbox credential bridge to the Bedrock SDK and protected token lifecycle.
-3. **Friend-world interoperability:** verify friend lookup, NetherNet connection, Bedrock login, spawn and world updates.
-4. **Live interoperability:** test friend activity, NetherNet connection, Bedrock login, spawn and world packet processing.
-5. **Android reliability:** foreground service, notification, cancellation, reconnect, and memory/battery testing.
-6. **Gameplay and AI:** connect world state and verified actions to the planner, then test increasingly complex tasks.
-7. **Release readiness:** security, regression tests, CI, device verification, signed APK and installation instructions.
-
-## Documentation
-
-- [Android app status / friend-world test](docs/ANDROID-APP-STATUS.md)
-- [Development roadmap](docs/ROADMAP.md)
-- [Android ARM64 runtime packaging](docs/ANDROID-RUNTIME-PACKAGING.md)
-- [Desktop friend-world diagnostic](docs/friend-world-live-join.md)
-- [Gameplay planning integration](docs/CRAFTMIND_GAMEPLAY_INTEGRATION.md)
-- [Voyager + ODYSSEY Bedrock-native learning integration](docs/VOYAGER_ODYSSEY_INTEGRATION.md)
-  - Includes an optional, user-enabled local autopilot that sequences supported built-in tasks without external AI prompts or Kaggle.
-- [Complete ODYSSEY skill catalog and Bedrock compatibility](docs/ODYSSEY_SKILL_LIBRARY.md)
-  - Includes the 183-skill metadata catalog, dependency graph, runtime compatibility evaluation and Android telemetry.
-
-## Contributions and issue reports
-
-When reporting a problem, include the Android device/model, OS version, Minecraft version, APK workflow run and commit SHA, reproduction steps, and **sanitized** diagnostic output. Do not post Xbox credentials, tokens, authorization codes, personal identifiers or screenshots exposing account secrets.
-
----
-
-**Bottom line:** MinePilot's immediate milestone is **real Xbox sign-in → friend discovery → host-confirmed Bedrock join**. Gameplay automation comes after that connection is genuinely verified.
+Work on feature branches, preserve main, keep tests with behavior changes, and verify Android builds. Keep useful implementation history and licensed vendor notices. Remove files only after checking imports, runtime packaging, manifests, CI workflows, tests and documentation links. Merge only after review and explicit project-owner approval.
