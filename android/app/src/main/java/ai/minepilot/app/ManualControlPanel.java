@@ -86,11 +86,11 @@ public final class ManualControlPanel extends LinearLayout {
     }
 
     public void setControlEnabled(boolean enabled) {
-        if (controlEnabled == enabled) return;
+        boolean changed = controlEnabled != enabled;
         controlEnabled = enabled;
         joystick.setControlEnabled(enabled);
         for (View view : gatedControls) view.setEnabled(enabled);
-        if (!enabled && listener != null) listener.onStop();
+        if (changed && !enabled && listener != null) listener.onStop();
     }
 
     private void addControl(LinearLayout row, String title, String mode, boolean action) {
