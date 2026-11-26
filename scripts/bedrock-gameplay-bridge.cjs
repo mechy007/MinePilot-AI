@@ -1183,7 +1183,7 @@ class BedrockGameplayBridge {
     }
     if (raw.action === 'wait') {
       if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
-      this.movement?.stop();
+      this.movement?.releaseManual?.();
       const result = this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
       if (result.status === 'accepted') {
         this.layerTwo?.stay();
@@ -1235,67 +1235,6 @@ class BedrockGameplayBridge {
       // one prediction origin and one server-tick stream until explicit STOP
       // or the 1.1s UI keepalive watchdog expires.
       return this.movement.runManualHold(this, { mode: raw.mode, ticks: raw.ticks });
-    }
-    if (raw.action === 'motion_diagnostic') {
-      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
-      if (this.layerOne?.snapshot()?.safetyHold)
-        return { status: 'rejected', reason: 'critical_health' };
-      if (this.layerFour?.critical)
-        return { status: 'rejected', reason: 'survival_hold' };
-      const activeFollow = this.layerTwo?.preview(this.gameplayWorld());
-      if (activeFollow && ['follow', 'return'].includes(activeFollow.goal))
-        return { status: 'rejected', reason: 'planned_navigation_not_executable' };
-      if (this.layerThree && this.layerThree.snapshot(this.gameplayWorld()).route.status !== 'idle')
-        return { status: 'rejected', reason: 'resource_goal_not_executable' };
-      if (this.layerFive && this.layerFive.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'building_plan_not_executable' };
-      if (this.layerSix && this.layerSix.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'workflow_not_executable' };
-      if (raw.confirmed !== true)
-        return { status: 'rejected', reason: 'confirmation_required' };
-      if (this.layerEight && !this.layerEight.allowPreview(this.readinessInput()).allowed)
-        return { status: 'rejected', reason: 'server_position_stale' };
-      if (!this.movement || this.movement.capability(this) !== 'experimental' ||
-          typeof this.movement.runDiagnostic !== 'function')
-        return { status: 'rejected', reason: 'movement_unavailable' };
-      // Diagnostic only: deliberately no pathfinder, auto-follow, sprint or block actions.
-      return this.movement.runDiagnostic(this, { mode: raw.mode, ticks: raw.ticks });
-    }
-    if (raw.action === 'probe_step') {
-      if (this.blockBreaker?.snapshot()?.active) return {status:'rejected',reason:'block_action_busy'};
-      if (this.layerOne?.snapshot()?.safetyHold)
-        return { status: 'rejected', reason: 'critical_health' };
-      if (this.layerFour?.critical)
-        return { status: 'rejected', reason: 'survival_hold' };
-      // A raw forward diagnostic is not execution of a Follow or Return plan.
-      const plan = this.layerTwo?.preview(this.gameplayWorld());
-      if (plan && (plan.goal === 'follow' || plan.goal === 'return'))
-        return { status: 'rejected', reason: 'planned_navigation_not_executable' };
-      const resourcePlanState = this.layerThree?.snapshot(this.gameplayWorld()).route.status;
-      if (resourcePlanState && resourcePlanState !== 'idle')
-        return { status: 'rejected', reason: 'resource_goal_not_executable' };
-      if (this.layerFive?.snapshot(this.gameplayWorld()).kind !== undefined &&
-          this.layerFive.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'building_plan_not_executable' };
-      if (this.layerSix?.snapshot(this.gameplayWorld()).kind !== undefined &&
-          this.layerSix.snapshot(this.gameplayWorld()).kind !== 'none')
-        return { status: 'rejected', reason: 'workflow_not_executable' };
-      if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
-      if (raw.direction !== 'forward') return { status: 'rejected', reason: 'unsupported_direction' };
-      if (!this.movement || this.movement.capability(this) !== 'experimental') {
-        return { status: 'rejected', reason: 'movement_unavailable' };
-      }
-      const preflight = this.layerOne?.beginProbe({ position: this.position, chunks: this.receivedChunks.size, spawned: this.spawned });
-      if (preflight && preflight.status !== 'accepted') return preflight;
-      try {
-        const result = this.movement.probeStep(this);
-        if (result.status === 'accepted') this.layerOne?.probeQueued();
-        else this.layerOne?.probeFailed(result.reason);
-        return result;
-      } catch {
-        this.layerOne?.probeFailed('movement_failed');
-        return { status: 'rejected', reason: 'movement_failed' };
-      }
     }
     return { status: 'rejected', reason: 'unsupported_command' };
   }
