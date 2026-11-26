@@ -139,10 +139,12 @@ function createHashedRuntimeRegistry(startGame) {
 function createNumericRuntimeRegistry(startGame, loadMinecraftData = null) {
   const serverVersion = startGame?.server_version ?? startGame?.engine;
   if (startGame?.block_network_ids_are_hashes === true) return null;
+  const protocol2225 = isProtocol2225(serverVersion);
+  if (!protocol2225 && (typeof serverVersion !== 'string' ||
+      !/^1\.26\.60(?:\.|$)/.test(serverVersion))) return null;
 
-  const physicsData = loadBedrockPhysicsData();
+  const physicsData = protocol2225 ? loadBedrockPhysicsData() : null;
   if (physicsData) {
-    if (!isProtocol2225(serverVersion)) return null;
     const knownNames = knownPhysicsNames(physicsData);
     if (!hasOnlyKnownBlocks(startGame, knownNames)) return null;
     const map = registryFromProfiles(physicsData.profilesByStateId, false);
