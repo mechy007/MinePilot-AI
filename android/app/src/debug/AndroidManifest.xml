@@ -1,12 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <application>
         <provider android:name=".WorldSessionProvider"
             android:authorities="${applicationId}.world-session"
             android:enabled="${minepilotNodeSmoke}" android:exported="false" android:process=":friend_world" />
         <service android:name=".XboxSignInService"
             android:enabled="${minepilotNodeSmoke}" android:exported="false"
-            android:foregroundServiceType="dataSync" android:process=":friend_world" />
+            android:foregroundServiceType="specialUse" android:process=":friend_world">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started persistent Minecraft Bedrock friend-world session with local bot controls." />
+        </service>
         <activity android:name=".XboxAuthProbeActivity" android:enabled="${minepilotNodeSmoke}" android:exported="false" android:process=":friend_world"/>
         <activity android:name=".NodeSmokeActivity"
             android:enabled="${minepilotNodeSmoke}"
