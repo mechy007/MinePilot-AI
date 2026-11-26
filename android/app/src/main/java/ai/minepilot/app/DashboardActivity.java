@@ -62,6 +62,7 @@ public final class DashboardActivity extends Activity {
         }
     };
     private LifeAnalyticsView lifeAnalytics;
+    private HealthMonitorView healthMonitor;
     private FirstPersonVoxelView firstPersonView;
     private TextView brainStatus;
     private Button autoFollow;
@@ -497,6 +498,12 @@ public final class DashboardActivity extends Activity {
         worldHunger = addVital(vitals, "Hunger", 0);
         body.addView(vitals, panelLayout(10));
 
+        LinearLayout healthCard = card();
+        healthCard.addView(text("SYSTEM HEALTH · LIVE", 11, GRASS, true));
+        healthMonitor = new HealthMonitorView(this);
+        healthCard.addView(healthMonitor, new LinearLayout.LayoutParams(-1, dp(252)));
+        body.addView(healthCard, panelLayout(10));
+
         if (!signedIn) {
             primaryButton("Sign in with Microsoft", () -> openBotFlow(null, false));
         } else {
@@ -522,6 +529,12 @@ public final class DashboardActivity extends Activity {
         worldHealth = addVital(vitals, "Health", 8);
         worldHunger = addVital(vitals, "Hunger", 0);
         body.addView(vitals, panelLayout(10));
+
+        LinearLayout healthCard = card();
+        healthCard.addView(text("SYSTEM HEALTH · LIVE", 11, GRASS, true));
+        healthMonitor = new HealthMonitorView(this);
+        healthCard.addView(healthMonitor, new LinearLayout.LayoutParams(-1, dp(252)));
+        body.addView(healthCard, panelLayout(10));
 
         // Manual movement has its own screen so the world overview remains focused.
 
@@ -766,6 +779,7 @@ public final class DashboardActivity extends Activity {
         }
         if (worldHealth != null) worldHealth.setText(current.getString("health", "—"));
         if (worldHunger != null) worldHunger.setText(current.getString("hunger", "—"));
+        if (healthMonitor != null) healthMonitor.update(current, worldRuntimeAvailable);
 
         if (manualControlStatus != null) {
             String capability = current.getString("movement_capability", "unavailable");
@@ -991,6 +1005,7 @@ public final class DashboardActivity extends Activity {
                 });
         worldHealth.setText(current.getString("health", "—"));
         worldHunger.setText(current.getString("hunger", "—"));
+        if (healthMonitor != null) healthMonitor.update(current, worldRuntimeAvailable);
         if (lifeAnalytics != null) lifeAnalytics.update(current);
         if (firstPersonView != null) firstPersonView.update(current);
         if (gameplayAgentState != null) {
