@@ -430,7 +430,9 @@ class BedrockMovementController {
     }
     this.history.push({ tick, input: this.captureInput(input), state: cloneState(this.state) });
     if (this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
-    if (!serverAckTimedOut) this.lastMovementResult = { status: 'simulating', reason: 'physics_tick' };
+    if (!serverAckTimedOut) this.lastMovementResult = this.unconfirmedMovement
+      ? { status: 'awaiting_server_ack', reason: 'awaiting_server_position' }
+      : { status: 'simulating', reason: 'physics_tick' };
     return frame;
   }
 
