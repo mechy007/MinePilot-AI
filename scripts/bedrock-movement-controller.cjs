@@ -272,6 +272,11 @@ class BedrockMovementController {
   }
 
   runManualHold(world, options = {}) {
+    if (options.vector && (!Number.isFinite(options.vector.x) || !Number.isFinite(options.vector.y) ||
+        Math.abs(options.vector.x) > 1 || Math.abs(options.vector.y) > 1))
+      return { status: 'rejected', reason: 'invalid_analog_vector' };
+    if (options.ticks != null && (!Number.isInteger(options.ticks) || options.ticks < 1 || options.ticks > 20))
+      return { status: 'rejected', reason: 'invalid_manual_duration' };
     if (this.capability(world) !== 'ready') {
       const timedOut = this.unconfirmedMovement && this.lastNonNeutralAt != null &&
         Date.now() - this.lastNonNeutralAt > 7000;
