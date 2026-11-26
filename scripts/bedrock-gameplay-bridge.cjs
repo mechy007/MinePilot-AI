@@ -1183,7 +1183,8 @@ class BedrockGameplayBridge {
     }
     if (raw.action === 'wait') {
       if (!this.spawned) return { status: 'rejected', reason: 'world_not_ready' };
-      this.movement?.releaseManual?.();
+      if (typeof this.movement?.releaseManual === 'function') this.movement.releaseManual();
+      else this.movement?.stop?.();
       const result = this.layerOne?.wait() ?? { status: 'rejected', reason: 'layer_one_unavailable' };
       if (result.status === 'accepted') {
         this.layerTwo?.stay();
@@ -1207,11 +1208,13 @@ class BedrockGameplayBridge {
       this.addonNavigation?.emergencyStop();
       this.autonomy?.stop('user_stop');
       this.blockBreaker?.abort('user_stop');
-      this.movement?.releaseManual?.();
+      if (typeof this.movement?.releaseManual === 'function') this.movement.releaseManual();
+      else this.movement?.stop?.();
       return { status: 'ok', reason: 'movement_cancelled' };
     }
     if (raw.action === 'manual_stop') {
-      this.movement?.releaseManual?.();
+      if (typeof this.movement?.releaseManual === 'function') this.movement.releaseManual();
+      else this.movement?.stop?.();
       return { status: 'ok', reason: 'manual_control_released' };
     }
     if (raw.action === 'manual_move') {
