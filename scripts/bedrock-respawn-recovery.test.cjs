@@ -26,7 +26,7 @@ function fixture() {
   return {client,bridge,called,advance(ms){now+=ms;}};
 }
 test('dead bot requests respawn once after server state 0 then action after state 1',()=>{
-  const {client,bridge,called}=fixture();
+  const {client,bridge,called,advance}=fixture();
   client.emit('update_attributes',{runtime_entity_id:123n,
     attributes:[{name:'minecraft:health',current:0}]});
   assert.equal(bridge.snapshot().respawnRecovery.state,'dead_waiting_for_server');
@@ -72,7 +72,7 @@ test('foreign health and respawn packets never trigger self-respawn',()=>{
   bridge.stop();
 });
 test('death followed directly by server state 1 requests only one revival',()=>{
-  const {client,bridge}=fixture();
+  const {client,bridge,advance}=fixture();
   client.emit('set_health',{health:0});
   client.emit('respawn',{runtime_entity_id:123n,state:1,
     position:{x:0.5,y:66,z:0.5}});
