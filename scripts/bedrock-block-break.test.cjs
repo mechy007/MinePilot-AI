@@ -89,7 +89,7 @@ test('block break shares physics PlayerAuthInput ticks and waits for server bloc
   assert.equal(actions.length, 26);
   assert.equal(actions[0].value.block_action[0].action, 'start_break');
   assert.equal(actions.at(-1).value.block_action[0].action, 'stop_break');
-  assert.ok(actions.every(p => p.value.input_data.includes(35)));
+  assert.ok(actions.every(p => p.value.input_data.includes('block_action')));
   assert.ok(f.packets.every((p, i) => i === 0 ||
     p.value.tick > f.packets[i - 1].value.tick));
   assert.equal(f.blockBreaker.snapshot().status, 'in_progress');
