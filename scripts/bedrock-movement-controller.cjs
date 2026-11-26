@@ -157,7 +157,7 @@ class BedrockMovementController {
     this.lastServerPosition = { ...world.position };
     this.lastServerPositionAt = world.lastServerPositionAt ?? Date.now();
     this.lastServerTick = world.serverTick;
-    if (!this.state) this.resetFromServer(world.position, world.yaw, world.pitch, false);
+    if (!this.started || !this.state) this.resetFromServer(world.position, world.yaw, world.pitch, false);
     this.inputQueue.anchor(world.serverTick, world.serverTickObservedAt ?? Date.now());
     this.inputQueue.start();
     this.started = true;
@@ -216,9 +216,23 @@ class BedrockMovementController {
     };
   }
 
+  preflightTerrain(world = this.world) {
+    if (!world || !finite3(world.position) || !this.physicsWorld) return false;
+    const feet = feetFromWire(world.position);
+    this.physicsWorld.beginTick();
+    for (let y = Math.floor(feet.y) - 1; y <= Math.floor(feet.y + 2); y++) {
+      for (let z = Math.floor(feet.z) - 1; z <= Math.floor(feet.z + 1); z++) {
+        for (let x = Math.floor(feet.x) - 1; x <= Math.floor(feet.x + 1); x++) {
+          this.physicsWorld.getBlock(new Vec3(x, y, z));
+        }
+      }
+    }
+    return !this.physicsWorld.unknown;
+  }
+
   runManualHold(world, options = {}) {
-    if (this.capability(world) !== 'ready') {
-      return { status: 'rejected', reason: this.lastError ? 'physics_data_unavailable' : 'movement_unavailable' };
+    if (this.capability(world) !== 'ready' || !this.preflightTerrain(world)) {
+      return { status: 'rejected', reason: this.lastError ? 'physics_data_unavailable' : 'terrain_not_fully_observed' };
     }
     const modes = {
       forward: { x: 0, z: 1 }, backward: { x: 0, z: -1 },
@@ -241,7 +255,7 @@ class BedrockMovementController {
   }
 
   runVerifiedStep(world, target, ticks = 8) {
-    if (this.capability(world) !== 'ready' || !finite3(target) ||
+    if (this.capability(world) !== 'ready' || !this.preflightTerrain(world) || !finite3(target) ||
         !Number.isInteger(ticks) || ticks < 1 || ticks > 20) {
       return { status: 'rejected', reason: 'movement_unavailable' };
     }
