@@ -108,7 +108,7 @@ test('movement controller sends physics-backed forward input on the server tick 
   const stopped = controller.tick(102n);
   assert.equal(stopped.input_data.includes('up'), false);
   assert.deepEqual(stopped.move_vector, { x: 0, z: 0 });
-  controller.stop();
+  controller.stop('session_closed');
 });
 
 test('movement controller refuses to predict through an unknown terrain cell', () => {
@@ -119,7 +119,7 @@ test('movement controller refuses to predict through an unknown terrain cell', (
   assert.equal(controller.snapshot().terrain.unknown, true);
   assert.deepEqual(frame.move_vector, { x: 0, z: 0 });
   assert.equal(controller.lastMovementResult.reason, 'terrain_not_fully_observed');
-  controller.stop();
+  controller.stop('session_closed');
 });
 
 
@@ -144,7 +144,7 @@ test('movement controller supports numeric runtime-state palettes as well as has
   assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
   const frame = controller.tick(101n);
   assert.ok(frame.position.z > world.position.z);
-  controller.stop();
+  controller.stop('session_closed');
 });
 
 test('server correction replaces the predicted state and records reconciliation', () => {
@@ -157,5 +157,5 @@ test('server correction replaces the predicted state and records reconciliation'
   assert.equal(controller.corrections, 1);
   assert.equal(controller.lastCorrection.tick, '101');
   assert.ok(Math.abs(controller.state.pos.z - (-0.2)) < 1e-6);
-  controller.stop();
+  controller.stop('session_closed');
 });
