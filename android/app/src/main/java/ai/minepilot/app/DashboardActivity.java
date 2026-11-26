@@ -1344,13 +1344,14 @@ public final class DashboardActivity extends Activity {
                 .show();
     }
     private void chooseIntelligentGameplayGoal() {
-        final String[] goals = {"Survive: explore and collect observed drops",
+        final String[] goals = {"Automatic AI movement: choose safe actions and explore",
+                "Survive: explore and collect observed drops",
                 "Explore verified terrain", "Follow a player",
                 "Return to marked home", "Collect an observed item drop"};
-        final String[] ids = {"survive","explore","follow","return_home","gather"};
+        final String[] ids = {"auto","survive","explore","follow","return_home","gather"};
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Gameplay Intelligence")
-                .setMessage("Choose one goal. Survive may automatically approach and collect server-observed item drops. Test only in a world where the host permits this. Terrain, movement and pickup must be verified. No automatic combat, eating or mining.")
+                .setMessage("Automatic AI movement chooses safe local exploration, avoids recognized nearby hostiles, and may approach server-observed item drops. It will pause instead of guessing when terrain, health, hunger or server confirmation is insufficient. No automatic combat, eating, mining or building.")
                 .setItems(goals, (dialog, which) -> {
                     String goal=ids[which];
                     if ("follow".equals(goal)) {
