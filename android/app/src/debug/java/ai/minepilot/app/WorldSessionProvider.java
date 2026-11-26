@@ -392,6 +392,7 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putString("movement_capability", movementSystem.optString("capability", "unavailable"));
                     result.putInt("movement_frames", Math.max(0, movementSystem.optInt("framesSent", 0)));
                     result.putInt("movement_corrections", Math.max(0, movementSystem.optInt("corrections", 0)));
+                    result.putBoolean("movement_unconfirmed", movementSystem.optBoolean("unconfirmedMovement", false));
                     JSONObject terrain = movementSystem.optJSONObject("terrain");
                     result.putBoolean("movement_terrain_ready", terrain != null && !terrain.optBoolean("unknown", true));
                     if (terrain != null)
