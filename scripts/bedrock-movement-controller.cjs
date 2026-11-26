@@ -545,8 +545,11 @@ class BedrockMovementController {
 
   stop(reason = 'stopped') {
     this.releaseManual();
-    this.inputQueue.stop();
-    this.started = false;
+    if (['session_closed', 'player_died', 'movement_authority_changed',
+         'dimension_changed', 'world_closed'].includes(reason)) {
+      this.inputQueue.stop();
+      this.started = false;
+    }
     this.lastMovementResult = { status: 'idle', reason };
   }
 
