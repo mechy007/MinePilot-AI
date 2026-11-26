@@ -1302,3 +1302,27 @@ test('live control loop actively runs terrain preflight and exposes its status',
   assert.equal(status.reason, 'terrain_observation_incomplete');
   bridge.stop();
 });
+test('responsive IPC polling is decoupled from the slower gameplay safety loop', () => {
+  const client = new Client();
+  const intervals = [];
+  const cleared = [];
+  const bridge = new BedrockGameplayBridge(client, {
+    commandPath: '/tmp/minepilot-command.json', receiptPath: '/tmp/minepilot-receipt.json',
+    commandPollMs: 25, controlTickMs: 100,
+    setInterval: (fn, ms) => { const handle = { fn, ms }; intervals.push(handle); return handle; },
+    clearInterval: handle => cleared.push(handle)
+  }).start();
+  assert.deepEqual(intervals.map(item => item.ms), [25, 100]);
+  assert.equal(bridge.commandPollMs, 25);
+  assert.equal(bridge.controlTickMs, 100);
+  bridge.stop();
+  assert.equal(cleared.length, 2);
+});
+
+test('IPC polling interval is clamped to a safe range', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { commandPollMs: 1, controlTickMs: 1 });
+  assert.equal(bridge.commandPollMs, 10);
+  assert.equal(bridge.controlTickMs, 50);
+  bridge.stop();
+});

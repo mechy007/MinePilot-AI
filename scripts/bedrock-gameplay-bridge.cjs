@@ -87,6 +87,8 @@ class BedrockGameplayBridge {
     this.intelligence = options.intelligence ?? null;
     this.gameplayAgent = options.gameplayAgent ?? null;
     this.clock = options.clock ?? Date.now;
+    this.setInterval = options.setInterval ?? setInterval;
+    this.clearInterval = options.clearInterval ?? clearInterval;
     this.spawned = false;
     this.closed = false;
     this.self = null;
@@ -132,6 +134,9 @@ class BedrockGameplayBridge {
       spawnObserved: false, healthConfirmed: false, position: null, resumeTask: null,
       resumeResult: null, error: null };
     this.watch = null;
+    this.controlWatch = null;
+    this.commandPollMs = Number.isFinite(options.commandPollMs) ? Math.max(10, Math.min(100, Math.round(options.commandPollMs))) : 25;
+    this.controlTickMs = Number.isFinite(options.controlTickMs) ? Math.max(50, Math.min(250, Math.round(options.controlTickMs))) : 100;
     this.learningTickStatus = { state: 'not_started', reason: 'runtime_tick_not_started' };
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
     this.lastIntelligenceDecision = null;
@@ -209,7 +214,19 @@ class BedrockGameplayBridge {
     this.bind('remove_entity', p => this.removeActor(p));
     this.bind('change_dimension', p => this.dimensionChange(p));
     this.bind('close', () => this.stop());
-    if (this.commandPath && this.receiptPath) this.watch = setInterval(() => this.poll(), 100);
+    if (this.commandPath && this.receiptPath) {
+      // Keep file IPC responsive without forcing expensive world/intelligence
+      // work at the same frequency. The gameplay safety loop remains separate.
+      this.watch = this.setInterval(() => this.poll(), this.commandPollMs);
+      this.controlWatch = this.setInterval(() => {
+        if (this.closed) return;
+        this.tickControlPlane();
+        this.tickRespawnRecovery();
+        this.tickLearning();
+      }, this.controlTickMs);
+      this.watch.unref?.();
+      this.controlWatch.unref?.();
+    }
     return this;
   }
   startGame(packet) {
@@ -1674,20 +1691,16 @@ class BedrockGameplayBridge {
   }
   poll() {
     if (this.closed || !this.commandPath || !this.receiptPath) return;
-    this.tickControlPlane();
-    this.tickRespawnRecovery();
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
         unlinkSync(this.commandPath);
-        this.tickLearning();
         return;
       }
       data = readFileSync(this.commandPath, 'utf8');
       unlinkSync(this.commandPath);
     } catch (error) {
       if (error.code !== 'ENOENT') this.lastReceipt = { status: 'rejected', reason: 'inbox_error' };
-      this.tickLearning();
       return;
     }
     let command;
@@ -1695,7 +1708,6 @@ class BedrockGameplayBridge {
     catch { command = null; }
     // agent_start performs its own tick before replacing the current task.
     // All other commands share the normal single 100 ms runtime tick.
-    if (command?.action !== 'agent_start') this.tickLearning();
     const result = this.execute(command);
     const completedPlacement = command?.action === 'odyssey_execute' && command?.primitive === 'placeBlock' &&
       this.lastBlockPlacement?.requestId === command?.requestId ? this.lastBlockPlacement : null;
@@ -1738,8 +1750,10 @@ class BedrockGameplayBridge {
     this.cancelPendingCraft('session_closed');
     this.closed = true;
     stopLocalAutopilot(this, 'session_closed');
-    if (this.watch) clearInterval(this.watch);
+    if (this.watch) this.clearInterval(this.watch);
+    if (this.controlWatch) this.clearInterval(this.controlWatch);
     this.watch = null;
+    this.controlWatch = null;
     this.gameplayAgent?.stop('session_closed');
     this.pendingHotbarSelection = null;
     this.stackRequests.close('bedrock_session_closed');
