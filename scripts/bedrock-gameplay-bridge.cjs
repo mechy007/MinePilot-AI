@@ -518,8 +518,10 @@ class BedrockGameplayBridge {
       }
       if (packet.state === 0 && recovery.state !== 'dead_waiting_for_server') {
         // The host returned to SearchingForSpawn. Re-enter the ready phase
-        // instead of resending PlayerAction(respawn) forever.
+        // instead of resending PlayerAction(respawn) forever. Reset the
+        // action-cycle counter so the next ReadyToSpawn can be acknowledged.
         recovery.state = 'dead_waiting_for_server';
+        recovery.attempts = 0;
       }
       if (this.completeRespawnRecovery()) return;
       this.tickRespawnRecovery();
