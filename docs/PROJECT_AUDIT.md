@@ -65,3 +65,13 @@ A file is removable only when its imports, references, manifest entries, runtime
 - The bot remains connected while controls are used; server corrections and terrain/safety gates behave correctly.
 - No claim of full autonomous gameplay until the corresponding actions are verified by server observations in a live world.
 - No merge to `main` without explicit owner approval.
+
+## Movement reliability remediation — 2026-11-26
+
+The previous audit identified a protocol mismatch: the controller and autonomy runner treated a positive server movement acknowledgement as mandatory. Bedrock server-authoritative movement normally sends a correction when prediction differs; accepted input does not require a positive acknowledgement packet. The implementation now keeps manual movement active without that false timeout and lets the bounded autonomy runner use local predicted progress only after a 1.2-second correction grace period. A server position/correction takes precedence; no progress from either source stops the runner.
+
+Additional fixes include rotation-only packet isolation, predicted-position terrain preflight, throttled retries for missing subchunks, collision-cell diagnostics, explicit command execution stages/receipts, Android foreground-service sticky recovery for a saved friend-world session, and the `specialUse` foreground-service type for the user-started persistent world session.
+
+Automated regression coverage was added for the seven-second manual movement case, predicted-position terrain preflight, terrain arrival recovery, MovePlayer modes, Android-style gameplay command inbox/receipt handling, subchunk retry throttling, and prediction-only autonomy progress. Latest CI status must be checked against the current PR head before treating these changes as passing.
+
+Remaining release blockers are physical-device acceptance tests: Bedrock 1.26.66.1 movement in a friend-hosted world, collision corrections at walls/edges, and Android background/process-recreation behavior. These cannot be proven by repository tests alone. See [Movement reliability validation](MOVEMENT-RELIABILITY-VALIDATION.md). Keep PRs #121 and #122 unmerged pending review and explicit owner approval.
