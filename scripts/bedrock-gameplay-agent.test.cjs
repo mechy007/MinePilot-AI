@@ -337,3 +337,31 @@ test('critical air is surfaced by intelligence and blocks ordinary exploration',
   assert.equal(f.intelligence.snapshot().reason,'critical_air_supply');
   assert.equal(f.agent.snapshot().reason,'critical_vitals_wait_for_safe_recovery');
 });
+
+test('automatic AI mode chooses safe exploration and keeps intelligence aligned with its survival policy',()=>{
+  const f=fixture();
+  const started=f.agent.start(f.world,{confirmed:true,goal:'auto'});
+  assert.equal(started.status,'accepted');
+  assert.equal(f.agent.snapshot().goal,'auto');
+  assert.equal(f.intelligence.snapshot().goal,'survive');
+  f.tick();
+  assert.equal(f.sent.length,1,'automatic mode should produce a real physics movement step');
+  assert.equal(f.agent.snapshot().phase,'moving');
+  assert.equal(f.agent.snapshot().serverVerifiedSteps,0,
+    'queued movement is not server-confirmed movement');
+  f.agent.stop('test_complete');
+  assert.equal(f.agent.snapshot().active,false);
+  assert.equal(f.agent.snapshot().reason,'test_complete');
+});
+
+test('automatic AI mode prioritizes a verified retreat when a recognized hostile is nearby',()=>{
+  const f=fixture();
+  f.agent.start(f.world,{confirmed:true,goal:'auto'});
+  f.changeLife({nearbyEntities:[{hostile:true,distance:2,
+    position:{x:10.5,y:65,z:8.5}}]});
+  f.tick();
+  assert.equal(f.sent.length,1);
+  assert.ok(f.sent[0].point.x<8.5,'automatic mode must move away from the observed hostile');
+  assert.equal(f.agent.snapshot().lastPlan.kind,'retreat');
+  f.agent.stop();
+});

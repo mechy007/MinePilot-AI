@@ -815,7 +815,7 @@ public final class WorldSessionProvider extends ContentProvider {
             }
             if ("agent_start".equals(action)) {
                 String goal=extras.getString("agent_goal","");
-                if (!"survive".equals(goal) && !"explore".equals(goal) &&
+                if (!"auto".equals(goal) && !"survive".equals(goal) && !"explore".equals(goal) &&
                         !"follow".equals(goal) &&
                         !"return_home".equals(goal) && !"gather".equals(goal)) return;
                 command.put("goal",goal);
