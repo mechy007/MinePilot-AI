@@ -48,6 +48,7 @@ public final class DashboardActivity extends Activity {
     private boolean manualJump;
     private boolean manualSprint;
     private boolean manualSneak;
+    private String manualLookMode = "";
     private int manualControlGeneration;
     private boolean manualControlsEnabled;
     private ManualJoystickView manualJoystick;
@@ -829,12 +830,13 @@ public final class DashboardActivity extends Activity {
             if (moving) showStatus("Movement is unavailable until the world and collision data are ready.");
             return;
         }
-        if (!moving && !manualJump && !manualSprint && !manualSneak) {
-            if ("vector".equals(activeManualMode)) stopManualControl();
+        if (!moving && !manualJump && !manualSprint && !manualSneak && manualLookMode.isEmpty()) {
+            if (!activeManualMode.isEmpty()) stopManualControl();
             return;
         }
-        boolean startPulse = !"vector".equals(activeManualMode);
-        activeManualMode = "vector";
+        String nextMode = manualLookMode.isEmpty() ? "vector" : manualLookMode;
+        boolean startPulse = !nextMode.equals(activeManualMode);
+        activeManualMode = nextMode;
         if (startPulse) {
             sendManualMotionPulse("vector");
             manualControlHandler.removeCallbacks(repeatManualControl);
@@ -859,8 +861,8 @@ public final class DashboardActivity extends Activity {
             stopManualControl();
             return;
         }
-        activeManualMode = "vector";
-        sendManualMotionPulse("vector");
+        activeManualMode = manualLookMode.isEmpty() ? "vector" : manualLookMode;
+        sendManualMotionPulse(activeManualMode);
         manualControlHandler.removeCallbacks(repeatManualControl);
         manualControlHandler.postDelayed(repeatManualControl, 450);
     }
@@ -879,6 +881,7 @@ public final class DashboardActivity extends Activity {
                 if ("jump".equals(mode) || "sprint".equals(mode) || "sneak".equals(mode)) {
                     setManualAction(mode, true);
                 } else {
+                    manualLookMode = mode;
                     activeManualMode = mode;
                     sendManualMotionPulse(mode);
                     manualControlHandler.removeCallbacks(repeatManualControl);
@@ -892,7 +895,8 @@ public final class DashboardActivity extends Activity {
                 view.setPressed(false);
                 if ("jump".equals(mode) || "sprint".equals(mode) || "sneak".equals(mode)) {
                     setManualAction(mode, false);
-                } else if (mode.equals(activeManualMode)) {
+                } else if (mode.equals(manualLookMode)) {
+                    manualLookMode = "";
                     if (Math.hypot(manualJoystickX, manualJoystickY) >= 0.12 ||
                             manualJump || manualSprint || manualSneak) {
                         activeManualMode = "vector";
@@ -956,6 +960,7 @@ public final class DashboardActivity extends Activity {
         manualJump = false;
         manualSprint = false;
         manualSneak = false;
+        manualLookMode = "";
         if (wasMoving) sendManualRelease();
     }
 
