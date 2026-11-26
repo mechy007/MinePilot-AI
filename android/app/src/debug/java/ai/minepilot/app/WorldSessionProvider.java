@@ -395,8 +395,25 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putBoolean("movement_unconfirmed", movementSystem.optBoolean("unconfirmedMovement", false));
                     JSONObject terrain = movementSystem.optJSONObject("terrain");
                     result.putBoolean("movement_terrain_ready", terrain != null && !terrain.optBoolean("unknown", true));
-                    if (terrain != null)
+                    if (terrain != null) {
                         result.putInt("movement_terrain_queries", Math.max(0, terrain.optInt("queries", 0)));
+                        org.json.JSONArray missingCells = terrain.optJSONArray("unknownCells");
+                        if (missingCells != null && missingCells.length() > 0) {
+                            JSONObject firstMissing = missingCells.optJSONObject(0);
+                            if (firstMissing != null) {
+                                int x = firstMissing.optInt("x", Integer.MIN_VALUE);
+                                int y = firstMissing.optInt("y", Integer.MIN_VALUE);
+                                int z = firstMissing.optInt("z", Integer.MIN_VALUE);
+                                if (Math.abs((long) x) <= 30000000 && y >= -256 && y <= 512 &&
+                                        Math.abs((long) z) <= 30000000) {
+                                    result.putString("movement_unknown_position", x + "," + y + "," + z);
+                                }
+                                String missingReason = firstMissing.optString("reason", "");
+                                if (missingReason.matches("[a-z_]{1,64}"))
+                                    result.putString("movement_unknown_reason", missingReason);
+                            }
+                        }
+                    }
                     JSONObject physics = movementSystem.optJSONObject("physics");
                     if (physics != null) {
                         result.putInt("movement_physics_blocks", Math.max(0, physics.optInt("blocks", 0)));
