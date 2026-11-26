@@ -607,6 +607,7 @@ class BedrockMovementController {
       lastNonNeutralAt: this.lastNonNeutralAt,
       lastServerAckAt: this.lastServerAckAt,
       state: this.started ? 'running' : 'stopped',
+      active: this.manualHoldActive,
       framesSent: this.framesSent,
       corrections: this.corrections,
       lastCorrection: this.lastCorrection,
