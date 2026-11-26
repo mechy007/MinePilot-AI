@@ -94,7 +94,7 @@ test('bounded autonomy performs a real step but never chains without host progre
   let now=1000,beat;
   const movement={
     busy:false,calls:0,
-    capability:()=> 'experimental',
+    capability:()=> 'ready',
     snapshot(){return {active:this.busy};},
     runVerifiedStep(){this.busy=true;this.calls++;return {status:'accepted'};},
     stop(){this.busy=false;}
@@ -134,7 +134,7 @@ test('autonomy requires movement capability, verified route and safety hold',()=
       nextPoint:{x:2.5,y:65.62,z:.5}})},routePlanner:planLocalRoute};
   const a=new VerifiedAutonomyRunner();
   assert.equal(a.enable(world,{confirmed:true}).reason,'movement_unavailable');
-  world.movement.capability=()=> 'experimental';
+  world.movement.capability=()=> 'ready';
   world.gameplayWorld=()=>({safetyHold:true});
   assert.equal(a.enable(world,{confirmed:true}).reason,'survival_safety_override');
   world.gameplayWorld=()=>({safetyHold:false});
