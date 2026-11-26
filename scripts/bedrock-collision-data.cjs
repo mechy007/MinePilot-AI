@@ -16,7 +16,11 @@ function loadBedrockCollisionData(directory = path.join(__dirname, 'bedrock-phys
   const blocks = readGzipJson(directory, 'blocks');
   const states = readGzipJson(directory, 'blockStates');
   const collision = readGzipJson(directory, 'blockCollisionShapes');
-  if (!Array.isArray(blocks) || !Array.isArray(states) || states.length !== EXPECTED_STATES ||
+  return buildBedrockCollisionData({ blocks, states, collision });
+}
+
+function buildBedrockCollisionData({ blocks, states, collision }, expectedStates = EXPECTED_STATES) {
+  if (!Array.isArray(blocks) || !Array.isArray(states) || states.length !== expectedStates ||
       !collision || !collision.blocks || !collision.shapes) {
     throw new Error('bedrock_physics_data_invalid');
   }
@@ -60,6 +64,7 @@ function loadBedrockCollisionData(directory = path.join(__dirname, 'bedrock-phys
       profilesByHash.set(hash, {
         id: block.id,
         name: block.name,
+        boundingBox: block.boundingBox ?? (boxes.length ? 'block' : 'empty'),
         friction,
         shapes: boxes,
         properties,
@@ -68,7 +73,7 @@ function loadBedrockCollisionData(directory = path.join(__dirname, 'bedrock-phys
       });
     }
   }
-  if (profilesByHash.size !== EXPECTED_STATES || !blocksByName.air) {
+  if (profilesByHash.size !== expectedStates || !blocksByName.air) {
     throw new Error('bedrock_physics_registry_incomplete');
   }
   return {
@@ -79,4 +84,4 @@ function loadBedrockCollisionData(directory = path.join(__dirname, 'bedrock-phys
   };
 }
 
-module.exports = { loadBedrockCollisionData, EXPECTED_STATES };
+module.exports = { loadBedrockCollisionData, buildBedrockCollisionData, EXPECTED_STATES };
