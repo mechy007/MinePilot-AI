@@ -404,9 +404,9 @@ public final class WorldSessionProvider extends ContentProvider {
                     }
                     JSONObject last = movementSystem.optJSONObject("lastMovementResult");
                     if (last != null) {
-                        String status = last.optString("status", "");
+                        String movementStatus = last.optString("status", "");
                         String reason = last.optString("reason", "");
-                        if (status.matches("[a-z_]{1,32}")) result.putString("movement_last_status", status);
+                        if (movementStatus.matches("[a-z_]{1,32}")) result.putString("movement_last_status", movementStatus);
                         if (reason.matches("[a-z_]{1,64}")) result.putString("movement_last_reason", reason);
                     }
                 }
