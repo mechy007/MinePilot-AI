@@ -28,6 +28,7 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
   const blocksByName = Object.create(null);
   const blocksArray = [];
   const profilesByHash = new Map();
+  const profilesByStateId = new Map();
   for (const block of blocks) {
     if (!block || typeof block.name !== 'string' || !Number.isInteger(block.id) ||
         !Number.isInteger(block.minStateId) || !Number.isInteger(block.maxStateId) ||
@@ -61,7 +62,7 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
       }
       const hash = state.hash >>> 0;
       if (profilesByHash.has(hash)) throw new Error('bedrock_physics_duplicate_state_hash');
-      profilesByHash.set(hash, {
+      const profile = {
         id: block.id,
         name: block.name,
         boundingBox: block.boundingBox ?? (boxes.length ? 'block' : 'empty'),
@@ -70,7 +71,9 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
         properties,
         metadata: Number(properties.liquid_depth ?? 0),
         isWaterlogged: properties.waterlogged_bit === 1 || properties.waterlogged === true
-      });
+      };
+      profilesByHash.set(hash, profile);
+      profilesByStateId.set(stateId, profile);
     }
   }
   if (profilesByHash.size !== expectedStates || !blocksByName.air) {
@@ -79,6 +82,7 @@ function buildBedrockCollisionData({ blocks, states, collision }, expectedStates
   return {
     registry: { blocksByName, blocksArray },
     profilesByHash,
+    profilesByStateId,
     stateCount: profilesByHash.size,
     blockCount: blocksArray.length
   };
