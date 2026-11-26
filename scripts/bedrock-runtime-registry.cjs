@@ -48,7 +48,7 @@ function registryFromProfiles(profiles, hashed) {
 }
 
 function knownPhysicsNames(data) {
-  return new Set(Object.keys(data.blocksByName).map(name =>
+  return new Set(Object.keys(data.registry.blocksByName).map(name =>
     name.startsWith('minecraft:') ? name : 'minecraft:' + name));
 }
 
