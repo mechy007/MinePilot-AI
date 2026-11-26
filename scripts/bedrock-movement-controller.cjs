@@ -460,10 +460,7 @@ class BedrockMovementController {
       interaction_model: 'crosshair'
     };
     const blockAction = this.blockExecutor?.next?.(world);
-    if (blockAction) {
-      frame.input_data = [...frame.input_data, 35];
-      frame.block_action = [blockAction];
-    }
+    if (blockAction) this.inputQueue.queueBlockAction(blockAction);
     this.previousInput = current;
     this.history.push({ tick, input: this.captureInput(input), state: cloneState(this.state) });
     if (this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
