@@ -11,9 +11,10 @@ const MINECRAFT_TITLE = {
 };
 
 function runtimeLogger(file) {
-  const phases = new Set(['device_code', 'microsoft_approved', 'bedrock_credentials', 'verified',
-    'account_sent', 'friends_loaded', 'discovery', 'connection', 'retrying', 'spawned',
-    'failed', 'disconnected', 'stopped']);
+  const phases = new Set(['join_start', 'sign_in_start', 'friends_start', 'runtime_ready', 'runtime_failed',
+    'runtime_interrupted', 'device_code', 'microsoft_approved', 'bedrock_credentials', 'verified',
+    'account_sent', 'account_saved', 'account_failed', 'friends_loaded', 'discovery', 'connection',
+    'retrying', 'spawned', 'failed', 'disconnected', 'stopped']);
   const stages = new Set(['microsoft_token', 'xbox_token', 'xbox_profile', 'account_save',
     'bedrock_credentials', 'friends', 'owner', 'discovery', 'connection', 'xbox_membership',
     'world_transport', 'world_nonce', 'nethernet_signalling', 'nethernet_peer',
