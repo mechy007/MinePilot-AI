@@ -10,9 +10,12 @@ const { learningEngineFor, odysseyCapabilityStates } = require('./bedrock-skill-
 const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
 
 async function importGameplay(moduleName) {
-  const stagedPath = join(__dirname, 'gameplay', `${moduleName}.js`);
+  const stagedPaths = [
+    join(__dirname, 'gameplay', `${moduleName}.js`),
+    join(__dirname, '..', 'gameplay', `${moduleName}.js`)
+  ];
   const builtPath = join(__dirname, '..', 'dist', 'src', 'gameplay', `${moduleName}.js`);
-  const target = existsSync(stagedPath) ? stagedPath : builtPath;
+  const target = stagedPaths.find(existsSync) ?? builtPath;
   if (!existsSync(target)) throw new Error(`Gameplay module is not staged or built: ${moduleName}`);
   return import(require('node:url').pathToFileURL(target).href);
 }
