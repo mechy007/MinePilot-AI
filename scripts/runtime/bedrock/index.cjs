@@ -1,6 +1,11 @@
 'use strict';
 const {VERSION,TARGET_GAME_VERSION,CODEC_BASELINE}=require('./contracts.cjs');
 const {compatibilitySnapshot}=require('./compatibility/versions.cjs');
+const {detectCompatibility}=require('./compatibility/adapter-selector.cjs');
+const {CapabilityRecoveryEngine}=require('./recovery/engine.cjs');
+const {StuckRecovery}=require('./navigation/stuck-recovery.cjs');
+const {createWorldPerception}=require('./world/perception.cjs');
+const {TaskExecutionCoordinator}=require('./tasks/execution-coordinator.cjs');
 const {ActionEnvelope}=require('./actions/envelope.cjs');
 const {OutcomeVerifier}=require('./actions/outcomes.cjs');
 const inventory=require('./inventory/containers.cjs');
@@ -25,6 +30,8 @@ function createRuntimeExtensions(options={}) {
  const clock=options.clock??Date.now;
  const envelope=new ActionEnvelope(),outcomes=new OutcomeVerifier({clock}),obtain=new BedrockObtainPlanner({clock});
  const safety=new SurvivalPolicy(),tasks=new BoundedTaskRunner({clock}),curriculum=new VerifiedCurriculum({clock});
+ const capabilities=new CapabilityRecoveryEngine({clock}),stuckRecovery=new StuckRecovery({clock}),perception=createWorldPerception(world,{clock});
+ const taskExecution=new TaskExecutionCoordinator({runner:tasks,capabilities,adapter:options.taskAdapter});
  const recorder=new RuntimeRecorder({clock}),events=new RuntimeEventBus({clock});
  const world=new WorldKnowledgeStore({clock,...(options.worldLimits??{})});
  const plugins=new ReadOnlyPluginRegistry(options.pluginLimits);
@@ -48,7 +55,8 @@ function createRuntimeExtensions(options={}) {
     isStandable:(x,y,z)=>terrain.tile(dimension,x,y,z)==='walkable'});
  }
  return {
-  envelope,outcomes,obtain,safety,tasks,curriculum,recorder,inventory,
+  envelope,outcomes,obtain,safety,tasks,curriculum,recorder,inventory,capabilities,stuckRecovery,perception,taskExecution,
+  detectCompatibility,
   events,world,plugins,registryAdapter,protocol,navigationGoals,navigationCosts,
   planObtain:(bridge,item,count)=>obtain.preview(bridge,item,count),
   planGoap:(initial,goal,actions,limits)=>planGoap(initial,goal,actions,limits),
@@ -59,7 +67,8 @@ function createRuntimeExtensions(options={}) {
   snapshot:()=>({
    version:VERSION,targetGameVersion:TARGET_GAME_VERSION,targetVersionVerified:false,
    codecBaseline:{...CODEC_BASELINE},compatibility:compatibilitySnapshot(),
-   taskRunner:tasks.snapshot(),outcomes:outcomes.snapshot().slice(-16),curriculum:curriculum.snapshot(),
+   taskRunner:tasks.snapshot(),capabilities:capabilities.snapshot(),stuckRecovery:stuckRecovery.snapshot(),
+   compatibilityDetection:detectCompatibility({gameVersion:options.gameVersion,protocol:options.protocol}),outcomes:outcomes.snapshot().slice(-16),curriculum:curriculum.snapshot(),
    diagnostics:{retainedEvents:recorder.events.length,recent:recorder.snapshot(12)},
    safety:{policy:'observation_only',emitsPackets:false},
    inventory:{containerAndClickPlans:'preview_only'},
