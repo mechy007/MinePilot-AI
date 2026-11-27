@@ -1676,10 +1676,7 @@ public final class DashboardActivity extends Activity {
         var events = RuntimeLog.recent(this);
         String latest = events.isEmpty() ? "Ready" : RuntimeLog.describe(events.getLast());
         latestRuntimeStatus.setText("Latest status · " + latest);
-        if (failuresOnly) events.removeIf(event -> switch (event.optString("phase")) {
-            case "failed", "runtime_failed", "account_failed", "disconnected", "runtime_interrupted" -> false;
-            default -> true;
-        });
+        if (failuresOnly) events.removeIf(event -> !RuntimeLog.hasFailure(event));
         String history = events.isEmpty() && failuresOnly ? "No failures in recent events." : formatRuntimeEvents(events);
         if (!android.text.TextUtils.equals(runtimeEvents.getText(), history)) runtimeEvents.setText(history);
     }
