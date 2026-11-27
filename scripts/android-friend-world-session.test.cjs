@@ -115,6 +115,45 @@ test('assesses the bot’s own vitals from the live session without issuing acti
   assert.equal(client.listenerCount('update_attributes'), 0);
 });
 
+
+test('reanchors vitals to the new player runtime ID after server respawn', async () => {
+  const client = new Client();
+  const snapshots = [];
+  const controller = new AbortController();
+  const session = observeSession(client, snapshot => snapshots.push(snapshot),
+    controller.signal, () => 'connection');
+  const update = (runtime_entity_id, health, hunger) => client.emit('update_attributes', {
+    runtime_entity_id,
+    attributes: [
+      { name: 'minecraft:health', current: health },
+      { name: 'minecraft:player.hunger', current: hunger }
+    ]
+  });
+
+  client.emit('start_game', { runtime_entity_id: 41n });
+  update('41', 0, 0);
+  client.emit('spawn');
+  assert.equal(snapshots.at(-1)?.vitals?.assessment, 'dead');
+
+  // SearchingForSpawn does not clear the dead state.
+  client.emit('respawn', { state: 0, runtime_entity_id: 41n });
+  assert.equal(snapshots.at(-1)?.vitals?.assessment, 'dead');
+
+  // The server confirms the new player identity. Old-ID updates are ignored.
+  client.emit('respawn', { state: 1, runtime_entity_id: 42n,
+    position: { x: 0, y: 64, z: 0 } });
+  update('41', 0, 0);
+  update('42', 20, 20);
+  await new Promise(resolve => setTimeout(resolve, 1050));
+
+  assert.deepEqual(snapshots.at(-1)?.vitals, {
+    health: 20, hunger: 20, assessment: 'ready'
+  });
+  controller.abort();
+  await session;
+  assert.equal(client.listenerCount('respawn'), 0);
+});
+
 test('awareness distinguishes food needs, recovery and incomplete data', () => {
   const { BotAwareness } = require('./bot-awareness.mjs');
   const awareness = new BotAwareness();

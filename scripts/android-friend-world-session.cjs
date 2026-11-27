@@ -130,6 +130,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       signal.removeEventListener('abort', stop);
       client.removeListener('close', closed);
       client.removeListener('start_game', onStartGame);
+      client.removeListener('respawn', onRespawn);
       client.removeListener('update_attributes', onAttributes);
       client.removeListener('spawn', onSpawn);
       client.removeListener('level_chunk', onChunk);
@@ -163,6 +164,14 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       heartbeat = setInterval(report, 1000);
     };
     const onStartGame = packet => { awareness.start(packet); startGame = true; checkSpawn(); };
+    // The server may assign a new player runtime ID after a death. Re-anchor
+    // vitals only when the respawn packet confirms the new spawned player;
+    // SearchingForSpawn packets must not clear the current death assessment.
+    const onRespawn = packet => {
+      const runtimeId = packet?.runtime_entity_id;
+      if (packet?.state === 1 && runtimeId != null && String(runtimeId) !== '0')
+        awareness.start(packet);
+    };
     const onAttributes = packet => awareness.update(packet);
     const onSpawn = () => { spawn = true; checkSpawn(); };
     const onChunk = () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); };
@@ -190,6 +199,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     client.once('join', onJoin);
     client.once('kick', onKick);
     client.once('start_game', onStartGame);
+    client.on('respawn', onRespawn);
     client.on('update_attributes', onAttributes);
     client.once('spawn', onSpawn);
     client.on('level_chunk', onChunk);
