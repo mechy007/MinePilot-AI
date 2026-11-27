@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/tests/*.test.js",
+    "test": "npm run build && node --test dist/tests/*.test.js && node --test scripts/bedrock-local-path.test.cjs",
     "friend:join": "npm run build && node dist/src/connection/friend-world-cli.js",
     "friend:check": "npm run build && node dist/src/connection/friend-world-runtime-check-cli.js"
   },
