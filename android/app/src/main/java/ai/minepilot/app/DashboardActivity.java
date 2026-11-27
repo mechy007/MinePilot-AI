@@ -978,7 +978,23 @@ public final class DashboardActivity extends Activity {
         extras.putBoolean("sneak", manualSneak);
         extras.putInt("motion_ticks", 8);
         worldReader.execute(() -> {
+            org.json.JSONObject sent = new org.json.JSONObject();
+            try {
+                sent.put("mode", effectiveMode).put("motionX", manualJoystickX)
+                        .put("motionY", manualJoystickY).put("jump", manualJump)
+                        .put("sprint", manualSprint).put("sneak", manualSneak).put("ticks", 8);
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, "manual_input_sent", sent);
             Bundle receipt = worldRequest("gameplay", session, extras);
+            org.json.JSONObject outcome = new org.json.JSONObject();
+            try {
+                outcome.put("mode", effectiveMode)
+                        .put("status", receipt != null && receipt.getBoolean("accepted") ? "accepted" : "rejected")
+                        .put("reason", receipt == null ? "no_receipt_from_world_session_provider"
+                                : receipt.getString("reason", "unspecified"));
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, receipt != null && receipt.getBoolean("accepted")
+                    ? "manual_input_accepted" : "manual_input_rejected", outcome);
             if (receipt == null || !receipt.getBoolean("accepted")) {
                 runOnUiThread(() -> {
                     if (generation == manualControlGeneration && !activeManualMode.isEmpty() &&
@@ -1000,7 +1016,16 @@ public final class DashboardActivity extends Activity {
         if (session.isEmpty()) return;
         Bundle extras = new Bundle();
         extras.putString("action", "manual_stop");
-        worldReader.execute(() -> worldRequest("gameplay", session, extras));
+        worldReader.execute(() -> {
+            Bundle receipt = worldRequest("gameplay", session, extras);
+            org.json.JSONObject details = new org.json.JSONObject();
+            try {
+                details.put("status", receipt != null && receipt.getBoolean("accepted") ? "accepted" : "rejected")
+                        .put("reason", receipt == null ? "no_receipt_from_world_session_provider"
+                                : receipt.getString("reason", "manual_control_released"));
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, "manual_input_released", details);
+        });
     }
 
     private void stopManualControl() {
