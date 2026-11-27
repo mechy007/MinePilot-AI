@@ -3,8 +3,8 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
-const { androidNetworkInterfaces, observeSession, run, validateOwner } = require('./friend-world-session.cjs');
-const { runtimeLogger } = require('./xbox-auth-probe.cjs');
+const { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner } = require('./android-friend-world-session.cjs');
+const { runtimeLogger } = require('./android-xbox-auth-probe.cjs');
 
 class Client extends EventEmitter {
   closed = 0;
@@ -38,6 +38,19 @@ test('runtime logs retain diagnostic codes and omit private data and duplicate h
     { phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37 },
     { phase: 'failed', stage: 'bedrock_login', reason: 'host_disconnect', bedrockCode: 136 }
   ]);
+});
+
+test('retries transient Xbox membership timeouts but not permanent membership failures', () => {
+  assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', reason: 'timeout' }), true);
+  assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', reason: 'network' }), true);
+  for (const httpStatus of [408, 425, 429, 500, 502, 503, 504]) {
+    assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', httpStatus }), true);
+  }
+  for (const httpStatus of [400, 401, 403, 404]) {
+    assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', httpStatus }), false);
+  }
+  assert.equal(shouldRetry({ phase: 'failed', stage: 'bedrock_login', reason: 'timeout' }), false);
+  assert.equal(shouldRetry({ phase: 'disconnected', stage: 'xbox_membership', reason: 'timeout' }), false);
 });
 
 test('validates the exact owner Xbox ID without converting it to a number', () => {
@@ -113,6 +126,45 @@ test('assesses the bot’s own vitals from the live session without issuing acti
   controller.abort();
   await session;
   assert.equal(client.listenerCount('update_attributes'), 0);
+});
+
+
+test('reanchors vitals to the new player runtime ID after server respawn', async () => {
+  const client = new Client();
+  const snapshots = [];
+  const controller = new AbortController();
+  const session = observeSession(client, snapshot => snapshots.push(snapshot),
+    controller.signal, () => 'connection');
+  const update = (runtime_entity_id, health, hunger) => client.emit('update_attributes', {
+    runtime_entity_id,
+    attributes: [
+      { name: 'minecraft:health', current: health },
+      { name: 'minecraft:player.hunger', current: hunger }
+    ]
+  });
+
+  client.emit('start_game', { runtime_entity_id: 41n });
+  update('41', 0, 0);
+  client.emit('spawn');
+  assert.equal(snapshots.at(-1)?.vitals?.assessment, 'dead');
+
+  // SearchingForSpawn does not clear the dead state.
+  client.emit('respawn', { state: 0, runtime_entity_id: 41n });
+  assert.equal(snapshots.at(-1)?.vitals?.assessment, 'dead');
+
+  // The server confirms the new player identity. Old-ID updates are ignored.
+  client.emit('respawn', { state: 1, runtime_entity_id: 42n,
+    position: { x: 0, y: 64, z: 0 } });
+  update('41', 0, 0);
+  update('42', 20, 20);
+  await new Promise(resolve => setTimeout(resolve, 1050));
+
+  assert.deepEqual(snapshots.at(-1)?.vitals, {
+    health: 20, hunger: 20, assessment: 'ready'
+  });
+  controller.abort();
+  await session;
+  assert.equal(client.listenerCount('respawn'), 0);
 });
 
 test('awareness distinguishes food needs, recovery and incomplete data', () => {

@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/tests/*.test.js && node --test scripts/bedrock-local-path.test.cjs",
+    "test": "npm run build && node --test dist/tests/*.test.js && node --test scripts/bedrock-local-path.test.cjs && npm run test:runtime",
     "friend:join": "npm run build && node dist/src/connection/friend-world-cli.js",
-    "friend:check": "npm run build && node dist/src/connection/friend-world-runtime-check-cli.js"
+    "friend:check": "npm run build && node dist/src/connection/friend-world-runtime-check-cli.js",
+    "test:runtime": "node --test scripts/runtime/bedrock/tests/runtime.test.cjs scripts/runtime/bedrock/tests/platform-integration.test.cjs scripts/runtime/bedrock/tests/recovery-capability.test.cjs"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

@@ -107,6 +107,7 @@ The Android runtime is the live execution path. The TypeScript engine provides t
 
 - [Development roadmap](docs/ROADMAP.md) — phases and acceptance criteria.
 - [Architecture rebuild](docs/ARCHITECTURE_REBUILD.md) — subsystem boundaries and design decisions.
+- [Bedrock ecosystem integration map](docs/PLATFORM-SOURCE-INTEGRATION.md) — source-by-source code mapping, licensing, connected adapters and compatibility limits.
 - [Unified gameplay engine](docs/UNIFIED_GAMEPLAY_ENGINE.md) — gameplay, safety and action contracts.
 - [Function contracts](docs/FUNCTION_CONTRACTS.md) — runtime interfaces and behavior.
 - [Android app status](docs/ANDROID-APP-STATUS.md) — device verification and movement test procedure.
@@ -126,3 +127,8 @@ Work on feature branches, preserve main, keep tests with behavior changes, and v
 ## Movement reliability status
 
 The movement pipeline has been hardened for Bedrock server-authoritative prediction: sustained manual input no longer depends on a positive acknowledgement packet, rotation-only packets no longer overwrite position, bounded autonomy can continue only from collision-checked predicted progress after a correction grace period, and missing terrain subchunks are retried with throttling. Android diagnostics now distinguish queued commands from runtime execution and show the first missing collision cell. **Live friend-world movement and Android background recovery still require device validation.** See [Movement reliability validation](docs/MOVEMENT-RELIABILITY-VALIDATION.md) for the acceptance checklist and remaining limits.
+
+
+## Modular gameplay engine
+
+The Android Bedrock runtime now loads modular extensions through the existing BedrockGameplayBridge. Their file-by-file structure and source mapping are documented in docs/INTEGRATION_RESTRUCTURE.md. The new plan_obtain command is a server-observed preview; it does not automatically gather, mine, smelt, craft or mutate inventory. The existing Xbox/NetherNet session, inventory ledger, stack-request manager and movement controller remain the single authorities.

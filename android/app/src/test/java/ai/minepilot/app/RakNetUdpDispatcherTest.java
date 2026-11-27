@@ -5,6 +5,11 @@ import static org.junit.Assert.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class RakNetUdpDispatcherTest {
     private static byte[] receive(DatagramSocket socket) throws Exception {
@@ -53,4 +58,31 @@ public class RakNetUdpDispatcherTest {
             assertNull(dispatcher.poll(2));
         }
     }
+    @Test public void closeUnblocksAWaitingPollWithoutWaitingForSocketTimeout() throws Exception {
+        InetAddress host = InetAddress.getByName("127.0.0.1");
+        try (DatagramSocket server = new DatagramSocket(0, host)) {
+            BedrockUdpTransport transport =
+                    new BedrockUdpTransport(host, server.getLocalPort(), 60000);
+            RakNetUdpDispatcher dispatcher = new RakNetUdpDispatcher(transport);
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            try {
+                CountDownLatch entered = new CountDownLatch(1);
+                Future<byte[]> waiting = executor.submit(() -> {
+                    entered.countDown();
+                    return dispatcher.poll(1);
+                });
+                assertTrue(entered.await(1, TimeUnit.SECONDS));
+                Thread.sleep(75); // allow poll() to enter the blocking UDP receive
+                long startedAt = System.nanoTime();
+                dispatcher.close();
+                long closeMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+                assertTrue("close must not wait for the 60-second receive timeout", closeMillis < 1000);
+                assertNull("a poll interrupted by close is a normal shutdown", waiting.get(1, TimeUnit.SECONDS));
+            } finally {
+                dispatcher.close();
+                executor.shutdownNow();
+            }
+        }
+    }
+
 }

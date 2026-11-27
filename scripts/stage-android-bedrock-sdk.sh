@@ -218,7 +218,11 @@ curl --fail --location --silent --show-error --retry 2 --max-time 45 \
 echo "70458c05b33622a05e4e2bbc5811f6221e4085003db25292ef122e0c830397a1  $data_notice" | sha256sum --check -
 cp "$root/scripts/android-node-bedrock-smoke.cjs" "$temp/node-smoke.cjs"
 cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
+# The session module uses the source filename; preserve it in the packaged runtime too.
+cp "$temp/xbox-auth-probe.cjs" "$temp/android-xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
+# The staged contract test imports the source filename; keep that alias beside it.
+cp "$temp/friend-world-session.cjs" "$temp/android-friend-world-session.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
 cp "$root/scripts/bedrock-stack-request-manager.cjs" "$temp/bedrock-stack-request-manager.cjs"
 cp "$root/scripts/bedrock-recipe-catalog.cjs" "$temp/bedrock-recipe-catalog.cjs"
@@ -251,6 +255,10 @@ cp "$root/scripts/bedrock-odyssey-bedrock-adapter.cjs" "$temp/bedrock-odyssey-be
 cp "$root/scripts/bedrock-odyssey-observation-executor.cjs" "$temp/bedrock-odyssey-observation-executor.cjs"
 cp "$root/scripts/bedrock-odyssey-skill-catalog.json" "$temp/bedrock-odyssey-skill-catalog.json"
 cp "$root/scripts/bedrock-first-person-scene.cjs" "$temp/bedrock-first-person-scene.cjs"
+# Preserve the modular runtime's relative imports inside the flattened APK bundle.
+mkdir -p "$temp/runtime" "$temp/vendor"
+cp -R "$root/scripts/runtime/bedrock" "$temp/runtime/bedrock"
+cp -R "$root/vendor/bedboo-agent" "$temp/vendor/bedboo-agent"
 # Keep original TypeScript gameplay modules as ESM with their relative imports.
 # This folder is staged inside the SAME Node Bedrock session bundle.
 mkdir -p "$temp/gameplay"
@@ -287,7 +295,7 @@ runtime = Path(sys.argv[1])
 zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
-        "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
+        "node-smoke.cjs", "xbox-auth-probe.cjs", "android-xbox-auth-probe.cjs", "friend-world-session.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-movement-controller.cjs", "bedrock-collision-data.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-terrain-check.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json", "bedrock-vanilla-12660-hashed-states.json",
@@ -297,6 +305,12 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     ):
         archive.write(runtime / entrypoint, entrypoint)
     for source in sorted((runtime / "vendor" / "bedboo-physics").rglob("*")):
+        if source.is_file():
+            archive.write(source, source.relative_to(runtime))
+    for source in sorted((runtime / "vendor" / "bedboo-agent").rglob("*")):
+        if source.is_file():
+            archive.write(source, source.relative_to(runtime))
+    for source in sorted((runtime / "runtime" / "bedrock").rglob("*")):
         if source.is_file():
             archive.write(source, source.relative_to(runtime))
     for source in sorted((runtime / "bedrock-physics-data").rglob("*")):
@@ -312,7 +326,34 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
             archive.write(source, source.relative_to(runtime))
 
 with ZipFile(zip_path) as archive:
-    required = {"bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs"}
+    required = {
+        "android-xbox-auth-probe.cjs", "bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs",
+        "runtime/bedrock/index.cjs",
+        "runtime/bedrock/events/event-bus.cjs",
+        "runtime/bedrock/adapters/packet-normalizer.cjs",
+        "runtime/bedrock/world/knowledge-store.cjs",
+        "runtime/bedrock/registry/adapter.cjs",
+        "runtime/bedrock/navigation/voxel.cjs",
+        "runtime/bedrock/navigation/goals.cjs",
+        "runtime/bedrock/plugins/registry.cjs",
+        "runtime/bedrock/protocol/differential.cjs",
+        "runtime/bedrock/sources/catalog.cjs",
+        "runtime/bedrock/tests/platform-integration.test.cjs",
+        "runtime/bedrock/actions/envelope.cjs",
+        "runtime/bedrock/actions/outcomes.cjs",
+        "runtime/bedrock/inventory/containers.cjs",
+        "runtime/bedrock/navigation/astar.cjs",
+        "runtime/bedrock/planning/goap.cjs",
+        "runtime/bedrock/planning/obtain.cjs",
+        "runtime/bedrock/safety/policy.cjs",
+        "runtime/bedrock/tasks/runner.cjs",
+        "runtime/bedrock/learning/curriculum.cjs",
+        "runtime/bedrock/diagnostics/recorder.cjs",
+        "vendor/bedboo-agent/planner.cjs",
+        "vendor/bedboo-agent/COPYING",
+        "vendor/bedboo-agent/COPYING.LESSER",
+        "vendor/bedboo-agent/NOTICE.md",
+    }
     missing = required.difference(archive.namelist())
     if missing:
         raise SystemExit(f"Android Bedrock SDK archive missing required modules: {sorted(missing)}")
@@ -365,6 +406,8 @@ require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
 console.log('Verified Bedrock 1.26.60 collision geometry and physics engine');
 JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
+# Tests execute from verify/, so provide their expected source-module basename there too.
+cp "$temp/friend-world-session.cjs" "$temp/verify/android-friend-world-session.cjs"
 cp "$root/scripts/bedrock-movement-controller.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-manual-terrain.test.cjs" "$temp/verify/"

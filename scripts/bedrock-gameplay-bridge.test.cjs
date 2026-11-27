@@ -401,6 +401,33 @@ test('respawn waits four seconds before the first Bedrock handshake and accepts 
   bridge.stop();
 });
 
+test('manual immediate respawn bypasses retry delay but preserves the server handshake', () => {
+  let now = 1000;
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, { clock: () => now }).start();
+  initialized(client, bridge);
+  client.emit('update_attributes', { runtime_entity_id: 123n,
+    attributes: [{ name: 'minecraft:health', current: 0 }] });
+
+  const early = bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'manual-respawn-early', action: 'immediate_respawn' });
+  assert.deepEqual(early, { status: 'rejected', reason: 'server_respawn_position_unavailable' });
+  assert.equal(client.sent.length, 0);
+
+  client.emit('respawn', { runtime_entity_id: 123n, state: 0, position: origin });
+  const requested = bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'manual-respawn-now', action: 'immediate_respawn' });
+  assert.deepEqual(requested, { status: 'ok', reason: 'immediate_respawn_requested' });
+  assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn']);
+  assert.equal(client.sent[0].value.state, 2);
+
+  // The server must still confirm its spawned state before PlayerAction(respawn).
+  client.emit('respawn', { runtime_entity_id: 123n, state: 1, position: origin });
+  assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn', 'player_action']);
+  assert.equal(client.sent[1].value.action, 'respawn');
+  bridge.stop();
+});
+
 test('respawn recovery handles repeated deaths and runtime ID changes without a lifetime cap', () => {
   let now = 1000;
   const client = new Client();

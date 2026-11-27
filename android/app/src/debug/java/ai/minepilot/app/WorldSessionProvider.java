@@ -625,8 +625,13 @@ public final class WorldSessionProvider extends ContentProvider {
                 }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
-                    result.putString("last_command", command.optString("status", "")
-                            + ": " + command.optString("reason", ""));
+                    String commandStatus = command.optString("status", "");
+                    String commandReason = command.optString("reason", "");
+                    result.putString("last_command", commandStatus + ": " + commandReason);
+                    if (commandStatus.matches("[a-z_]{1,32}"))
+                        result.putString("last_command_status", commandStatus);
+                    if (commandReason.matches("[a-z_]{1,80}"))
+                        result.putString("last_command_reason", commandReason);
                     String executionStage = command.optString("executionStage", "");
                     if (executionStage.matches("[a-z_]{1,64}"))
                         result.putString("last_command_execution_stage", executionStage);
@@ -683,7 +688,8 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"review_checkpoint".equals(action) && !"advisor_mode".equals(action) &&
                 !"advisor_review".equals(action) &&
                 !"stop_movement".equals(action) && !"manual_move".equals(action) &&
-                !"manual_stop".equals(action) && !"verified_step".equals(action) &&
+                !"manual_stop".equals(action) && !"immediate_respawn".equals(action) &&
+                !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
                 !"experimental_break".equals(action) && !"learning_start".equals(action) && !"native_skill_start".equals(action) &&

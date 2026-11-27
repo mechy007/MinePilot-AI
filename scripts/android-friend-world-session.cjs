@@ -6,7 +6,7 @@ const os = require('node:os');
 const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
-const { accountWriter, runtimeLogger, verifyXbox } = require('./xbox-auth-probe.cjs');
+const { accountWriter, runtimeLogger, verifyXbox } = require('./android-xbox-auth-probe.cjs');
 const { BotAwareness } = require('./bot-awareness.mjs');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { BedrockMovementController } = require('./bedrock-movement-controller.cjs');
@@ -62,16 +62,19 @@ function safeJoinFailure(error) {
   if (/timed out|timeout/i.test(message)) return { reason: 'timeout' };
   const code = error?.cause?.code ?? error?.code;
   if (['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH',
-    'ECONNRESET', 'ECONNREFUSED'].includes(code)) return { reason: 'network' };
+    'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKETTIMEDOUT',
+    'ERR_SOCKET_TIMEOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(code)) return { reason: 'network' };
   if (/signalling|websocket|webrtc|\bice\b/i.test(message)) return { reason: 'transport' };
   return {};
 }
 
 function shouldRetry(result) {
-  return result.phase === 'failed' &&
-    ['nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
-    (['timeout', 'network'].includes(result.reason) ||
-      (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
+  if (result?.phase !== 'failed') return false;
+  const transient = ['timeout', 'network'].includes(result.reason) ||
+    [408, 425, 429, 500, 502, 503, 504].includes(result.httpStatus);
+  if (result.stage === 'xbox_membership') return transient;
+  return ['nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
+    (transient || (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
 }
 
 function bedrockDisconnectCode(reason) {
@@ -130,6 +133,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       signal.removeEventListener('abort', stop);
       client.removeListener('close', closed);
       client.removeListener('start_game', onStartGame);
+      client.removeListener('respawn', onRespawn);
       client.removeListener('update_attributes', onAttributes);
       client.removeListener('spawn', onSpawn);
       client.removeListener('level_chunk', onChunk);
@@ -163,6 +167,14 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       heartbeat = setInterval(report, 1000);
     };
     const onStartGame = packet => { awareness.start(packet); startGame = true; checkSpawn(); };
+    // The server may assign a new player runtime ID after a death. Re-anchor
+    // vitals only when the respawn packet confirms the new spawned player;
+    // SearchingForSpawn packets must not clear the current death assessment.
+    const onRespawn = packet => {
+      const runtimeId = packet?.runtime_entity_id;
+      if (packet?.state === 1 && runtimeId != null && String(runtimeId) !== '0')
+        awareness.start(packet);
+    };
     const onAttributes = packet => awareness.update(packet);
     const onSpawn = () => { spawn = true; checkSpawn(); };
     const onChunk = () => { chunks = Math.min(chunks + 1, Number.MAX_SAFE_INTEGER); };
@@ -190,6 +202,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     client.once('join', onJoin);
     client.once('kick', onKick);
     client.once('start_game', onStartGame);
+    client.on('respawn', onRespawn);
     client.on('update_attributes', onAttributes);
     client.once('spawn', onSpawn);
     client.on('level_chunk', onChunk);
@@ -334,4 +347,4 @@ if (require.main === module) {
     .finally(() => clearInterval(stop));
 }
 
-module.exports = { androidNetworkInterfaces, observeSession, run, validateOwner };
+module.exports = { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner };

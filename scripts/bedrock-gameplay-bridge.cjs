@@ -15,11 +15,12 @@ const { BedrockRecipeCatalog, sumItem } = require('./bedrock-recipe-catalog.cjs'
 const { buildFirstPersonScene } = require('./bedrock-first-person-scene.cjs');
 const { BedrockTerrainCheck } = require('./bedrock-terrain-check.cjs');
 const { gameplaySkillManifest, tickLearningEngine, startLearningTask, stopLearningTask, startLocalAutopilot, stopLocalAutopilot, proposeLearningSkill, learningEngineFor, evaluateCapabilities, startBedrockNativeSkill } = require('./bedrock-skill-manifest.cjs');
+const { createRuntimeExtensions } = require('./runtime/bedrock/index.cjs');
 
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'immediate_respawn', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute', 'plan_obtain']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -128,6 +129,7 @@ class BedrockGameplayBridge {
       isEnabled: () => this.itemStackNetManager === true, timeoutMs: 5000
     });
     this.recipeCatalog = options.recipeCatalog ?? new BedrockRecipeCatalog({ clock: this.clock });
+    this.runtimeExtensions = options.runtimeExtensions ?? createRuntimeExtensions({ clock: this.clock });
     this.pendingCraft = null;
     this.lastCraft = null;
     this.selectedHotbarSlot = null;
@@ -152,8 +154,19 @@ class BedrockGameplayBridge {
     this.listeners = [];
   }
   bind(event, callback) {
-    this.client.on(event, callback);
-    this.listeners.push([event, callback]);
+    // Existing handler remains authoritative; extensions only see safe projections.
+    const wrapped = payload => {
+      try { callback(payload); }
+      finally {
+        try { this.runtimeExtensions?.observePacket?.(event, payload, this); }
+        catch {
+          // Auxiliary integrations must never interrupt the authenticated session.
+          this.runtimeExtensions?.recordSystem?.('packet_projection_error', { event });
+        }
+      }
+    };
+    this.client.on(event, wrapped);
+    this.listeners.push([event, wrapped]);
   }
   start() {
     if (this.closed || this.watch || this.listeners.length) throw new Error('Bridge already used');
@@ -440,6 +453,27 @@ class BedrockGameplayBridge {
     if (recovery.state === 'respawn_action_sent' && now >= recovery.nextActionAt)
       return this.sendRespawnAction(position);
     return false;
+  }
+  requestImmediateRespawn() {
+    const recovery = this.respawnRecovery;
+    if (this.closed) return { status: 'rejected', reason: 'session_closed' };
+    if (recovery.state === 'alive')
+      return { status: 'rejected', reason: 'bot_not_dead' };
+    if (!finitePosition(recovery.position))
+      return { status: 'rejected', reason: 'server_respawn_position_unavailable' };
+    if (recovery.serverState !== 0 && recovery.serverState !== 1)
+      return { status: 'rejected', reason: 'waiting_for_server_respawn' };
+    const now = this.clock();
+    if (!Number.isFinite(now))
+      return { status: 'rejected', reason: 'respawn_clock_unavailable' };
+    // The manual action bypasses only the retry timer. It still follows the
+    // server's current respawn state and uses the normal Bedrock handshake.
+    recovery.firstRequestAt = now;
+    recovery.nextActionAt = now;
+    const sent = this.tickRespawnRecovery();
+    return sent
+      ? { status: 'ok', reason: 'immediate_respawn_requested' }
+      : { status: 'rejected', reason: recovery.error ?? 'respawn_not_ready' };
   }
   restoreRespawnTask(task) {
     const recovery = this.respawnRecovery;
@@ -1094,6 +1128,15 @@ class BedrockGameplayBridge {
     this.receivedChunks.clear();
     this.subchunkRequestKeys.clear();
     this.subchunkPollingModes.clear();
+    this.subchunkRequestsSent = 0;
+    this.subchunksRequested = 0;
+    this.subchunkRequestErrors = 0;
+    this.subchunkResponsePackets = 0;
+    this.subchunkResponseEntries = 0;
+    this.subchunkResponseSuccesses = 0;
+    this.subchunkResponseAllAir = 0;
+    this.subchunkResponseFailures = 0;
+    this.subchunkLastResponse = null;
     this.players.clear();
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
     else this.movement?.stop();
@@ -1289,6 +1332,7 @@ class BedrockGameplayBridge {
       ...(this.layerSeven ? { layerSeven: this.layerSeven.snapshot(this.advisorWorld()) } : {}),
       ...(this.layerEight ? { layerEight: this.layerEight.assess(this.readinessInput()) } : {}),
       ...(this.addonNavigation ? { addonNavigation: this.lastAddonNavigationSnapshot ?? this.addonNavigation.snapshot?.() ?? null } : {}),
+      runtimeExtensions: this.runtimeExtensions?.snapshot?.() ?? { enabled: false },
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -1308,13 +1352,19 @@ class BedrockGameplayBridge {
     // Stop, status and disabling suggestions remain possible when stale.
     if (this.layerEight && [
       'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food',
-      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start', 'native_skill_start'
+      'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'learning_start', 'native_skill_start', 'plan_obtain'
     ].includes(raw.action)) {
       const preflight = this.layerEight.allowPreview(this.readinessInput());
       if (!preflight.allowed)
         return { status: 'rejected', reason: preflight.reason };
     }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if (raw.action === 'immediate_respawn') return this.requestImmediateRespawn();
+    if (raw.action === 'plan_obtain') {
+      if (typeof raw.itemName !== 'string') return { status: 'rejected', reason: 'item_name_required' };
+      return this.runtimeExtensions?.planObtain?.(this, raw.itemName, raw.count) ??
+        { status: 'blocked', reason: 'obtain_planner_unavailable', executable: false };
+    }
     if (raw.action === 'odyssey_observe') {
       if (raw.confirmed !== true) return { status: 'rejected', reason: 'confirmation_required' };
       if (typeof raw.primitive !== 'string') return { status: 'rejected', reason: 'primitive_required' };
@@ -1593,6 +1643,18 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: 'autonomous_controller_busy' };
       if (!this.movement || typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
+      const envelope = this.runtimeExtensions?.envelope?.evaluate?.('manual_move', {
+        confirmed: raw.confirmed === true, worldReady: this.spawned === true,
+        sessionClosed: this.closed,
+        freshPosition: this.position !== null && this.lastServerPositionAt !== null &&
+          this.clock() >= this.lastServerPositionAt &&
+          (this.clock() - this.lastServerPositionAt <= 7000 || this.isIdlePositionAnchor()),
+        freshObservation: this.position !== null && this.dimension !== null,
+        safetyHold: this.layerOne?.snapshot?.()?.safetyHold === true || this.layerFour?.critical === true,
+        controllerBusy: this.gameplayAgent?.snapshot?.()?.active === true || this.autonomy?.snapshot?.()?.active === true,
+        executorAvailable: typeof this.movement?.runManualHold === 'function', capabilityAvailable: true
+      });
+      if (envelope && !envelope.allowed) return { status: 'rejected', reason: envelope.reason };
       // Every refresh updates the physics controller. One server-tick stream
       // carries simulated state until release or the UI keepalive expires.
       return this.movement.runManualHold(this, {
@@ -1854,6 +1916,7 @@ class BedrockGameplayBridge {
     // agent_start performs its own tick before replacing the current task.
     // All other commands share the normal single 100 ms runtime tick.
     const result = this.execute(command);
+    this.runtimeExtensions?.recordCommand?.(command, result);
     const completedPlacement = command?.action === 'odyssey_execute' && command?.primitive === 'placeBlock' &&
       this.lastBlockPlacement?.requestId === command?.requestId ? this.lastBlockPlacement : null;
     const receipt = {
@@ -1864,6 +1927,8 @@ class BedrockGameplayBridge {
       reason: completedPlacement?.reason ?? result.reason,
       dispatchAccepted: result.status === 'accepted' || result.status === 'ok',
       executionStage: result.status === 'rejected' ? 'rejected'
+        : result.status === 'preview' ? 'preview_only'
+        : result.status === 'blocked' ? 'blocked'
         : command?.action === 'manual_move' ? 'movement_controls_applied'
         : result.status === 'accepted' ? 'dispatched' : 'completed',
       ...(command?.action === 'manual_move' ? {
@@ -1925,6 +1990,7 @@ class BedrockGameplayBridge {
     this.listeners = [];
     this.players.clear();
     this.receivedChunks.clear();
+    this.runtimeExtensions?.close?.('session_closed');
   }
 }
 

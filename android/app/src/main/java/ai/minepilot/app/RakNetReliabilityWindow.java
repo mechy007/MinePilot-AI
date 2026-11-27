@@ -11,6 +11,7 @@ public final class RakNetReliabilityWindow {
     public static final int MASK = 0xFFFFFF;
     public static final int HALF = 0x800000;
     public static final int MAX_PENDING = 512;
+    public static final int MAX_ATTEMPTS = 5;
     private final Map<Integer, Pending> pending = new HashMap<>();
     private int nextSequence;
     private int highestReceived = -1;
@@ -45,7 +46,13 @@ public final class RakNetReliabilityWindow {
     public synchronized Pending negativeAcknowledge(int sequence, long nowMillis) {
         if (!valid(sequence) || nowMillis < 0) return null;
         Pending previous = pending.get(sequence);
-        if (previous == null || previous.attempts >= 5) return null;
+        if (previous == null) return null;
+        if (previous.attempts >= MAX_ATTEMPTS) {
+            // A datagram that exhausted all retries is terminal. Keep it in
+            // neither the retransmit queue nor the capacity budget.
+            pending.remove(sequence);
+            return null;
+        }
         Pending retry = new Pending(sequence, previous.packet, nowMillis, previous.attempts + 1);
         pending.put(sequence, retry);
         return retry;
