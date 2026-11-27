@@ -30,10 +30,10 @@ function createRuntimeExtensions(options={}) {
  const clock=options.clock??Date.now;
  const envelope=new ActionEnvelope(),outcomes=new OutcomeVerifier({clock}),obtain=new BedrockObtainPlanner({clock});
  const safety=new SurvivalPolicy(),tasks=new BoundedTaskRunner({clock}),curriculum=new VerifiedCurriculum({clock});
- const capabilities=new CapabilityRecoveryEngine({clock}),stuckRecovery=new StuckRecovery({clock}),perception=createWorldPerception(world,{clock});
- const taskExecution=new TaskExecutionCoordinator({runner:tasks,capabilities,adapter:options.taskAdapter});
  const recorder=new RuntimeRecorder({clock}),events=new RuntimeEventBus({clock});
  const world=new WorldKnowledgeStore({clock,...(options.worldLimits??{})});
+ const capabilities=new CapabilityRecoveryEngine({clock}),stuckRecovery=new StuckRecovery({clock}),perception=createWorldPerception(world,{clock});
+ const taskExecution=new TaskExecutionCoordinator({runner:tasks,capabilities,adapter:options.taskAdapter});
  const plugins=new ReadOnlyPluginRegistry(options.pluginLimits);
  let closed=false;plugins.start();
  function observePacket(name,packet,bridge) {
