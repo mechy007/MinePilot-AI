@@ -1532,3 +1532,26 @@ test('outbound Bedrock packets are counted and the original queue is restored on
   bridge.stop();
   assert.equal(client.queue, originalQueue);
 });
+
+
+test('gameplay command exceptions are retained in diagnostic history before propagating', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    movement: { capability() { return 'ready'; },
+      runManualHold() { throw new TypeError('synthetic movement failure'); },
+      releaseManual() {}, stop() {}, stopPresence() {}, snapshot() { return {}; } }
+  }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  assert.throws(() => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'manual-throws',
+    action: 'manual_move', confirmed: true, mode: 'vector',
+    ticks: 8, motionX: 0.2, motionY: 0.8
+  }), /synthetic movement failure/);
+  const last = bridge.snapshot().commandTelemetry.last;
+  assert.equal(last.action, 'manual_move');
+  assert.equal(last.status, 'failed');
+  assert.equal(last.reason, 'command_exception');
+  assert.equal(last.errorName, 'TypeError');
+  bridge.stop();
+});
