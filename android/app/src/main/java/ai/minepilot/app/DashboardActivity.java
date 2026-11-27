@@ -829,10 +829,16 @@ public final class DashboardActivity extends Activity {
             }
             String runtimeCapability = current.getString("runtime_capability_state", "");
             if (!runtimeCapability.isEmpty())
-                message += "\nRuntime assessment: " + runtimeCapability.replace('_', ' ');
+                message += "\nSystem capability assessment: " + runtimeCapability.replace('_', ' ');
             String[] missingCapabilities = current.getStringArray("runtime_capability_missing");
             if (missingCapabilities != null && missingCapabilities.length > 0)
-                message += "\nMissing evidence: " + String.join(", ", missingCapabilities).replace('_', ' ');
+                message += "\nNot ready for task execution: " + String.join(", ", missingCapabilities).replace('_', ' ');
+            int queuedFrames = current.getInt("movement_frames", 0);
+            if (queuedFrames > 0) {
+                String inputFlags = current.getString("movement_last_input_flags", "");
+                message += "\nInput frames queued: " + queuedFrames;
+                if (!inputFlags.isEmpty()) message += " · last flags: " + inputFlags.replace('_', ' ');
+            }
             if (current.getBoolean("movement_stuck_suspected", false)) {
                 String stuckReason = current.getString("movement_stuck_reason", "movement_input_without_server_progress");
                 message += "\nPossible stuck state: " + stuckReason.replace('_', ' ') +
