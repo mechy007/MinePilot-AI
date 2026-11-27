@@ -1482,3 +1482,32 @@ test('movement presence retries after spawn when terrain was not ready on the fi
   assert.equal(bridge.snapshot().movementPresence.state, 'active');
   bridge.stop();
 });
+
+
+test('session diagnostics retain bounded packet and command summaries without raw identities', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    movement: { capability() { return 'unavailable'; }, stop() {}, stopPresence() {},
+      snapshot() { return { state: 'idle' }; } }
+  }).start();
+  client.emit('start_game', { ...start, player_position: { x: 8.5, y: 64, z: 10.5 },
+    xuid: 'must-not-be-retained', gamertag: 'must-not-be-retained' });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 2, z: -3, dimension: 0, ownerXuid: 'private' });
+  const result = bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'diagnostic-status', action: 'status' });
+  assert.equal(result.status, 'ok');
+  const snapshot = bridge.snapshot();
+  assert.equal(snapshot.packetTelemetry.received >= 3, true);
+  assert.equal(snapshot.packetTelemetry.byType.start_game, 1);
+  assert.equal(snapshot.packetTelemetry.byType.spawn, 1);
+  assert.equal(snapshot.packetTelemetry.byType.level_chunk, 1);
+  assert.equal(snapshot.packetTelemetry.lastType, 'level_chunk');
+  assert.deepEqual(snapshot.packetTelemetry.lastSummary, { x: 2, z: -3, dimension: 0 });
+  assert.equal(JSON.stringify(snapshot).includes('must-not-be-retained'), false);
+  assert.equal(JSON.stringify(snapshot).includes('private'), false);
+  assert.equal(snapshot.commandTelemetry.received, 1);
+  assert.equal(snapshot.commandTelemetry.last.action, 'status');
+  assert.equal(snapshot.commandTelemetry.last.status, 'ok');
+  bridge.stop();
+});
