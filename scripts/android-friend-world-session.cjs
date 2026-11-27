@@ -62,16 +62,19 @@ function safeJoinFailure(error) {
   if (/timed out|timeout/i.test(message)) return { reason: 'timeout' };
   const code = error?.cause?.code ?? error?.code;
   if (['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH',
-    'ECONNRESET', 'ECONNREFUSED'].includes(code)) return { reason: 'network' };
+    'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKETTIMEDOUT',
+    'ERR_SOCKET_TIMEOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(code)) return { reason: 'network' };
   if (/signalling|websocket|webrtc|\bice\b/i.test(message)) return { reason: 'transport' };
   return {};
 }
 
 function shouldRetry(result) {
-  return result.phase === 'failed' &&
-    ['nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
-    (['timeout', 'network'].includes(result.reason) ||
-      (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
+  if (result?.phase !== 'failed') return false;
+  const transient = ['timeout', 'network'].includes(result.reason) ||
+    [408, 425, 429, 500, 502, 503, 504].includes(result.httpStatus);
+  if (result.stage === 'xbox_membership') return transient;
+  return ['nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
+    (transient || (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
 }
 
 function bedrockDisconnectCode(reason) {
@@ -344,4 +347,4 @@ if (require.main === module) {
     .finally(() => clearInterval(stop));
 }
 
-module.exports = { androidNetworkInterfaces, observeSession, run, validateOwner };
+module.exports = { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner };
