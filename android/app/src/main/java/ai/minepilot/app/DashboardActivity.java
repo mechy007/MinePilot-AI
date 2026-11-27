@@ -94,6 +94,7 @@ public final class DashboardActivity extends Activity {
     private Button advisorReview;
     private Button stopWorld;
     private Button joinFriend;
+    private Button immediateRespawnButton;
     private boolean failuresOnly;
     private String worldSessionId = "";
     private boolean dashboardVisible;
@@ -394,6 +395,7 @@ public final class DashboardActivity extends Activity {
         xuidInput = null;
         currentTab = tab;
         manualControlStatus = null;
+        immediateRespawnButton = null;
         manualMovementReady = false;
         manualQueueNoticeShown = false;
         DashboardShell shell = new DashboardShell(this, tab, this::show);
@@ -491,6 +493,7 @@ public final class DashboardActivity extends Activity {
         manualControlStatus = text("Checking movement and connection readiness…", 12, MUTED, false);
         manualControlStatus.setPadding(0, dp(9), 0, 0);
         session.addView(manualControlStatus);
+        addImmediateRespawnButton(session);
         body.addView(session, panelLayout(10));
 
         LinearLayout vitals = new LinearLayout(this);
@@ -523,6 +526,7 @@ public final class DashboardActivity extends Activity {
         session.addView(worldState);
         worldDetail = text("No active connection", 13, MUTED, false);
         session.addView(worldDetail);
+        addImmediateRespawnButton(session);
         body.addView(session, panelLayout(10));
 
         LinearLayout vitals = new LinearLayout(this);
@@ -702,6 +706,15 @@ public final class DashboardActivity extends Activity {
         refreshCommandCenter();
     }
 
+    private void addImmediateRespawnButton(LinearLayout parent) {
+        immediateRespawnButton = actionButton("Immediate Respawn", true,
+                () -> requestGameplay("immediate_respawn", false));
+        immediateRespawnButton.setVisibility(View.GONE);
+        LinearLayout.LayoutParams params = panelLayout(0);
+        params.topMargin = dp(10);
+        parent.addView(immediateRespawnButton, params);
+    }
+
     private TextView addVital(LinearLayout row, String title, int gap) {
         LinearLayout tile = card();
         tile.addView(text(title, 13, MUTED, true));
@@ -757,6 +770,8 @@ public final class DashboardActivity extends Activity {
         boolean dead = WorldSessionStatus.isDead(
                 current.getString("life_state", ""), current.getString("assessment", ""));
         boolean connectedAndAlive = playing && !dead && !worldSessionId.isEmpty();
+        if (immediateRespawnButton != null)
+            immediateRespawnButton.setVisibility(dead ? View.VISIBLE : View.GONE);
         manualMovementReady = playing && current.getBoolean("movement_ready", false);
         // Keep touch input responsive while terrain is loading. The runtime still
         // enforces server-authority, collision and survival gates before moving.
@@ -978,6 +993,8 @@ public final class DashboardActivity extends Activity {
                 current.getString("life_state", ""), current.getString("assessment", ""));
         boolean movementReady = playing && current.getBoolean("movement_ready", false);
         boolean connectedAndAlive = playing && !dead && !worldSessionId.isEmpty();
+        if (immediateRespawnButton != null)
+            immediateRespawnButton.setVisibility(dead ? View.VISIBLE : View.GONE);
         manualMovementReady = movementReady;
         manualControlsEnabled = connectedAndAlive;
         if (manualControlPanel != null) manualControlPanel.setControlEnabled(connectedAndAlive);
