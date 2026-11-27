@@ -20,7 +20,7 @@ const { createRuntimeExtensions } = require('./runtime/bedrock/index.cjs');
 const MAX_COMMAND_BYTES = 2048;
 const MAX_VISIBLE_PLAYERS = 64;
 const MAX_CHUNKS = 128;
-const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute', 'plan_obtain']);
+const COMMAND_ACTIONS = new Set(['status', 'inspect', 'wait', 'stay', 'set_home', 'plan_follow', 'plan_return', 'plan_collect', 'inspect_block', 'plan_food', 'plan_shelter', 'plan_craft_planks', 'plan_workflow', 'review_checkpoint', 'advisor_mode', 'advisor_review', 'stop_movement', 'manual_move', 'manual_stop', 'immediate_respawn', 'autonomy_follow', 'follow_player', 'autonomy_stop', 'agent_start', 'agent_stop', 'verified_step', 'experimental_break', 'learning_start', 'native_skill_start', 'learning_stop', 'learning_propose', 'learning_autopilot_start', 'learning_autopilot_stop', 'odyssey_observe', 'odyssey_execute', 'plan_obtain']);
 const finitePosition = value => value && typeof value === 'object' &&
   ['x', 'y', 'z'].every(key => typeof value[key] === 'number' &&
     Number.isFinite(value[key]) && Math.abs(value[key]) <= 30_000_000);
@@ -453,6 +453,27 @@ class BedrockGameplayBridge {
     if (recovery.state === 'respawn_action_sent' && now >= recovery.nextActionAt)
       return this.sendRespawnAction(position);
     return false;
+  }
+  requestImmediateRespawn() {
+    const recovery = this.respawnRecovery;
+    if (this.closed) return { status: 'rejected', reason: 'session_closed' };
+    if (recovery.state === 'alive')
+      return { status: 'rejected', reason: 'bot_not_dead' };
+    if (!finitePosition(recovery.position))
+      return { status: 'rejected', reason: 'server_respawn_position_unavailable' };
+    if (recovery.serverState !== 0 && recovery.serverState !== 1)
+      return { status: 'rejected', reason: 'waiting_for_server_respawn' };
+    const now = this.clock();
+    if (!Number.isFinite(now))
+      return { status: 'rejected', reason: 'respawn_clock_unavailable' };
+    // The manual action bypasses only the retry timer. It still follows the
+    // server's current respawn state and uses the normal Bedrock handshake.
+    recovery.firstRequestAt = now;
+    recovery.nextActionAt = now;
+    const sent = this.tickRespawnRecovery();
+    return sent
+      ? { status: 'ok', reason: 'immediate_respawn_requested' }
+      : { status: 'rejected', reason: recovery.error ?? 'respawn_not_ready' };
   }
   restoreRespawnTask(task) {
     const recovery = this.respawnRecovery;
@@ -1338,6 +1359,7 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: preflight.reason };
     }
     if (raw.action === 'status') return { status: 'ok', reason: 'snapshot_available' };
+    if (raw.action === 'immediate_respawn') return this.requestImmediateRespawn();
     if (raw.action === 'plan_obtain') {
       if (typeof raw.itemName !== 'string') return { status: 'rejected', reason: 'item_name_required' };
       return this.runtimeExtensions?.planObtain?.(this, raw.itemName, raw.count) ??
