@@ -450,6 +450,21 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("movement_frames", Math.max(0, movementSystem.optInt("framesSent", 0)));
                     result.putInt("movement_corrections", Math.max(0, movementSystem.optInt("corrections", 0)));
                     result.putBoolean("movement_unconfirmed", movementSystem.optBoolean("unconfirmedMovement", false));
+                    JSONObject lastInput = movementSystem.optJSONObject("lastInput");
+                    if (lastInput != null) {
+                        String tick = lastInput.optString("tick", "");
+                        if (tick.matches("[0-9]{1,24}"))
+                            result.putString("movement_last_input_tick", tick);
+                        org.json.JSONArray inputFlags = lastInput.optJSONArray("input");
+                        if (inputFlags != null) {
+                            java.util.ArrayList<String> flags = new java.util.ArrayList<>();
+                            for (int i = 0; i < Math.min(10, inputFlags.length()); i++) {
+                                String flag = inputFlags.optString(i, "");
+                                if (flag.matches("[a-z_]{1,64}")) flags.add(flag);
+                            }
+                            result.putString("movement_last_input_flags", String.join(", ", flags));
+                        }
+                    }
                     JSONObject terrain = movementSystem.optJSONObject("terrain");
                     result.putBoolean("movement_terrain_ready", terrain != null && !terrain.optBoolean("unknown", true));
                     if (terrain != null) {
