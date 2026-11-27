@@ -245,6 +245,7 @@ async function joinFriendWorld({
       signal: joinSignal,
       timeoutMs: nonceTimeoutMs
     });
+    if (!nonce) publish({ phase: 'connection', stage: 'world_nonce', reason: 'nonce_unavailable' });
 
     session = createManagedSession({
       xbox, world, rta, subscription, controller, initialSession: sessionDocument,
