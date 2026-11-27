@@ -827,6 +827,17 @@ public final class DashboardActivity extends Activity {
                 message += "\nLocal input: " + (inputState.isEmpty() ? "waiting" : inputState.replace('_', ' '));
                 if (!inputReason.isEmpty()) message += " · " + inputReason.replace('_', ' ');
             }
+            String runtimeCapability = current.getString("runtime_capability_state", "");
+            if (!runtimeCapability.isEmpty())
+                message += "\nRuntime assessment: " + runtimeCapability.replace('_', ' ');
+            String[] missingCapabilities = current.getStringArray("runtime_capability_missing");
+            if (missingCapabilities != null && missingCapabilities.length > 0)
+                message += "\nMissing evidence: " + String.join(", ", missingCapabilities).replace('_', ' ');
+            if (current.getBoolean("movement_stuck_suspected", false)) {
+                String stuckReason = current.getString("movement_stuck_reason", "movement_input_without_server_progress");
+                message += "\nPossible stuck state: " + stuckReason.replace('_', ' ') +
+                        " · stop/reorient/repath suggested; no automatic movement issued.";
+            }
             String lastStatus = current.getString("last_command_status", "");
             String lastReason = current.getString("last_command_reason", "");
             if ("rejected".equals(lastStatus) && !lastReason.isEmpty() && connectedAndAlive) {
