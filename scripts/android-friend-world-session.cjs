@@ -404,6 +404,7 @@ async function run({
           connectTimeout: 45000,
           nethernet: {
             networkId: prepared.peerId,
+            _peerPlayerId: prepared.signallingProtocol === 'jsonrpc' ? prepared.peerId.toLowerCase() : undefined,
             webrtcBackend: 'werift',
             signalling: 'services',
             _signallingProtocol: prepared.signallingProtocol,
