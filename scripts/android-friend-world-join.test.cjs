@@ -49,7 +49,7 @@ function handle(connections = [
 
 test('selects JSON-RPC PmsgId ahead of legacy NetherNet entries', () => {
   assert.deepEqual(selectFriendWorldConnection(handle().customProperties), {
-    connectionType: 7, peerId: PMSG, signallingProtocol: 'jsonrpc'
+    connectionType: 7, networkId: NETWORK, peerId: PMSG, signallingProtocol: 'jsonrpc'
   });
 });
 
@@ -59,7 +59,7 @@ test('falls back to legacy NetherNet ID when a type-7 handle has no valid PmsgId
       { ConnectionType: 7, NetherNetId: NETWORK, PmsgId: 'not-a-guid' },
       { ConnectionType: 3, NetherNetId: '123' }
     ]
-  }), { connectionType: 7, peerId: NETWORK, signallingProtocol: 'legacy' });
+  }), { connectionType: 7, networkId: NETWORK, peerId: NETWORK, signallingProtocol: 'legacy' });
   assert.equal(selectFriendWorldConnection({ SupportedConnections: [
     { ConnectionType: 4, NetherNetId: '123' },
     { ConnectionType: 3, NetherNetId: '0' }
