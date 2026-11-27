@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
-const { androidNetworkInterfaces, observeSession, run, validateOwner } = require('./friend-world-session.cjs');
+const { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner } = require('./android-friend-world-session.cjs');
 const { runtimeLogger } = require('./xbox-auth-probe.cjs');
 
 class Client extends EventEmitter {
@@ -38,6 +38,19 @@ test('runtime logs retain diagnostic codes and omit private data and duplicate h
     { phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37 },
     { phase: 'failed', stage: 'bedrock_login', reason: 'host_disconnect', bedrockCode: 136 }
   ]);
+});
+
+test('retries transient Xbox membership timeouts but not permanent membership failures', () => {
+  assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', reason: 'timeout' }), true);
+  assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', reason: 'network' }), true);
+  for (const httpStatus of [408, 425, 429, 500, 502, 503, 504]) {
+    assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', httpStatus }), true);
+  }
+  for (const httpStatus of [400, 401, 403, 404]) {
+    assert.equal(shouldRetry({ phase: 'failed', stage: 'xbox_membership', httpStatus }), false);
+  }
+  assert.equal(shouldRetry({ phase: 'failed', stage: 'bedrock_login', reason: 'timeout' }), false);
+  assert.equal(shouldRetry({ phase: 'disconnected', stage: 'xbox_membership', reason: 'timeout' }), false);
 });
 
 test('validates the exact owner Xbox ID without converting it to a number', () => {
