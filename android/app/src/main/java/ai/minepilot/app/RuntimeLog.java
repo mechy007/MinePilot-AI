@@ -141,7 +141,7 @@ final class RuntimeLog {
         if (gameplay != null) {
             JSONObject packets = gameplay.optJSONObject("packetTelemetry");
             if (packets != null) {
-                message += "\\nBedrock packets received: " + packets.optLong("received") +
+                message += "\nBedrock packets received: " + packets.optLong("received") +
                         " · handler errors: " + packets.optLong("errors");
                 JSONObject byType = packets.optJSONObject("byType");
                 if (byType != null && byType.length() > 0) {
@@ -152,18 +152,18 @@ final class RuntimeLog {
                         counts.add(key + "=" + byType.optLong(key));
                     }
                     java.util.Collections.sort(counts);
-                    message += "\\nPacket types: " + String.join(", ", counts);
+                    message += "\nPacket types: " + String.join(", ", counts);
                 }
                 String lastType = packets.optString("lastType", "");
-                if (!lastType.isEmpty()) message += "\\nLast packet: " + lastType +
+                if (!lastType.isEmpty()) message += "\nLast packet: " + lastType +
                         " · " + packets.optJSONObject("lastSummary");
                 JSONObject packetError = packets.optJSONObject("lastError");
-                if (packetError != null) message += "\\nLast packet-handler error: " +
+                if (packetError != null) message += "\nLast packet-handler error: " +
                         packetError.optString("event") + " · " + packetError.optString("name");
             }
             JSONObject commands = gameplay.optJSONObject("commandTelemetry");
             if (commands != null) {
-                message += "\\nApp commands received by runtime: " + commands.optLong("received");
+                message += "\nApp commands received by runtime: " + commands.optLong("received");
                 JSONObject byAction = commands.optJSONObject("byAction");
                 if (byAction != null && byAction.length() > 0) {
                     java.util.ArrayList<String> counts = new java.util.ArrayList<>();
@@ -173,30 +173,30 @@ final class RuntimeLog {
                         counts.add(key + "=" + byAction.optLong(key));
                     }
                     java.util.Collections.sort(counts);
-                    message += "\\nCommand actions: " + String.join(", ", counts);
+                    message += "\nCommand actions: " + String.join(", ", counts);
                 }
                 JSONObject last = commands.optJSONObject("last");
-                if (last != null) message += "\\nLast command: " + last.optString("action") +
+                if (last != null) message += "\nLast command: " + last.optString("action") +
                         " → " + last.optString("status") +
                         (last.optString("reason").isEmpty() ? "" : " · " + last.optString("reason")) +
                         " · " + last.optLong("durationMs") + " ms";
             }
             JSONObject movement = gameplay.optJSONObject("movementSystem");
             if (movement != null) {
-                message += "\\nMovement engine: " + movement.optString("state", "unknown") +
+                message += "\nMovement engine: " + movement.optString("state", "unknown") +
                         " · capability " + movement.optString("capability", "unknown") +
                         " · frames sent " + movement.optLong("framesSent") +
                         " · corrections " + movement.optLong("corrections") +
                         " · non-neutral frames " + movement.optLong("nonNeutralFrames");
                 JSONObject lastResult = movement.optJSONObject("lastMovementResult");
-                if (lastResult != null) message += "\\nMovement result: " +
+                if (lastResult != null) message += "\nMovement result: " +
                         lastResult.optString("status") + " · " + lastResult.optString("reason");
                 JSONObject lastInput = movement.optJSONObject("lastInput");
-                if (lastInput != null) message += "\\nLast movement input: " + lastInput;
+                if (lastInput != null) message += "\nLast movement input: " + lastInput;
                 JSONObject lastError = movement.optJSONObject("lastError");
-                if (lastError != null) message += "\\nMovement error: " + lastError;
+                if (lastError != null) message += "\nMovement error: " + lastError;
             }
-            message += "\\nFull sanitized session telemetry:\\n" + gameplay.toString(2);
+            message += "\nFull sanitized session telemetry:\n" + gameplay.toString();
         }
         return message;
     }
