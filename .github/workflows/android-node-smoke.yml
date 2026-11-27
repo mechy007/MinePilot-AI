@@ -41,6 +41,7 @@ on:
       - scripts/bedrock-odyssey-observation-executor.test.cjs
       - 'scripts/android-xbox-auth-probe*.cjs'
       - 'scripts/android-friend-world-session*.cjs'
+      - 'scripts/android-friend-world-session.test.cjs'
       - 'scripts/android-friend-world-join*.cjs'
       - src/connection/prismarine-world-client.ts
       - package.json
