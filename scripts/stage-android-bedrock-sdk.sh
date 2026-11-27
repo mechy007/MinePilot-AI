@@ -218,6 +218,8 @@ curl --fail --location --silent --show-error --retry 2 --max-time 45 \
 echo "70458c05b33622a05e4e2bbc5811f6221e4085003db25292ef122e0c830397a1  $data_notice" | sha256sum --check -
 cp "$root/scripts/android-node-bedrock-smoke.cjs" "$temp/node-smoke.cjs"
 cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
+# The session module uses the source filename; preserve it in the packaged runtime too.
+cp "$temp/xbox-auth-probe.cjs" "$temp/android-xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
 # The staged contract test imports the source filename; keep that alias beside it.
 cp "$temp/friend-world-session.cjs" "$temp/android-friend-world-session.cjs"
@@ -293,7 +295,7 @@ runtime = Path(sys.argv[1])
 zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
-        "node-smoke.cjs", "xbox-auth-probe.cjs", "friend-world-session.cjs",
+        "node-smoke.cjs", "xbox-auth-probe.cjs", "android-xbox-auth-probe.cjs", "friend-world-session.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-movement-controller.cjs", "bedrock-collision-data.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-terrain-check.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json", "bedrock-vanilla-12660-hashed-states.json",
@@ -325,7 +327,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
 
 with ZipFile(zip_path) as archive:
     required = {
-        "bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs",
+        "android-xbox-auth-probe.cjs", "bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs",
         "runtime/bedrock/index.cjs",
         "runtime/bedrock/events/event-bus.cjs",
         "runtime/bedrock/adapters/packet-normalizer.cjs",
