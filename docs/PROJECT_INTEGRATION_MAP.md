@@ -13,6 +13,7 @@ Android UI
   -> WorldSessionProvider
   -> manual-input-state.json
   -> android-friend-world-session.cjs
+  -> android-friend-world-join.cjs (MPSD handle + RTA + nonce + peer route)
   -> one Xbox/NetherNet Bedrock client
   -> BedrockGameplayBridge
   -> BedrockMovementController
@@ -35,7 +36,7 @@ The control loop also retries movement-presence startup when required session me
 
 | Subsystem | Live integration |
 |---|---|
-| Xbox identity and friend-world discovery | `android-friend-world-session.cjs` authenticates, selects the owner world, and creates the one Bedrock client. |
+| Xbox identity and friend-world discovery | `android-friend-world-session.cjs` authenticates; `android-friend-world-join.cjs` selects the exact activity handle, joins MPSD with the live RTA ConnectionId, applies the host nonce and selects the PmsgId/legacy peer route. The resulting membership and RTA subscription are owned by the one Bedrock client. |
 | TypeScript gameplay layers 1–8 | Built from `src/gameplay`, staged into the same Node session bundle, and injected into the bridge as planners, supervisors, or readiness policy. |
 | Bedrock terrain and physics | `BedrockTerrainCache`, the vendored Bedboo-derived physics library, collision data, movement controller, and input queue share one world/dimension. |
 | Inventory and item actions | Inventory packets feed the authoritative ledger; stack requests are serialized through the same Bedrock client and await server responses. |
@@ -55,7 +56,7 @@ The control loop also retries movement-presence startup when required session me
 
 ## Source and test boundaries
 
-- `scripts/android-friend-world-session.cjs` and `scripts/bedrock-gameplay-bridge.cjs` are the embedded Android gameplay path.
+- `scripts/android-friend-world-session.cjs`, `scripts/android-friend-world-join.cjs`, and `scripts/bedrock-gameplay-bridge.cjs` are the embedded Android gameplay path.
 - `src/` contains TypeScript gameplay/connection modules that are built and staged into that same session bundle; it is not a second live client.
 - `vendor/bedboo-physics` is the pinned CommonJS physics implementation used by the Bedrock movement controller.
 - `npm test` builds TypeScript, runs the complete root script test set serially, then runs runtime-extension tests.
