@@ -1446,3 +1446,39 @@ test('manual input mailbox persists held intent until terrain is ready and clear
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test('movement presence retries after spawn when terrain was not ready on the first attempt', () => {
+  let now = 1000;
+  let ready = false;
+  let active = false;
+  let attempts = 0;
+  const movement = {
+    capability: () => active ? 'ready' : 'unavailable',
+    snapshot: () => ({ presenceActive: active }),
+    startPresence: () => {
+      attempts++;
+      if (!ready) return false;
+      active = true;
+      return true;
+    },
+    stop: () => {},
+    stopPresence: () => {},
+    resetSession: () => {}
+  };
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    movement, clock: () => now, terrainCheck: { check: () => ({ state: 'waiting' }) }
+  });
+  bridge.movementAuthority = 1;
+  bridge.onSpawn();
+  assert.equal(attempts, 1);
+  assert.equal(bridge.snapshot().movementPresence.state, 'waiting');
+
+  ready = true;
+  now += 500;
+  bridge.tickControlPlane();
+  assert.equal(attempts, 2);
+  assert.equal(bridge.snapshot().movementPresence.state, 'active');
+  bridge.close();
+});
