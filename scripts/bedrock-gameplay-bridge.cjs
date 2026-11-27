@@ -156,9 +156,12 @@ class BedrockGameplayBridge {
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
     this.lastIntelligenceDecision = null;
     this.lastAddonNavigationSnapshot = null;
-    this.commandTelemetry = { received: 0, byAction: {}, last: null };
+    this.commandTelemetry = { received: 0, byAction: {}, last: null, events: [] };
     this.packetTelemetry = { received: 0, errors: 0, byType: {}, lastType: null,
-      lastAt: null, lastSummary: null, lastError: null };
+      lastAt: null, lastSummary: null, lastError: null, events: [], sent: 0,
+      sentByType: {}, lastSentType: null, lastSentSummary: null, sentErrors: 0 };
+    this.originalQueue = null;
+    this.queueTelemetryWrapper = null;
     this.listeners = [];
   }
   bind(event, callback) {
@@ -190,6 +193,8 @@ class BedrockGameplayBridge {
         if (Array.isArray(payload.attributes)) summary.attributeCount = payload.attributes.length;
       }
       telemetry.lastSummary = summary;
+      telemetry.events.push({ at: telemetry.lastAt, type: event, summary });
+      if (telemetry.events.length > 64) telemetry.events.shift();
       try {
         callback(payload);
       } catch (error) {
@@ -214,6 +219,43 @@ class BedrockGameplayBridge {
   }
   start() {
     if (this.closed || this.watch || this.listeners.length) throw new Error('Bridge already used');
+    if (typeof this.client.queue === 'function') {
+      const original = this.client.queue;
+      const telemetry = this.packetTelemetry;
+      this.originalQueue = original;
+      this.queueTelemetryWrapper = function (...args) {
+        const type = typeof args[0] === 'string' ? args[0] : 'unknown';
+        telemetry.sent++;
+        telemetry.sentByType[type] = Math.min(1000000000, (telemetry.sentByType[type] ?? 0) + 1);
+        telemetry.lastSentType = type;
+        const packet = args[1];
+        const summary = {};
+        if (packet && typeof packet === 'object') {
+          for (const key of ['position', 'delta', 'move_vector', 'raw_move_vector',
+            'analogue_move_vector', 'input_data', 'input_mode', 'play_mode',
+            'interaction_model', 'yaw', 'pitch', 'head_yaw', 'tick', 'runtime_entity_id']) {
+            const value = packet[key];
+            if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ||
+                (typeof value === 'string' && value.length <= 64) ||
+                (Array.isArray(value) && value.length <= 64) ||
+                (value && typeof value === 'object' && !Array.isArray(value) &&
+                  ['x','y','z'].every(axis => Number.isFinite(value[axis])))) {
+              summary[key] = value;
+            }
+          }
+        }
+        telemetry.lastSentSummary = summary;
+        telemetry.events.push({ at: this.clock ? this.clock() : Date.now(),
+          direction: 'out', type, summary });
+        if (telemetry.events.length > 64) telemetry.events.shift();
+        try { return original.apply(this, args); }
+        catch (error) {
+          telemetry.sentErrors++;
+          throw error;
+        }
+      };
+      this.client.queue = this.queueTelemetryWrapper;
+    }
     this.bind('start_game', p => this.startGame(p));
     this.bind('spawn', () => this.onSpawn());
     this.bind('respawn', p => this.onRespawn(p));
@@ -1343,9 +1385,14 @@ class BedrockGameplayBridge {
     const terrainCheck = this.checkTerrainReadiness();
     return {
       commandTelemetry: { ...this.commandTelemetry, byAction: { ...this.commandTelemetry.byAction },
+        events: this.commandTelemetry.events.map(event => ({ ...event })),
         last: this.commandTelemetry.last ? { ...this.commandTelemetry.last } : null },
       packetTelemetry: { ...this.packetTelemetry, byType: { ...this.packetTelemetry.byType },
+        sentByType: { ...this.packetTelemetry.sentByType },
+        events: this.packetTelemetry.events.map(event => ({ ...event,
+          summary: event.summary ? { ...event.summary } : undefined })),
         lastSummary: this.packetTelemetry.lastSummary ? { ...this.packetTelemetry.lastSummary } : null,
+        lastSentSummary: this.packetTelemetry.lastSentSummary ? { ...this.packetTelemetry.lastSentSummary } : null,
         lastError: this.packetTelemetry.lastError ? { ...this.packetTelemetry.lastError } : null },
       state: this.closed ? 'closed' : this.spawned && this.self && this.position && this.receivedChunks.size
         ? 'observing' : 'awaiting_world',
@@ -1446,6 +1493,8 @@ class BedrockGameplayBridge {
       durationMs: Math.max(0, this.clock() - startedAt),
       at: this.clock()
     };
+    telemetry.events.push({ ...telemetry.last });
+    if (telemetry.events.length > 64) telemetry.events.shift();
     return result;
   }
   executeCommand(raw) {
@@ -2129,6 +2178,10 @@ class BedrockGameplayBridge {
   }
   stop() {
     if (this.closed) return;
+    if (this.queueTelemetryWrapper && this.client.queue === this.queueTelemetryWrapper &&
+        typeof this.originalQueue === 'function') this.client.queue = this.originalQueue;
+    this.queueTelemetryWrapper = null;
+    this.originalQueue = null;
     if (this.manualInputPath) {
       try { unlinkSync(this.manualInputPath); } catch {}
     }
