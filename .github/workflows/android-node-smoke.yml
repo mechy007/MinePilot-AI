@@ -9,6 +9,7 @@ on:
       - scripts/android-node-bedrock-smoke.cjs
       - scripts/bedrock-gameplay-bridge.cjs
       - scripts/bedrock-gameplay-bridge.test.cjs
+      - scripts/session-diagnostics.test.cjs
       - scripts/bedrock-native-skill-system.cjs
       - scripts/bedrock-native-skill-system.test.cjs
       - scripts/bedrock-block-placement.cjs
@@ -63,7 +64,7 @@ jobs:
       - name: Install engine build dependencies
         run: npm install --ignore-scripts --omit=optional
       - name: Test Xbox sign-in program with synthetic account responses
-        run: node --test scripts/android-xbox-auth-probe.test.cjs
+        run: node --test scripts/android-xbox-auth-probe.test.cjs scripts/session-diagnostics.test.cjs
       - name: Test Bedrock inventory, bridge and stack transaction contracts
         run: node --test scripts/bedrock-inventory-ledger.test.cjs scripts/bedrock-stack-request-manager.test.cjs scripts/bedrock-recipe-catalog.test.cjs scripts/bedrock-odyssey-observation-executor.test.cjs scripts/bedrock-native-skill-system.test.cjs scripts/bedrock-block-placement.test.cjs
       - name: Stage SDK and run runtime smoke checks
