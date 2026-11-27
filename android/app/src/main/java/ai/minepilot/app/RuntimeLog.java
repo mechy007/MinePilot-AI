@@ -12,8 +12,8 @@ import org.json.JSONObject;
 
 /** Recent, app-owned diagnostic events shared with the friend-world process. */
 final class RuntimeLog {
-    private static final int MAX_EVENTS = 60;
-    private static final int ROTATE_AT_BYTES = 32 * 1024;
+    private static final int MAX_EVENTS = 300;
+    private static final int ROTATE_AT_BYTES = 4 * 1024 * 1024;
 
     static Path file(Context context) {
         return context.getNoBackupFilesDir().toPath().resolve("runtime-events.jsonl");
@@ -136,6 +136,68 @@ final class RuntimeLog {
         if (!bedrock.isEmpty()) message += " · " + bedrock;
         String xbox = event.optString("xboxCode");
         if (xbox.matches("214[0-9]{7}")) message += " · Xbox " + xbox;
+
+        JSONObject gameplay = event.optJSONObject("gameplay");
+        if (gameplay != null) {
+            JSONObject packets = gameplay.optJSONObject("packetTelemetry");
+            if (packets != null) {
+                message += "\\nBedrock packets received: " + packets.optLong("received") +
+                        " · handler errors: " + packets.optLong("errors");
+                JSONObject byType = packets.optJSONObject("byType");
+                if (byType != null && byType.length() > 0) {
+                    java.util.ArrayList<String> counts = new java.util.ArrayList<>();
+                    var keys = byType.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        counts.add(key + "=" + byType.optLong(key));
+                    }
+                    java.util.Collections.sort(counts);
+                    message += "\\nPacket types: " + String.join(", ", counts);
+                }
+                String lastType = packets.optString("lastType", "");
+                if (!lastType.isEmpty()) message += "\\nLast packet: " + lastType +
+                        " · " + packets.optJSONObject("lastSummary");
+                JSONObject packetError = packets.optJSONObject("lastError");
+                if (packetError != null) message += "\\nLast packet-handler error: " +
+                        packetError.optString("event") + " · " + packetError.optString("name");
+            }
+            JSONObject commands = gameplay.optJSONObject("commandTelemetry");
+            if (commands != null) {
+                message += "\\nApp commands received by runtime: " + commands.optLong("received");
+                JSONObject byAction = commands.optJSONObject("byAction");
+                if (byAction != null && byAction.length() > 0) {
+                    java.util.ArrayList<String> counts = new java.util.ArrayList<>();
+                    var keys = byAction.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        counts.add(key + "=" + byAction.optLong(key));
+                    }
+                    java.util.Collections.sort(counts);
+                    message += "\\nCommand actions: " + String.join(", ", counts);
+                }
+                JSONObject last = commands.optJSONObject("last");
+                if (last != null) message += "\\nLast command: " + last.optString("action") +
+                        " → " + last.optString("status") +
+                        (last.optString("reason").isEmpty() ? "" : " · " + last.optString("reason")) +
+                        " · " + last.optLong("durationMs") + " ms";
+            }
+            JSONObject movement = gameplay.optJSONObject("movementSystem");
+            if (movement != null) {
+                message += "\\nMovement engine: " + movement.optString("state", "unknown") +
+                        " · capability " + movement.optString("capability", "unknown") +
+                        " · frames sent " + movement.optLong("framesSent") +
+                        " · corrections " + movement.optLong("corrections") +
+                        " · non-neutral frames " + movement.optLong("nonNeutralFrames");
+                JSONObject lastResult = movement.optJSONObject("lastMovementResult");
+                if (lastResult != null) message += "\\nMovement result: " +
+                        lastResult.optString("status") + " · " + lastResult.optString("reason");
+                JSONObject lastInput = movement.optJSONObject("lastInput");
+                if (lastInput != null) message += "\\nLast movement input: " + lastInput;
+                JSONObject lastError = movement.optJSONObject("lastError");
+                if (lastError != null) message += "\\nMovement error: " + lastError;
+            }
+            message += "\\nFull sanitized session telemetry:\\n" + gameplay.toString(2);
+        }
         return message;
     }
 
