@@ -165,7 +165,9 @@ final class RuntimeLog {
             JSONObject packets = gameplay.optJSONObject("packetTelemetry");
             if (packets != null) {
                 message += "\nBedrock packets received: " + packets.optLong("received") +
-                        " · handler errors: " + packets.optLong("errors");
+                        " · sent: " + packets.optLong("sent") +
+                        " · inbound handler errors: " + packets.optLong("errors") +
+                        " · outbound send errors: " + packets.optLong("sentErrors");
                 JSONObject byType = packets.optJSONObject("byType");
                 if (byType != null && byType.length() > 0) {
                     java.util.ArrayList<String> counts = new java.util.ArrayList<>();
@@ -175,11 +177,25 @@ final class RuntimeLog {
                         counts.add(key + "=" + byType.optLong(key));
                     }
                     java.util.Collections.sort(counts);
-                    message += "\nPacket types: " + String.join(", ", counts);
+                    message += "\nInbound packet types: " + String.join(", ", counts);
+                }
+                JSONObject sentByType = packets.optJSONObject("sentByType");
+                if (sentByType != null && sentByType.length() > 0) {
+                    java.util.ArrayList<String> counts = new java.util.ArrayList<>();
+                    var keys = sentByType.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        counts.add(key + "=" + sentByType.optLong(key));
+                    }
+                    java.util.Collections.sort(counts);
+                    message += "\nOutbound packet types: " + String.join(", ", counts);
                 }
                 String lastType = packets.optString("lastType", "");
-                if (!lastType.isEmpty()) message += "\nLast packet: " + lastType +
+                if (!lastType.isEmpty()) message += "\nLast inbound packet: " + lastType +
                         " · " + packets.optJSONObject("lastSummary");
+                String lastSentType = packets.optString("lastSentType", "");
+                if (!lastSentType.isEmpty()) message += "\nLast outbound packet: " + lastSentType +
+                        " · " + packets.optJSONObject("lastSentSummary");
                 JSONObject packetError = packets.optJSONObject("lastError");
                 if (packetError != null) message += "\nLast packet-handler error: " +
                         packetError.optString("event") + " · " + packetError.optString("name");
@@ -233,7 +249,7 @@ final class RuntimeLog {
         JSONObject gameplay = event.optJSONObject("gameplay");
         if (gameplay == null) return false;
         JSONObject packets = gameplay.optJSONObject("packetTelemetry");
-        if (packets != null && packets.optInt("errors") > 0) return true;
+        if (packets != null && (packets.optInt("errors") > 0 || packets.optInt("sentErrors") > 0)) return true;
         JSONObject commands = gameplay.optJSONObject("commandTelemetry");
         JSONObject lastCommand = commands == null ? null : commands.optJSONObject("last");
         if (lastCommand != null && java.util.Arrays.asList("rejected", "failed", "blocked")
