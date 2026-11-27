@@ -294,6 +294,7 @@ async function joinFriendWorld({
       world,
       session,
       nonce,
+      networkId: route.networkId,
       peerId: route.peerId,
       signallingProtocol: route.signallingProtocol,
       connectionType: route.connectionType,
