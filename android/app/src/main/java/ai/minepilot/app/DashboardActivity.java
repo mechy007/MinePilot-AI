@@ -800,6 +800,9 @@ public final class DashboardActivity extends Activity {
         if (manualControlStatus != null) {
             String capability = current.getString("movement_capability", "unavailable");
             String reason = current.getString("movement_last_reason", "");
+            String terrainGate = current.getString("movement_terrain_gate", "");
+            String inputState = current.getString("movement_input_state", "");
+            String inputReason = current.getString("movement_input_reason", "");
             String message;
             if (!playing) {
                 message = "Join a friend-hosted world to activate the controls.";
@@ -811,8 +814,18 @@ public final class DashboardActivity extends Activity {
                 message = "Connected · touch controls are active. Movement will start when server authority, physics and terrain are ready." +
                         "\nCurrent capability: " + capability.replace('_', ' ');
             }
-            if (!reason.isEmpty() && !manualMovementReady) {
-                message += "\nMovement gate: " + reason.replace('_', ' ');
+            if (!manualMovementReady) {
+                String gate = !terrainGate.isEmpty() ? terrainGate : reason;
+                if (!gate.isEmpty()) message += "\nMovement gate: " + gate.replace('_', ' ');
+                message += "\nTerrain: " + current.getInt("movement_decoded_sections", 0) +
+                        " sections · " + current.getInt("movement_subchunk_response_successes", 0) +
+                        " responses · " + current.getInt("movement_decode_errors", 0) + " decode errors";
+                String unknown = current.getString("movement_unknown_reason", "");
+                if (!unknown.isEmpty()) message += "\nUnknown block: " + unknown.replace('_', ' ');
+            }
+            if (current.getBoolean("movement_input_active", false) && !manualMovementReady) {
+                message += "\nLocal input: " + (inputState.isEmpty() ? "waiting" : inputState.replace('_', ' '));
+                if (!inputReason.isEmpty()) message += " · " + inputReason.replace('_', ' ');
             }
             String lastStatus = current.getString("last_command_status", "");
             String lastReason = current.getString("last_command_reason", "");
@@ -922,13 +935,6 @@ public final class DashboardActivity extends Activity {
     private void sendManualMotionPulse(String mode) {
         String session = worldSessionId;
         if (session.isEmpty() || !manualControlsEnabled) return;
-        if (!manualMovementReady) {
-            if (!manualQueueNoticeShown) {
-                manualQueueNoticeShown = true;
-                showStatus("Touch input is captured locally; movement commands are withheld until physics and terrain readiness is verified.");
-            }
-            return;
-        }
         int generation = manualControlGeneration;
         Bundle extras = new Bundle();
         extras.putString("action", "manual_move");

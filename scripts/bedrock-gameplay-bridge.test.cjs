@@ -1351,3 +1351,87 @@ test('IPC polling interval is clamped to a safe range', () => {
   assert.equal(bridge.controlTickMs, 50);
   bridge.stop();
 });
+
+test('manual input mailbox persists held intent until terrain is ready and clears on release or expiry', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'minepilot-manual-input-'));
+  const manualInputPath = join(directory, 'manual-input-state.json');
+  let now = 1000;
+  let ready = false;
+  let attempts = 0;
+  let releases = 0;
+  let applied = null;
+  const movement = {
+    capability: () => ready ? 'ready' : 'unavailable',
+    releaseManual() { releases++; }
+  };
+  const bridge = new BedrockGameplayBridge(new Client(), {
+    manualInputPath,
+    movement,
+    clock: () => now
+  });
+  bridge.execute = command => {
+    attempts++;
+    if (!ready) return { status: 'rejected', reason: 'terrain_not_fully_observed' };
+    applied = command;
+    return { status: 'accepted', reason: 'movement_controls_applied' };
+  };
+  const writeState = state => writeFileSync(manualInputPath, JSON.stringify(state));
+  try {
+    writeState({
+      version: 'minepilot.manual-input.v1',
+      requestId: 'hold-one',
+      active: true,
+      expiresAt: 2400,
+      mode: 'vector',
+      ticks: 8,
+      motionX: 0.6,
+      motionY: 0.2,
+      jump: false,
+      sprint: true,
+      sneak: false
+    });
+
+    bridge.pollManualInput();
+    assert.equal(bridge.snapshot().manualInput.status, 'waiting');
+    assert.equal(bridge.snapshot().manualInput.reason, 'terrain_not_fully_observed');
+    assert.equal(existsSync(manualInputPath), true, 'blocked input remains locally queued');
+    bridge.pollManualInput();
+    assert.equal(attempts, 1, 'do not spam the runtime while readiness remains blocked');
+
+    ready = true;
+    bridge.pollManualInput();
+    assert.equal(attempts, 2, 'retry the same held input when readiness becomes available');
+    assert.equal(applied?.motionX, 0.6);
+    assert.equal(applied?.sprint, true);
+    assert.equal(bridge.snapshot().manualInput.status, 'accepted');
+    bridge.pollManualInput();
+    assert.equal(attempts, 2, 'an accepted state is not replayed continuously');
+
+    writeState({
+      version: 'minepilot.manual-input.v1',
+      requestId: 'release-one',
+      active: false
+    });
+    bridge.pollManualInput();
+    assert.equal(releases, 1);
+    assert.equal(bridge.snapshot().manualInput.reason, 'manual_control_released');
+
+    writeState({
+      version: 'minepilot.manual-input.v1',
+      requestId: 'hold-expired',
+      active: true,
+      expiresAt: 3000,
+      mode: 'forward',
+      ticks: 8,
+      motionX: 0,
+      motionY: 1
+    });
+    now = 4000;
+    bridge.pollManualInput();
+    assert.equal(releases, 2, 'expired held input actively releases the movement controller');
+    assert.equal(bridge.snapshot().manualInput.status, 'expired');
+  } finally {
+    bridge.stop();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
