@@ -17,6 +17,13 @@ const { BedrockBlockBreakExecutor } = require('./bedrock-block-break.cjs');
 const { BedrockLifeSenses } = require('./bedrock-life-senses.cjs');
 const { MinePilotIntelligence } = require('./bedrock-intelligence-core.cjs');
 const { BedrockGameplayAgent } = require('./bedrock-gameplay-agent.cjs');
+const { joinFriendWorld } = require('./android-friend-world-join.cjs');
+
+const MINECRAFT_TITLE = {
+  titleId: '896928775',
+  scid: '4fc10100-5f7a-4470-899b-280835760c07',
+  templateName: 'MinecraftLobby'
+};
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
@@ -85,6 +92,58 @@ function safeJoinFailure(error) {
   return {};
 }
 
+function installNonceUserChain(client, nonce) {
+  if (typeof nonce !== 'string' || !nonce || typeof client?.createClientUserChain !== 'function') return;
+  const jwt = require('jsonwebtoken');
+  const original = client.createClientUserChain;
+  client.createClientUserChain = function (privateKey) {
+    const result = original.call(this, privateKey);
+    const payload = jwt.decode(this.clientUserChain);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Bedrock client identity payload is unavailable');
+    }
+    payload.Nonce = nonce;
+    this.clientUserChain = jwt.sign(payload, privateKey, {
+      algorithm: 'ES384',
+      header: { x5u: this.clientX509, typ: undefined },
+      noTimestamp: true
+    });
+    return result;
+  };
+}
+
+function installNethernetTelemetry(client) {
+  if (!client.nethernet || typeof client.nethernet !== 'object') client.nethernet = {};
+  let signalling = client.nethernet.signalling;
+  Object.defineProperty(client.nethernet, 'signalling', {
+    configurable: true,
+    enumerable: true,
+    get() { return signalling; },
+    set(value) {
+      signalling = value;
+      if (!value || typeof value.on !== 'function') return;
+      client.emit('minepilot_join_step', 'nethernet_signalling');
+      const { SignalType } = require('nethernet');
+      if (typeof value.write === 'function') {
+        const originalWrite = value.write;
+        value.write = function (signal) {
+          if (signal?.type === SignalType.ConnectRequest) {
+            client.emit('minepilot_join_trace', 'offer_sent');
+          }
+          return originalWrite.call(this, signal);
+        };
+      }
+      value.once('credentials', () => client.emit('minepilot_join_step', 'nethernet_peer'));
+      value.on('signal', signal => {
+        if (signal?.type === SignalType.ConnectResponse) {
+          client.emit('minepilot_join_trace', 'answer_received');
+        }
+      });
+    }
+  });
+  if (signalling) client.nethernet.signalling = signalling;
+}
+
 function shouldRetry(result) {
   if (result?.phase !== 'failed') return false;
   const transient = ['timeout', 'network'].includes(result.reason) ||
@@ -141,6 +200,19 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   let timeout;
   let heartbeat;
   let connectionStage;
+  let disconnectDetails = {};
+  const originalClose = client.close;
+  if (typeof originalClose === 'function') {
+    client.close = function (reason, ...args) {
+      const match = typeof reason === 'string' && /^connecterror:(\\d+)$/.exec(reason);
+      if (match) {
+        connectionStage = 'nethernet_peer';
+        disconnectDetails = { reason: 'nethernet_closed', nethernetCode: Number(match[1]) };
+        publish({ phase: 'connection', stage: connectionStage });
+      }
+      return originalClose.call(this, reason, ...args);
+    };
+  }
   const result = await new Promise(resolve => {
     function finish(reason, details = {}) {
       if (finished) return;
@@ -168,7 +240,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       }
     }
     const stop = () => finish('stopped');
-    const closed = () => finish(joinedAt === undefined ? 'failed' : 'disconnected');
+    const closed = () => finish(joinedAt === undefined ? 'failed' : 'disconnected', disconnectDetails);
     const report = () => {
       if (joinedAt !== undefined) {
         const vitals = awareness.snapshot();
@@ -235,17 +307,19 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   return result;
 }
 
-async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld, saveAccount, gameplayOptions }) {
+async function run({
+  ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld,
+  saveAccount, gameplayOptions, joinFriendWorldImpl = joinFriendWorld
+}) {
   let stage = 'owner';
   let retried = false;
   try {
     if (!ownerXuid || ownerXuid.length > 32) throw new Error();
     stage = 'auth';
-    const { auth, profile } = await verifyXbox(authDependencies, publish, saveAccount);
+    const { auth, profile, xbox } = await verifyXbox(authDependencies, publish, saveAccount);
     signal.throwIfAborted();
     stage = 'owner';
-    if (!/^\d+$/.test(ownerXuid)) {
-      const xbox = new authDependencies.XboxClient(auth);
+    if (!/^\\d+$/.test(ownerXuid)) {
       const friend = await xbox.getProfile({ gamertag: ownerXuid });
       ownerXuid = friend.xuid;
       signal.throwIfAborted();
@@ -256,27 +330,50 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
       signal.throwIfAborted();
       stage = 'discovery';
       publish({ phase: 'discovery', gamertag: profile.gamertag, ...(retried ? { retried } : {}) });
-      const client = createClient({
-        username: profile.gamertag,
-        offline: false,
-        version: '1.26.60',
-        authTitle: authDependencies.Titles.MinecraftAndroid,
-        deviceType: 'Android',
-        authflow: auth,
-        // Give the mobile path room for signalling and ICE before the spawn deadline.
-        connectTimeout: 45000,
-        nethernet: { webrtcBackend: 'werift', responseTimeoutMs: 25000, inactivityTimeoutMs: 12000 },
-        conLog: null,
-        world: {
-          pickSession(sessions) {
-            const selected = pickOwnerWorld(sessions, ownerXuid);
-            stage = 'connection';
-            publish({ phase: 'connection' });
-            return selected;
-          }
-        }
-      });
-      client.viewDistance = 4;
+      let prepared;
+      try {
+        prepared = await joinFriendWorldImpl({
+          xbox, profile, ownerXuid,
+          XboxRTASocket: authDependencies.XboxRTASocket,
+          pickOwnerWorld, publish, signal,
+          onStage(next) { stage = next; }
+        });
+      } catch (error) {
+        return { phase: 'failed', stage, ...safeJoinFailure(error) };
+      }
+
+      let client;
+      try {
+        client = createClient({
+          username: profile.gamertag,
+          offline: false,
+          version: '1.26.60',
+          authTitle: authDependencies.Titles.MinecraftAndroid,
+          deviceType: 'Android',
+          authflow: auth,
+          transport: 'nethernet',
+          skipPing: true,
+          connectTimeout: 45000,
+          nethernet: {
+            networkId: prepared.peerId,
+            webrtcBackend: 'werift',
+            signalling: 'services',
+            _signallingProtocol: prepared.signallingProtocol,
+            responseTimeoutMs: 25000,
+            inactivityTimeoutMs: 12000
+          },
+          conLog: null
+        });
+        client.nethernet ??= {};
+        client.nethernet.sessionAbort = prepared.sessionAbort;
+        client.nethernet.session = prepared.session;
+        installNonceUserChain(client, prepared.nonce);
+        installNethernetTelemetry(client);
+        client.viewDistance = 4;
+      } catch (error) {
+        await prepared.session.close().catch(() => {});
+        return { phase: 'failed', stage, ...safeJoinFailure(error) };
+      }
       return observeSession(client, publish, signal, () => stage, timeoutMs, gameplayOptions);
     }
     let result = await attempt(ATTEMPT_TIMEOUT_MS);
@@ -325,7 +422,7 @@ if (require.main === module) {
         () => JSON.parse(readFileSync(addressFile, 'utf8')));
     }
     const { Authflow, Titles } = require('prismarine-auth');
-    const { XboxClient } = require('prismarine-xbox-services');
+    const { XboxClient, XboxRTASocket } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
     const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
     const { LayerOneController } = await importRuntimeModule('gameplay/layer-one.js', 'gameplay/layer-one.js');
@@ -343,7 +440,7 @@ if (require.main === module) {
       ownerXuid: readFileSync(path.join(__dirname, 'owner-xuid'), 'utf8'),
       publish,
       signal: controller.signal,
-      authDependencies: { Authflow, Titles, XboxClient, refreshToken },
+      authDependencies: { Authflow, Titles, XboxClient, XboxRTASocket, refreshToken },
       saveAccount,
       createClient,
       pickOwnerWorld,
@@ -366,4 +463,4 @@ if (require.main === module) {
     .finally(() => clearInterval(stop));
 }
 
-module.exports = { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner };
+module.exports = { androidNetworkInterfaces, installNethernetTelemetry, installNonceUserChain, observeSession, run, shouldRetry, validateOwner };
