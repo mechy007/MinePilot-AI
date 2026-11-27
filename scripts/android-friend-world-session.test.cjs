@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
 const { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner } = require('./android-friend-world-session.cjs');
-const { runtimeLogger } = require('./xbox-auth-probe.cjs');
+const { runtimeLogger } = require('./android-xbox-auth-probe.cjs');
 
 class Client extends EventEmitter {
   closed = 0;
