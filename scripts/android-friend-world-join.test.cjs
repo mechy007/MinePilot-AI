@@ -37,7 +37,7 @@ class FakeRta extends EventEmitter {
 
 function handle(connections = [
   { ConnectionType: 3, NetherNetId: '123' },
-  { ConnectionType: 7, NetherNetId: NETWORK, PmsgId: PMSG }
+  { ConnectionType: 7, NetherNetId: NETWORK, PmsgId: PMSG.toUpperCase() }
 ]) {
   return {
     id: 'activity-handle-1',
