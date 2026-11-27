@@ -53,8 +53,9 @@ test('runtime logs retain diagnostic codes and omit private data and duplicate h
   log({ phase: 'failed', stage: 'bedrock_login', reason: 'host_disconnect', bedrockCode: 136,
     nonce: 'private', message: 'private' });
   const events = readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(events.every(event => Number.isInteger(event.at)));
-  assert.deepEqual(events.map(({ at, ...event }) => event), [
+  assert.ok(events.every(event => Number.isInteger(event.at) && Number.isInteger(event.sequence) &&
+    event.schema === 'minepilot.session-diagnostic.v1'));
+  assert.deepEqual(events.map(({ at, schema, sequence, seconds, ...event }) => event), [
     { phase: 'device_code' }, { phase: 'spawned' },
     { phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37 },
     { phase: 'failed', stage: 'bedrock_login', reason: 'host_disconnect', bedrockCode: 136 }
