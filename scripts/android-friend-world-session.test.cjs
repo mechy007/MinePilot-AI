@@ -348,20 +348,29 @@ for (const cancel of [false, true]) {
   });
 }
 
-test('packaged Bedrock SDK reaches the Xbox membership request for the selected owner', async context => {
-  const { createClient } = require('bedrock-protocol');
+test('friend-world join sends the MPSD handle membership request for the exact owner', async context => {
   const { Titles } = require('prismarine-auth');
-  const { XboxClient } = require('prismarine-xbox-services');
+  const { XboxClient, XboxRTASocket } = require('prismarine-xbox-services');
   const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
   const ownerXuid = '2533274790000002';
   const botXuid = '2533274790000001';
   context.mock.method(XboxClient.prototype, 'getProfile', async () => ({ xuid: botXuid, gamertag: 'FixtureBot' }));
   const activity = context.mock.method(XboxClient.prototype, 'getActivityHandles', async () => [
-    { sessionRef: { name: 'wrong' }, ownerXuid, customProperties: { ownerId: botXuid } },
-    { sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225 } }
+    { id: 'wrong-handle', sessionRef: { name: 'wrong' }, ownerXuid, customProperties: { ownerId: botXuid } },
+    { id: 'expected-handle', sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225 } }
   ]);
-  const membership = context.mock.method(XboxClient.prototype, 'joinSession', async () => {
-    throw Object.assign(new Error('Fixture stops before Xbox membership'), { status: 403 });
+  const subscription = new EventEmitter();
+  subscription.initialData = { ConnectionId: 'fixture-rta-connection' };
+  subscription.close = context.mock.fn(async () => {});
+  context.mock.method(XboxRTASocket.prototype, 'connect', async () => {});
+  context.mock.method(XboxRTASocket.prototype, 'subscribe', async () => subscription);
+  const rtaClose = context.mock.method(XboxRTASocket.prototype, 'close', async () => {});
+  const membership = context.mock.method(XboxClient.prototype, 'request', async (method, url, options) => {
+    assert.equal(method, 'PUT');
+    assert.equal(url, 'https://sessiondirectory.xboxlive.com/handles/expected-handle/session');
+    assert.equal(options.contractVersion, '107');
+    assert.deepEqual(options.data.members.me.constants.system, { xuid: botXuid, initialize: true });
+    throw Object.assign(new Error('Fixture stops at MPSD membership'), { status: 403 });
   });
   class Authflow {
     async getXboxToken() {}
@@ -375,24 +384,25 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
     ownerXuid,
     publish: snapshot => snapshots.push(snapshot),
     signal: new AbortController().signal,
-    authDependencies: { Authflow, XboxClient, Titles },
-    createClient,
+    authDependencies: { Authflow, XboxClient, XboxRTASocket, Titles },
+    createClient: () => assert.fail('Bedrock client must not start after membership rejection'),
     pickOwnerWorld
   });
-  assert.equal(activity.mock.callCount(), 1, JSON.stringify(snapshots));
+  assert.equal(activity.mock.callCount(), 1);
   assert.equal(activity.mock.calls[0].arguments[0], botXuid);
-  assert.equal(membership.mock.callCount(), 1, JSON.stringify(snapshots));
-  assert.equal(membership.mock.calls[0].arguments[0], 'expected');
+  assert.equal(membership.mock.callCount(), 1);
+  assert.equal(subscription.close.mock.callCount(), 1);
+  assert.equal(rtaClose.mock.callCount(), 1);
   assert.deepEqual(snapshots.at(-1), { phase: 'failed', stage: 'xbox_membership', httpStatus: 403 });
 });
 
-test('packaged SDK routes the offer to the Xbox messaging ID and accepts the matching peer', { timeout: 10000 }, async context => {
+test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters unrelated peers', { timeout: 10000 }, async context => {
   const os = require('node:os');
   const { createClient } = require('bedrock-protocol');
   const { NethernetSignal } = require('bedrock-protocol/src/nethernet/signalling');
   const { parseJson } = require('bedrock-protocol/src/nethernet/signallingCodec');
   const { Titles } = require('prismarine-auth');
-  const { XboxClient } = require('prismarine-xbox-services');
+  const { XboxClient, XboxRTASocket } = require('prismarine-xbox-services');
   const { SignalType } = require('nethernet');
   const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
   const ownerXuid = '2533274790000002';
@@ -404,24 +414,38 @@ test('packaged SDK routes the offer to the Xbox messaging ID and accepts the mat
     fixture: [{ address: '127.0.0.1', family: 'IPv4', internal: false }]
   }));
   context.mock.method(XboxClient.prototype, 'getProfile', async () => ({ xuid: botXuid, gamertag: 'FixtureBot' }));
-  context.mock.method(XboxClient.prototype, 'getActivityHandles', async () => [
-    { sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225 } }
-  ]);
-  const membership = new EventEmitter();
-  membership.current = { properties: { custom: { SupportedConnections: [
-    { ConnectionType: 3, NetherNetId: '123' },
-    { ConnectionType: 7, NetherNetId: hostNetworkId, PmsgId: hostPlayerId }
-  ] } } };
-  membership.current.properties.custom.nonces = { [ownerXuid]: 'deadbeef' };
-  const get = context.mock.fn(async () => {
-    const document = structuredClone(membership.current);
-    document.properties.custom.nonces[botXuid] = botNonce;
-    return document;
+  context.mock.method(XboxClient.prototype, 'getActivityHandles', async () => [{
+    id: 'expected-handle',
+    sessionRef: { name: 'expected' },
+    customProperties: {
+      ownerId: ownerXuid,
+      protocol: 2225,
+      SupportedConnections: [
+        { ConnectionType: 3, NetherNetId: '123' },
+        { ConnectionType: 7, NetherNetId: hostNetworkId, PmsgId: hostPlayerId }
+      ]
+    }
+  }]);
+  const sessionDocument = { properties: { custom: { nonces: { [ownerXuid]: 'deadbeef' } } } };
+  const latestDocument = { properties: { custom: { nonces: { [ownerXuid]: 'deadbeef', [botXuid]: botNonce } } } };
+  const get = context.mock.method(XboxClient.prototype, 'getSession', async () => latestDocument);
+  const request = context.mock.method(XboxClient.prototype, 'request', async (method, url, options) => {
+    if (method === 'PUT' && url.endsWith('/handles/expected-handle/session')) {
+      assert.equal(options.contractVersion, '107');
+      assert.equal(options.data.members.me.properties.system.connection, 'fixture-rta-connection');
+      return sessionDocument;
+    }
+    if (method === 'POST' && url === 'https://sessiondirectory.xboxlive.com/handles') return {};
+    if (method === 'PUT' && url.endsWith('/sessions/expected')) return {};
+    throw new Error('Unexpected Xbox request in fixture');
   });
-  membership.get = get;
-  const close = context.mock.fn();
-  membership.close = close;
-  context.mock.method(XboxClient.prototype, 'joinSession', async () => membership);
+  const subscription = new EventEmitter();
+  subscription.initialData = { ConnectionId: 'fixture-rta-connection' };
+  const subscriptionClose = context.mock.fn(async () => {});
+  subscription.close = subscriptionClose;
+  context.mock.method(XboxRTASocket.prototype, 'connect', async () => {});
+  context.mock.method(XboxRTASocket.prototype, 'subscribe', async () => subscription);
+  const rtaClose = context.mock.method(XboxRTASocket.prototype, 'close', async () => {});
   const sent = [];
   let client;
   let signedNonce;
@@ -459,8 +483,13 @@ test('packaged SDK routes the offer to the Xbox messaging ID and accepts the mat
     ownerXuid,
     publish: snapshot => snapshots.push(snapshot),
     signal: AbortSignal.timeout(5000),
-    authDependencies: { Authflow, XboxClient, Titles },
-    createClient: options => { client = createClient(options); return client; },
+    authDependencies: { Authflow, XboxClient, XboxRTASocket, Titles },
+    createClient: options => {
+      assert.equal(options.nethernet.networkId, hostPlayerId);
+      assert.equal(options.nethernet._signallingProtocol, 'jsonrpc');
+      client = createClient(options);
+      return client;
+    },
     pickOwnerWorld
   });
   assert.equal(sent[0]?.method, 'Signaling_SendClientMessage_v1_0', JSON.stringify(snapshots));
@@ -473,13 +502,16 @@ test('packaged SDK routes the offer to the Xbox messaging ID and accepts the mat
   assert.equal(offer.netherNetId, String(client.connection.nethernet.networkId));
   assert.match(offer.message, /^CONNECTREQUEST /);
   assert.ok(snapshots.some(event => event.step === 'offer_sent'));
-  assert.match(offer.message, /^a=candidate:.*127\.0\.0\.1/m);
+  assert.match(offer.message, /^a=candidate:.*127\\.0\\.0\\.1/m);
+  assert.equal(client.connection.nethernet.serverNetworkId, hostPlayerId);
   assert.equal(client.connection.nethernet.responseTimeoutMs, 25000);
   assert.equal(client.connection.nethernet.inactivityTimeoutMs, 12000);
   assert.deepEqual(snapshots.at(-1), {
     phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37
   });
-  assert.equal(close.mock.callCount(), 1);
+  assert.equal(subscriptionClose.mock.callCount(), 1);
+  assert.equal(rtaClose.mock.callCount(), 1);
+  assert.ok(request.mock.callCount() >= 2);
 });
 
 test('signalling keeps legacy numeric destinations and existing Realm UUID routes', () => {
