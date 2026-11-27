@@ -957,7 +957,7 @@ public final class DashboardActivity extends Activity {
                     if (generation == manualControlGeneration && !activeManualMode.isEmpty() &&
                             !manualQueueNoticeShown) {
                         manualQueueNoticeShown = true;
-                        showStatus("Manual input is waiting for the runtime command queue. It will retry while you hold the control.");
+                        showStatus("The game movement engine has not accepted this input yet. The command is sent directly; keep holding to retry while terrain and physics are checked.");
                     }
                 });
             } else {
