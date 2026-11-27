@@ -431,7 +431,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
       ]
     }
   }]);
-  const sessionDocument = { properties: { custom: { nonces: { [ownerXuid]: 'deadbeef' } } } };
+  const sessionDocument = { properties: { custom: { nonces: { [ownerXuid]: 'deadbeef', [botXuid]: botNonce } } } };
   const latestDocument = { properties: { custom: { nonces: { [ownerXuid]: 'deadbeef', [botXuid]: botNonce } } } };
   const get = context.mock.method(XboxClient.prototype, 'getSession', async () => latestDocument);
   const request = context.mock.method(XboxClient.prototype, 'request', async (method, url, options) => {
@@ -499,7 +499,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
     pickOwnerWorld
   });
   assert.equal(sent[0]?.method, 'Signaling_SendClientMessage_v1_0', JSON.stringify(snapshots));
-  assert.equal(get.mock.callCount(), 1);
+  assert.equal(get.mock.callCount(), 0);
   assert.equal(signedNonce, botNonce);
   assert.ok(snapshots.some(event => event.stage === 'world_nonce'));
   assert.ok(!JSON.stringify(snapshots).includes(botNonce));
