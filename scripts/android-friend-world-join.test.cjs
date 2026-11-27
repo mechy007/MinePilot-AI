@@ -102,6 +102,56 @@ test('waits for the host nonce on an RTA tap and ignores other players', async (
   assert.deepEqual(reads, ['friend-world']);
 });
 
+test('retries a nonce read when an RTA notification arrives during an outstanding read', async () => {
+  const subscription = new EventEmitter();
+  const rta = new EventEmitter();
+  let resolveFirst;
+  let reads = 0;
+  const xbox = {
+    getSession() {
+      reads++;
+      if (reads === 1) return new Promise(resolve => { resolveFirst = resolve; });
+      return Promise.resolve({ properties: { custom: { nonces: { [BOT]: 'late-host-nonce' } } } });
+    }
+  };
+  const pending = waitForWorldNonce({
+    xbox, sessionName: 'friend-world', xuid: BOT,
+    session: { properties: { custom: { nonces: {} } } },
+    subscription, rta, timeoutMs: 1000
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  subscription.emit('data', {});
+  resolveFirst({ properties: { custom: { nonces: {} } } });
+  assert.equal(await pending, 'late-host-nonce');
+  assert.equal(reads, 2);
+});
+
+test('retries a failed RTA membership rebind before committing its connection ID', async () => {
+  const rta = new FakeRta();
+  let updates = 0;
+  const xbox = {
+    async getActivityHandles() { return [handle()]; },
+    async request() { return { properties: { custom: { nonces: { [BOT]: 'nonce' } } } }; },
+    async setActivity() {},
+    async updateSession(name, body) {
+      if (body.members.me?.properties?.system?.connection) {
+        updates++;
+        if (updates === 1) throw new Error('temporary membership update failure');
+      }
+    }
+  };
+  const prepared = await joinFriendWorld({
+    xbox, profile: { xuid: BOT }, ownerXuid: OWNER,
+    XboxRTASocket: class { constructor() { return rta; } },
+    pickOwnerWorld(handles) { return handles[0]; },
+    signal: new AbortController().signal
+  });
+  rta.subscription.emit('ready', { ConnectionId: 'rta-connection-2' });
+  await new Promise(resolve => setTimeout(resolve, 350));
+  assert.equal(updates, 2, 'failed rebind is retried and then committed');
+  await prepared.session.close();
+});
+
 test('joins the activity handle, retains RTA membership, updates reconnect IDs and leaves on close', async () => {
   const rta = new FakeRta();
   const calls = [];
