@@ -66,7 +66,7 @@ function validateOwner(ownerXuid, botXuid) {
 }
 
 function safeJoinFailure(error) {
-  const status = error?.status ?? error?.response?.status;
+  const status = error?.status ?? error?.statusCode ?? error?.response?.status;
   if (Number.isInteger(status) && status >= 400 && status <= 599) return { httpStatus: status };
   const message = typeof error?.message === 'string' ? error.message : '';
   if (message === 'Xbox world login nonce unavailable') return { reason: 'nonce_unavailable' };
@@ -190,7 +190,7 @@ function shouldRetry(result) {
   const transient = ['timeout', 'network'].includes(result.reason) ||
     [408, 425, 429, 500, 502, 503, 504].includes(result.httpStatus);
   if (result.stage === 'xbox_membership') return transient;
-  return ['world_transport', 'nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
+  return ['discovery', 'world_transport', 'nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
     (transient || (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
 }
 
