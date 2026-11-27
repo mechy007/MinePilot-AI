@@ -109,6 +109,14 @@ function installNonceUserChain(client, nonce) {
 function installNethernetTelemetry(client, peerId, signallingProtocol) {
   if (!client.nethernet || typeof client.nethernet !== 'object') client.nethernet = {};
   const connection = client.connection;
+  if (signallingProtocol === 'jsonrpc' && typeof peerId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(peerId) &&
+      connection?.nethernet && typeof connection.nethernet === 'object') {
+    // JSON-RPC routes to the host's Xbox PmsgId, not its numeric NetherNet ID.
+    // bedrock-protocol passes the latter into node-nethernet's serverNetworkId;
+    // replace it before the authenticated session starts peer negotiation.
+    connection.nethernet.serverNetworkId = peerId.toLowerCase();
+  }
   if (connection && typeof connection === 'object') {
     const instrumentClose = callback => {
       if (typeof callback !== 'function' || callback.__minepilotCloseWrapped) return callback;
