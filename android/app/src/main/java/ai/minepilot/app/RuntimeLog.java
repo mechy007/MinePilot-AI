@@ -246,9 +246,12 @@ final class RuntimeLog {
     static boolean hasFailure(JSONObject event) {
         String phase = event.optString("phase");
         if (java.util.Arrays.asList("failed", "runtime_failed", "account_failed", "disconnected",
-                "runtime_interrupted").contains(phase)) return true;
+                "runtime_interrupted", "manual_input_rejected", "app_command_rejected").contains(phase)) return true;
         if (event.optInt("httpStatus") >= 400 || event.optInt("nethernetCode") > 0 ||
                 event.optInt("bedrockCode", -1) >= 0 || event.has("error")) return true;
+        JSONObject details = event.optJSONObject("details");
+        if (details != null && java.util.Arrays.asList("rejected", "failed", "blocked")
+                .contains(details.optString("status"))) return true;
         JSONObject gameplay = event.optJSONObject("gameplay");
         if (gameplay == null) return false;
         JSONObject packets = gameplay.optJSONObject("packetTelemetry");
