@@ -338,6 +338,8 @@ class BedrockGameplayBridge {
     this.subchunkLastResponse = null;
     this.lastWorldAt = this.clock();
     this.spawned = false;
+    this.movementPresence = { state: 'idle', reason: 'world_reset', attempts: 0, lastAttemptAt: null };
+    this.lastMovementStartAttemptAt = -Infinity;
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
     else this.movement?.stop();
     this.layerOne?.reset();
@@ -560,6 +562,7 @@ class BedrockGameplayBridge {
       this.lastRespawnState = null;
       this.gameplayAgent?.stop('player_died');
       this.spawned = false;
+      this.movementPresence = { ...this.movementPresence, state: 'waiting', reason: 'player_died' };
       this.autonomy?.stop('player_died');
       this.blockBreaker?.abort('player_died');
       this.movement?.stopPresence?.('player_died');
@@ -1123,6 +1126,8 @@ class BedrockGameplayBridge {
     this.movementAuthority = null;
     this.movementAuthoritySource = 'unknown';
     this.spawned = false;
+    this.movementPresence = { state: 'idle', reason: 'dimension_changed', attempts: 0, lastAttemptAt: null };
+    this.lastMovementStartAttemptAt = -Infinity;
     this.respawnRecovery.state = 'alive';
     this.respawnRecovery.attempts = 0;
     this.respawnRecovery.lastActionAt = 0;
@@ -1361,6 +1366,7 @@ class BedrockGameplayBridge {
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       respawnRecovery: { ...this.respawnRecovery,
         resumeTask: this.respawnRecovery.resumeTask ? { ...this.respawnRecovery.resumeTask } : null },
+      movementPresence: { ...this.movementPresence },
       movement: movementCapability,
       ...(movementSystem ? { movementSystem } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
