@@ -156,13 +156,51 @@ class BedrockGameplayBridge {
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
     this.lastIntelligenceDecision = null;
     this.lastAddonNavigationSnapshot = null;
+    this.packetTelemetry = { received: 0, errors: 0, byType: {}, lastType: null,
+      lastAt: null, lastSummary: null, lastError: null };
     this.listeners = [];
   }
   bind(event, callback) {
-    // Existing handler remains authoritative; extensions only see safe projections.
+    // Keep bounded packet telemetry for post-session diagnosis. Never retain raw
+    // packet bodies, authentication material, account identifiers or player names.
     const wrapped = payload => {
-      try { callback(payload); }
-      finally {
+      const telemetry = this.packetTelemetry;
+      telemetry.received++;
+      telemetry.byType[event] = Math.min(1000000000, (telemetry.byType[event] ?? 0) + 1);
+      telemetry.lastType = event;
+      telemetry.lastAt = this.clock();
+      const summary = {};
+      if (payload && typeof payload === 'object') {
+        for (const key of ['state', 'mode', 'dimension', 'x', 'y', 'z', 'time',
+          'current_tick', 'sub_chunk_count', 'highest_subchunk_count', 'sub_chunk_limit',
+          'runtime_entity_id', 'player_position', 'position', 'rotation', 'movement_authority',
+          'health', 'food', 'saturation', 'difficulty', 'enable_commands', 'permission_level']) {
+          const value = payload[key];
+          if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ||
+              (typeof value === 'string' && value.length <= 96) ||
+              (value && typeof value === 'object' && !Array.isArray(value) &&
+                ['x','y','z'].every(axis => Number.isFinite(value[axis])))) {
+            summary[key] = value && typeof value === 'object'
+              ? { x: value.x, y: value.y, z: value.z } : value;
+          }
+        }
+        if (Array.isArray(payload.entries)) summary.entryCount = payload.entries.length;
+        if (Array.isArray(payload.records)) summary.recordCount = payload.records.length;
+        if (Array.isArray(payload.attributes)) summary.attributeCount = payload.attributes.length;
+      }
+      telemetry.lastSummary = summary;
+      try {
+        callback(payload);
+      } catch (error) {
+        telemetry.errors++;
+        telemetry.lastError = {
+          event,
+          name: ['TypeError','RangeError','SyntaxError','AbortError'].includes(error?.name)
+            ? error.name : 'Error',
+          at: this.clock()
+        };
+        throw error;
+      } finally {
         try { this.runtimeExtensions?.observePacket?.(event, payload, this); }
         catch {
           // Auxiliary integrations must never interrupt the authenticated session.
@@ -1303,6 +1341,9 @@ class BedrockGameplayBridge {
     const movementSystem = this.movement?.snapshot?.() ?? null;
     const terrainCheck = this.checkTerrainReadiness();
     return {
+      packetTelemetry: { ...this.packetTelemetry, byType: { ...this.packetTelemetry.byType },
+        lastSummary: this.packetTelemetry.lastSummary ? { ...this.packetTelemetry.lastSummary } : null,
+        lastError: this.packetTelemetry.lastError ? { ...this.packetTelemetry.lastError } : null },
       state: this.closed ? 'closed' : this.spawned && this.self && this.position && this.receivedChunks.size
         ? 'observing' : 'awaiting_world',
       position: this.position ? { ...this.position } : null,
