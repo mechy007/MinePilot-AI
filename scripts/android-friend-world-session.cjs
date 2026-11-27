@@ -108,6 +108,35 @@ function installNonceUserChain(client, nonce) {
 
 function installNethernetTelemetry(client) {
   if (!client.nethernet || typeof client.nethernet !== 'object') client.nethernet = {};
+  const connection = client.connection;
+  if (connection && typeof connection === 'object') {
+    const instrumentClose = callback => {
+      if (typeof callback !== 'function' || callback.__minepilotCloseWrapped) return callback;
+      const wrapped = function (reason, ...args) {
+        const value = typeof reason === 'string' ? reason : reason?.message;
+        const match = typeof value === 'string' && /connecterror:(\\d+)/i.exec(value);
+        if (match) {
+          client.emit('minepilot_join_failure', {
+            reason: 'nethernet_closed', nethernetCode: Number(match[1])
+          });
+        }
+        return callback.call(this, reason, ...args);
+      };
+      Object.defineProperty(wrapped, '__minepilotCloseWrapped', { value: true });
+      return wrapped;
+    };
+    try {
+      let closeCallback = instrumentClose(connection.onCloseConnection);
+      Object.defineProperty(connection, 'onCloseConnection', {
+        configurable: true,
+        enumerable: true,
+        get() { return closeCallback; },
+        set(value) { closeCallback = instrumentClose(value); }
+      });
+    } catch {
+      try { connection.onCloseConnection = instrumentClose(connection.onCloseConnection); } catch {}
+    }
+  }
   let signalling = client.nethernet.signalling;
   Object.defineProperty(client.nethernet, 'signalling', {
     configurable: true,
@@ -223,6 +252,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       client.removeListener('level_chunk', onChunk);
       client.removeListener('minepilot_join_step', onStep);
       client.removeListener('minepilot_join_trace', onTrace);
+      client.removeListener('minepilot_join_failure', onFailure);
       client.removeListener('loggingIn', onLogin);
       client.removeListener('join', onJoin);
       client.removeListener('kick', onKick);
@@ -269,6 +299,11 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       }
     };
     const onTrace = step => publish({ phase: 'connection', stage: 'nethernet_peer', step });
+    const onFailure = details => {
+      disconnectDetails = details && typeof details === 'object' ? details : {};
+      connectionStage = 'nethernet_peer';
+      publish({ phase: 'connection', stage: connectionStage });
+    };
     const onLogin = () => {
       connectionStage = 'bedrock_login';
       publish({ phase: 'connection', stage: connectionStage });
@@ -282,6 +317,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     });
     client.on('minepilot_join_step', onStep);
     client.on('minepilot_join_trace', onTrace);
+    client.on('minepilot_join_failure', onFailure);
     client.once('loggingIn', onLogin);
     client.once('join', onJoin);
     client.once('kick', onKick);
