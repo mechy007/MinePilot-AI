@@ -183,8 +183,8 @@ test('Android gameplay inbox carries joystick commands through controller execut
 });
 
 test('Layer 2 equipment, target removal and health override are observational', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerOneController } = await import('../dist/src/gameplay/layer-one.js');
+  const { LayerTwoPlanner } = await import('../dist/src/gameplay/layer-two.js');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, {
     layerOne: new LayerOneController(), layerTwo: new LayerTwoPlanner()
@@ -220,7 +220,7 @@ test('Layer 2 equipment, target removal and health override are observational', 
 });
 
 test('nested Bedrock PlayerRecords add/remove resolves names only for visible entities', async () => {
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerTwoPlanner } = await import('../dist/src/gameplay/layer-two.js');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
   initialized(client, bridge);
@@ -243,7 +243,7 @@ test('nested Bedrock PlayerRecords add/remove resolves names only for visible en
 });
 
 test('player names arriving after AddPlayer rehydrate the Follow target cache', async () => {
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerTwoPlanner } = await import('../dist/src/gameplay/layer-two.js');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
   initialized(client, bridge);
@@ -266,7 +266,7 @@ test('player names arriving after AddPlayer rehydrate the Follow target cache', 
 });
 
 test('Layer 3 block updates do not imply mining, and dimension resets resource targets', async () => {
-  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+  const { LayerThreePlanner } = await import('../dist/src/gameplay/layer-three.js');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { layerThree: new LayerThreePlanner() }).start();
   client.emit('start_game', {
@@ -296,9 +296,9 @@ test('Layer 3 block updates do not imply mining, and dimension resets resource t
 });
 
 test('Layer 7 optional advisor sees same-client survival and workflow state but never executes actions', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
-  const { LayerSevenAdvisor } = await import('./gameplay/layer-seven.js');
+  const { LayerOneController } = await import('../dist/src/gameplay/layer-one.js');
+  const { LayerFourSupervisor } = await import('../dist/src/gameplay/layer-four.js');
+  const { LayerSevenAdvisor } = await import('../dist/src/gameplay/layer-seven.js');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, {
     layerOne: new LayerOneController(), layerFour: new LayerFourSupervisor(),
@@ -328,8 +328,8 @@ test('Layer 7 optional advisor sees same-client survival and workflow state but 
 
 
 test('Layer 8 enforces fresh world observations and never claims beta or autonomous gameplay', async () => {
-  const { LayerEightReadiness } = await import('./gameplay/layer-eight.js');
-  const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
+  const { LayerEightReadiness } = await import('../dist/src/gameplay/layer-eight.js');
+  const { LayerSixWorkflow } = await import('../dist/src/gameplay/layer-six.js');
   let now = 1000;
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, {
@@ -609,8 +609,8 @@ test('pinned Bedrock 1.26.60 serializer accepts spawn completion and respawn ack
 
 
 test('addon-derived follow priority is wired to same Xbox world without automatic movement', async()=>{
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-  const { BedrockMotionArbiter } = await import('./gameplay/addon-navigation.js');
+  const { LayerTwoPlanner } = await import('../dist/src/gameplay/layer-two.js');
+  const { BedrockMotionArbiter } = await import('../dist/src/gameplay/addon-navigation.js');
   const client=new Client();
   const bridge=new BedrockGameplayBridge(client,{
     layerTwo:new LayerTwoPlanner(),
