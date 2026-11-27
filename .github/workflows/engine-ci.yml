@@ -11,6 +11,7 @@ jobs:
         with:
           node-version: '24'
       - run: npm install --omit=optional
+      - run: npm install --no-save --ignore-scripts bedrock-protocol@3.61.0
       - run: npm test
       - name: Verify friend-world CLI reports missing SDK
         run: |
