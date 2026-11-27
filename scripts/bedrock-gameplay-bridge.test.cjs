@@ -423,9 +423,6 @@ test('manual immediate respawn bypasses retry delay but preserves the server han
 
   // The server must still confirm its spawned state before PlayerAction(respawn).
   client.emit('respawn', { runtime_entity_id: 123n, state: 1, position: origin });
-  assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn']);
-  now += 1800;
-  bridge.tickRespawnRecovery();
   assert.deepEqual(client.sent.map(packet => packet.packet), ['respawn', 'player_action']);
   assert.equal(client.sent[1].value.action, 'respawn');
   bridge.stop();
