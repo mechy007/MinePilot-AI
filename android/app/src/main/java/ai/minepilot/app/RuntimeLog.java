@@ -143,15 +143,15 @@ final class RuntimeLog {
         JSONObject details = event.optJSONObject("details");
         if (details != null) {
             String mode = details.optString("mode", "");
-            if (!mode.isEmpty()) message += "\\nInput mode: " + mode;
+            if (!mode.isEmpty()) message += "\nInput mode: " + mode;
             if (details.has("motionX") || details.has("motionY"))
-                message += "\\nAnalog vector: x=" + details.optDouble("motionX") +
+                message += "\nAnalog vector: x=" + details.optDouble("motionX") +
                         " y=" + details.optDouble("motionY");
-            if (details.has("jump")) message += "\\nActions: jump=" + details.optBoolean("jump") +
+            if (details.has("jump")) message += "\nActions: jump=" + details.optBoolean("jump") +
                     " sprint=" + details.optBoolean("sprint") +
                     " sneak=" + details.optBoolean("sneak");
             String commandStatus = details.optString("status", "");
-            if (!commandStatus.isEmpty()) message += "\\nCommand result: " + commandStatus +
+            if (!commandStatus.isEmpty()) message += "\nCommand result: " + commandStatus +
                     (details.optString("reason").isEmpty() ? "" : " · " + details.optString("reason"));
         }
         int http = event.optInt("httpStatus");
