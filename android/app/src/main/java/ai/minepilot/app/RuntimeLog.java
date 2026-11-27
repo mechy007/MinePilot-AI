@@ -106,12 +106,12 @@ final class RuntimeLog {
             case "runtime_failed" -> "Android runtime failed";
             case "runtime_interrupted" -> "Android runtime interrupted";
             case "manual_input_sent" -> "Android manual input dispatched";
-            case "manual_input_accepted" -> "Runtime accepted manual input";
-            case "manual_input_rejected" -> "Runtime rejected manual input";
+            case "manual_input_accepted" -> "IPC queued manual input";
+            case "manual_input_rejected" -> "IPC rejected manual input";
             case "manual_input_released" -> "Android manual input released";
             case "app_command_sent" -> "Android gameplay command dispatched";
-            case "app_command_accepted" -> "Runtime accepted gameplay command";
-            case "app_command_rejected" -> "Runtime rejected gameplay command";
+            case "app_command_accepted" -> "IPC queued gameplay command";
+            case "app_command_rejected" -> "IPC rejected gameplay command";
             case "device_code" -> "Waiting for Microsoft approval";
             case "microsoft_approved" -> "Microsoft approval received";
             case "bedrock_credentials" -> "Verifying Minecraft credentials";
