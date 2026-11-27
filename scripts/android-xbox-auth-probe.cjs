@@ -11,40 +11,79 @@ const MINECRAFT_TITLE = {
 };
 
 function runtimeLogger(file) {
-  const phases = ['device_code', 'microsoft_approved', 'bedrock_credentials', 'verified', 'account_sent',
-    'friends_loaded', 'discovery', 'connection', 'retrying', 'spawned', 'failed', 'disconnected', 'stopped'];
-  const stages = ['microsoft_token', 'xbox_token', 'xbox_profile', 'account_save', 'bedrock_credentials',
-    'friends', 'owner', 'discovery', 'connection', 'xbox_membership', 'world_transport',
-    'world_nonce', 'nethernet_signalling', 'nethernet_peer', 'bedrock_login', 'bedrock_spawn', 'runtime'];
-  const reasons = ['no_transport', 'transport', 'network', 'timeout', 'host_disconnect', 'nethernet_closed',
-    'nonce_unavailable'];
-  const steps = ['offer_sent', 'answer_received', 'peer_connected'];
+  const phases = new Set(['device_code', 'microsoft_approved', 'bedrock_credentials', 'verified',
+    'account_sent', 'friends_loaded', 'discovery', 'connection', 'retrying', 'spawned',
+    'failed', 'disconnected', 'stopped']);
+  const stages = new Set(['microsoft_token', 'xbox_token', 'xbox_profile', 'account_save',
+    'bedrock_credentials', 'friends', 'owner', 'discovery', 'connection', 'xbox_membership',
+    'world_transport', 'world_nonce', 'nethernet_signalling', 'nethernet_peer',
+    'bedrock_login', 'bedrock_spawn', 'runtime']);
+  const reasons = new Set(['no_transport', 'transport', 'network', 'timeout', 'host_disconnect',
+    'nethernet_closed', 'nonce_unavailable']);
+  const steps = new Set(['offer_sent', 'answer_received', 'peer_connected']);
+  const sensitiveKey = /token|secret|password|authorization|cookie|private.?key|refresh.?key|nonce|xuid|gamertag|username|player.?name|peer.?id|network.?id|email|device.?code|user.?code/i;
+  const safeValue = (value, depth = 0) => {
+    if (value == null || typeof value === 'boolean') return value;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string') return value.slice(0, 240);
+    if (depth >= 6) return '[depth-limited]';
+    if (Array.isArray(value)) return value.slice(0, 32).map(item => safeValue(item, depth + 1));
+    if (typeof value !== 'object') return undefined;
+    const output = {};
+    for (const [key, item] of Object.entries(value).slice(0, 100)) {
+      if (sensitiveKey.test(key)) continue;
+      const safe = safeValue(item, depth + 1);
+      if (safe !== undefined) output[key.slice(0, 80)] = safe;
+    }
+    return output;
+  };
   let previous;
+  let sequence = 0;
+  const rotate = () => {
+    try {
+      if (fs.existsSync(file) && fs.statSync(file).size >= 4 * 1024 * 1024) {
+        const old = file + '.previous';
+        try { fs.unlinkSync(old); } catch {}
+        fs.renameSync(file, old);
+      }
+    } catch { /* Diagnostics must never interrupt the live session. */ }
+  };
   return snapshot => {
-    if (!file || !phases.includes(snapshot.phase)) return;
-    const event = { phase: snapshot.phase };
-    if (stages.includes(snapshot.stage)) event.stage = snapshot.stage;
-    if (reasons.includes(snapshot.reason)) event.reason = snapshot.reason;
-    if (steps.includes(snapshot.step)) event.step = snapshot.step;
-    if (Number.isInteger(snapshot.httpStatus) && snapshot.httpStatus >= 400 && snapshot.httpStatus <= 599) {
-      event.httpStatus = snapshot.httpStatus;
+    if (!file || !snapshot || !phases.has(snapshot.phase)) return;
+    const event = {
+      schema: 'minepilot.session-diagnostic.v1',
+      sequence: ++sequence,
+      at: Date.now(),
+      phase: snapshot.phase
+    };
+    if (typeof snapshot.stage === 'string' && stages.has(snapshot.stage)) event.stage = snapshot.stage;
+    if (typeof snapshot.reason === 'string' && reasons.has(snapshot.reason)) event.reason = snapshot.reason;
+    if (typeof snapshot.step === 'string' && steps.has(snapshot.step)) event.step = snapshot.step;
+    for (const key of ['httpStatus', 'nethernetCode', 'bedrockCode', 'chunks', 'seconds', 'retried']) {
+      const value = snapshot[key];
+      if (typeof value === 'boolean' || (Number.isInteger(value) && value >= 0 && value <= 1000000000))
+        event[key] = value;
     }
-    if (typeof snapshot.xboxCode === 'string' && /^214\d{7}$/.test(snapshot.xboxCode)) {
-      event.xboxCode = snapshot.xboxCode;
-    }
-    if (Number.isInteger(snapshot.nethernetCode) && snapshot.nethernetCode > 0 && snapshot.nethernetCode <= 255) {
-      event.nethernetCode = snapshot.nethernetCode;
-    }
-    if (Number.isInteger(snapshot.bedrockCode) && snapshot.bedrockCode >= 0 && snapshot.bedrockCode <= 255) {
-      event.bedrockCode = snapshot.bedrockCode;
+    if (snapshot.vitals && typeof snapshot.vitals === 'object')
+      event.vitals = safeValue(snapshot.vitals);
+    if (snapshot.gameplay && typeof snapshot.gameplay === 'object')
+      event.gameplay = safeValue(snapshot.gameplay);
+    // Preserve a concise, non-sensitive error classification, never raw SDK messages/bodies.
+    if (snapshot.error && typeof snapshot.error === 'object') {
+      event.error = {
+        name: ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'AbortError'].includes(snapshot.error.name)
+          ? snapshot.error.name : 'Error'
+      };
     }
     const key = JSON.stringify(event);
     if (key === previous) return;
     try {
-      fs.appendFileSync(file, JSON.stringify({ ...event, at: Date.now() }) + '\n', { mode: 0o600 });
+      rotate();
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      fs.appendFileSync(file, JSON.stringify(event) + '\\n', { mode: 0o600 });
       previous = key;
     } catch {
-      // The primary status and connection must continue if log storage fails.
+      // Logging is best-effort; never interrupt authentication or gameplay.
     }
   };
 }
