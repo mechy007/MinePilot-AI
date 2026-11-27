@@ -193,7 +193,7 @@ class BedrockGameplayBridge {
         if (Array.isArray(payload.attributes)) summary.attributeCount = payload.attributes.length;
       }
       telemetry.lastSummary = summary;
-      telemetry.events.push({ at: telemetry.lastAt, type: event, summary });
+      telemetry.events.push({ at: telemetry.lastAt, direction: 'in', type: event, summary });
       if (telemetry.events.length > 64) telemetry.events.shift();
       try {
         callback(payload);
