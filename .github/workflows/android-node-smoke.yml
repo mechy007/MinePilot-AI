@@ -41,6 +41,7 @@ on:
       - scripts/bedrock-odyssey-observation-executor.test.cjs
       - 'scripts/android-xbox-auth-probe*.cjs'
       - 'scripts/android-friend-world-session*.cjs'
+      - 'scripts/android-friend-world-join*.cjs'
       - src/connection/prismarine-world-client.ts
       - package.json
       - tsconfig.json
@@ -137,7 +138,7 @@ jobs:
                   assert apk.getinfo(f"assets/{name}").file_size > 0, name
               with ZipFile(BytesIO(apk.read("assets/bedrock-sdk.zip"))) as sdk:
                   for entry in ("node-smoke.cjs", "xbox-auth-probe.cjs",
-                                "friend-world-session.cjs", "bedrock-inventory-ledger.cjs",
+                                "friend-world-session.cjs", "android-friend-world-join.cjs", "bedrock-inventory-ledger.cjs",
                                 "prismarine-world-client.mjs", "runtime/bedrock/index.cjs",
                                 "runtime/bedrock/events/event-bus.cjs",
                                 "runtime/bedrock/adapters/packet-normalizer.cjs",
