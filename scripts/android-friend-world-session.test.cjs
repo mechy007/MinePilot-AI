@@ -6,6 +6,23 @@ const { test } = require('node:test');
 const { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner } = require('./android-friend-world-session.cjs');
 const { runtimeLogger } = require('./android-xbox-auth-probe.cjs');
 
+const { existsSync } = require('node:fs');
+const { join, resolve } = require('node:path');
+function runtimeModulePath(stagedRelative, builtRelative) {
+  const staged = [join(__dirname, stagedRelative), join(__dirname, '..', stagedRelative)]
+    .find(existsSync);
+  const built = resolve(__dirname, '..', 'dist', 'src', builtRelative);
+  const target = staged ?? built;
+  if (!existsSync(target)) throw new Error(`Runtime module is not staged or built: ${stagedRelative}`);
+  return target;
+}
+function requireRuntimeModule(stagedRelative, builtRelative) {
+  return require(runtimeModulePath(stagedRelative, builtRelative));
+}
+async function importRuntimeModule(stagedRelative, builtRelative) {
+  return import(require('node:url').pathToFileURL(runtimeModulePath(stagedRelative, builtRelative)).href);
+}
+
 class Client extends EventEmitter {
   closed = 0;
   sent = [];
@@ -168,7 +185,7 @@ test('reanchors vitals to the new player runtime ID after server respawn', async
 });
 
 test('awareness distinguishes food needs, recovery and incomplete data', () => {
-  const { BotAwareness } = require('./bot-awareness.mjs');
+  const { BotAwareness } = requireRuntimeModule('bot-awareness.mjs', 'core/bot-awareness.js');
   const awareness = new BotAwareness();
   const update = (...attributes) => awareness.update({
     runtime_entity_id: 1n,
@@ -197,7 +214,7 @@ test('captures the Bedrock disconnect code without forwarding the server message
 });
 
 test('hands the verified account to the friend-world SDK with exact owner selection', async () => {
-  const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
+  const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
   const client = new Client();
   const snapshots = [];
   let auth;
@@ -310,7 +327,7 @@ test('packaged Bedrock SDK reaches the Xbox membership request for the selected 
   const { createClient } = require('bedrock-protocol');
   const { Titles } = require('prismarine-auth');
   const { XboxClient } = require('prismarine-xbox-services');
-  const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
+  const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
   const ownerXuid = '2533274790000002';
   const botXuid = '2533274790000001';
   context.mock.method(XboxClient.prototype, 'getProfile', async () => ({ xuid: botXuid, gamertag: 'FixtureBot' }));
@@ -352,7 +369,7 @@ test('packaged SDK routes the offer to the Xbox messaging ID and accepts the mat
   const { Titles } = require('prismarine-auth');
   const { XboxClient } = require('prismarine-xbox-services');
   const { SignalType } = require('nethernet');
-  const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
+  const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
   const ownerXuid = '2533274790000002';
   const botXuid = '2533274790000001';
   const hostNetworkId = '18446744073709551610';
