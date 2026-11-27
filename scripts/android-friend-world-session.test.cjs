@@ -493,8 +493,13 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
       assert.equal(options.nethernet.networkId, hostNetworkId);
       assert.equal(options.nethernet._peerPlayerId, hostPlayerId);
       assert.equal(options.nethernet._signallingProtocol, 'jsonrpc');
-      client = createClient(options);
-      return client;
+      try {
+        client = createClient(options);
+        return client;
+      } catch (error) {
+        snapshots.push({ testSetupError: error?.message, testSetupStack: error?.stack });
+        throw error;
+      }
     },
     pickOwnerWorld
   });
