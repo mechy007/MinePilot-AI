@@ -176,9 +176,13 @@ class BedrockGameplayBridge {
       const summary = {};
       if (payload && typeof payload === 'object') {
         for (const key of ['state', 'mode', 'dimension', 'x', 'y', 'z', 'time',
-          'current_tick', 'sub_chunk_count', 'highest_subchunk_count', 'sub_chunk_limit',
-          'runtime_entity_id', 'player_position', 'position', 'rotation', 'movement_authority',
-          'health', 'food', 'saturation', 'difficulty', 'enable_commands', 'permission_level']) {
+          'current_tick', 'tick', 'sub_chunk_count', 'highest_subchunk_count', 'sub_chunk_limit',
+          'runtime_entity_id', 'entity_runtime_id', 'runtime_id', 'player_unique_id',
+          'player_position', 'position', 'rotation', 'velocity', 'delta', 'yaw', 'pitch',
+          'movement_authority', 'on_ground', 'teleport', 'window_id', 'container_id',
+          'slot', 'selected_slot', 'select_slot', 'count', 'network_id', 'block_id',
+          'block_position', 'action_type', 'movement_type', 'flags', 'health', 'food',
+          'saturation', 'difficulty', 'enable_commands', 'permission_level', 'reason']) {
           const value = payload[key];
           if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ||
               (typeof value === 'string' && value.length <= 96) ||
@@ -188,9 +192,30 @@ class BedrockGameplayBridge {
               ? { x: value.x, y: value.y, z: value.z } : value;
           }
         }
+        if (payload.item && typeof payload.item === 'object') {
+          const item = {};
+          for (const key of ['network_id', 'id', 'count', 'aux', 'metadata']) {
+            const value = payload.item[key];
+            if (typeof value === 'number' && Number.isFinite(value)) item[key] = value;
+          }
+          if (Object.keys(item).length) summary.item = item;
+        }
         if (Array.isArray(payload.entries)) summary.entryCount = payload.entries.length;
         if (Array.isArray(payload.records)) summary.recordCount = payload.records.length;
-        if (Array.isArray(payload.attributes)) summary.attributeCount = payload.attributes.length;
+        if (Array.isArray(payload.attributes)) {
+          summary.attributeCount = payload.attributes.length;
+          summary.attributes = payload.attributes.slice(0, 32).flatMap(attribute => {
+            if (!attribute || typeof attribute !== 'object') return [];
+            const item = {};
+            if (typeof attribute.name === 'string' && /^[a-zA-Z0-9_.:-]{1,80}$/.test(attribute.name))
+              item.attribute = attribute.name;
+            for (const key of ['current', 'min', 'max', 'value']) {
+              if (typeof attribute[key] === 'number' && Number.isFinite(attribute[key]))
+                item[key] = attribute[key];
+            }
+            return Object.keys(item).length ? [item] : [];
+          });
+        }
       }
       telemetry.lastSummary = summary;
       telemetry.events.push({ at: telemetry.lastAt, direction: 'in', type: event, summary });
