@@ -196,8 +196,9 @@ function installNethernetTelemetry(client, peerId, signallingProtocol, expectedN
           } catch {}
           if (senderIds.length === 0) return originalOnMessage.call(this, normalized);
           // SDK releases disagree on whether signal.networkId comes from the
-          // inner numeric NetherNet ID or the outer Xbox PmsgId. For JSON-RPC,
-          // the outer sender is authoritative and must drive peer validation.
+          // inner numeric NetherNet ID or the outer Xbox PmsgId. Validate both
+          // identities above, then use the outer PmsgId for node-nethernet's
+          // consistent expected-peer comparison.
           const originalEmit = this.emit;
           let senderIndex = 0;
           this.emit = function (event, ...args) {
