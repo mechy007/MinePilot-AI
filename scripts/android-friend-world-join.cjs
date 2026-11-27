@@ -152,8 +152,8 @@ function createManagedSession({ xbox, world, rta, subscription, controller, init
       closed = true;
       controller.abort(new Error('Friend-world session closing'));
       closing = (async () => {
-        await subscription.close?.().catch?.(() => {});
-        await rta.close?.().catch?.(() => {});
+        try { if (typeof subscription.close === 'function') await subscription.close(); } catch {}
+        try { if (typeof rta.close === 'function') await rta.close(); } catch {}
         try {
           await xbox.updateSession(world.sessionRef.name, { members: { me: null } }, { timeout: 5_000 });
         } catch {
@@ -193,6 +193,7 @@ async function joinFriendWorld({
   let rta = null;
   let subscription = null;
   let session = null;
+  let world = null;
   let joined = false;
   const setStage = stage => {
     onStage(stage);
@@ -202,7 +203,7 @@ async function joinFriendWorld({
   try {
     setStage('discovery');
     const handles = await xbox.getActivityHandles(profile.xuid, { signal: joinSignal });
-    const world = pickOwnerWorld(handles, ownerXuid);
+    world = pickOwnerWorld(handles, ownerXuid);
     if (!world?.id || !world?.sessionRef?.name) throw new Error('Selected friend world has no joinable activity handle');
     const route = selectFriendWorldConnection(world.customProperties);
     if (!route) throw new Error('Friend world has no supported NetherNet signalling route');
@@ -260,13 +261,15 @@ async function joinFriendWorld({
     };
   } catch (error) {
     controller.abort(error);
-    if (subscription) await subscription.close?.().catch?.(() => {});
-    if (rta) await rta.close?.().catch?.(() => {});
-    if (joined) {
+    if (subscription) {
+      try { if (typeof subscription.close === 'function') await subscription.close(); } catch {}
+    }
+    if (rta) {
+      try { if (typeof rta.close === 'function') await rta.close(); } catch {}
+    }
+    if (joined && world?.sessionRef?.name) {
       try {
-        const selected = session?.current;
-        const name = selected?.sessionRef?.name;
-        if (name) await xbox.updateSession(name, { members: { me: null } }, { timeout: 5_000 });
+        await xbox.updateSession(world.sessionRef.name, { members: { me: null } }, { timeout: 5_000 });
       } catch {
         // Best-effort leave after a failed join.
       }
