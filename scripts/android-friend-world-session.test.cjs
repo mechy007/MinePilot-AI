@@ -470,6 +470,10 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
       respond(hostPlayerId.toUpperCase(), hostNetworkId, 37);
       respond(hostPlayerId, '124', 39);
     } };
+    this.on('signal', signal => snapshots.push({ testSignal: {
+      type: signal.type, connectionId: String(signal.connectionId),
+      networkId: String(signal.networkId), data: signal.data
+    } }));
     this.emit('credentials', []);
   });
   class Authflow {
@@ -545,7 +549,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   assert.equal(client.options.nethernet.inactivityTimeoutMs, 12000);
   assert.deepEqual(snapshots.at(-1), {
     phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37
-  });
+  }, JSON.stringify({ snapshots, sent, serverNetworkId: String(client.connection.nethernet.serverNetworkId) }));
   assert.equal(subscriptionClose.mock.callCount(), 1);
   assert.equal(rtaClose.mock.callCount(), 1);
   assert.ok(request.mock.callCount() >= 2);
