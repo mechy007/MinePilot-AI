@@ -109,6 +109,9 @@ final class RuntimeLog {
             case "manual_input_accepted" -> "Runtime accepted manual input";
             case "manual_input_rejected" -> "Runtime rejected manual input";
             case "manual_input_released" -> "Android manual input released";
+            case "app_command_sent" -> "Android gameplay command dispatched";
+            case "app_command_accepted" -> "Runtime accepted gameplay command";
+            case "app_command_rejected" -> "Runtime rejected gameplay command";
             case "device_code" -> "Waiting for Microsoft approval";
             case "microsoft_approved" -> "Microsoft approval received";
             case "bedrock_credentials" -> "Verifying Minecraft credentials";
