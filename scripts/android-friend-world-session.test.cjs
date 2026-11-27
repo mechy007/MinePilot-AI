@@ -27,9 +27,12 @@ class Client extends EventEmitter {
   closed = 0;
   sent = [];
   queue(packet, value) { this.sent.push({ packet, value }); }
-  close() {
+  close(reason) {
+    if (this.closed) return;
     this.closed++;
-    this.emit('close');
+    const cleanup = this.nethernet?.session?.close?.();
+    this._nethernetCleanup = Promise.resolve(cleanup);
+    this.emit('close', reason);
   }
 }
 
@@ -213,10 +216,9 @@ test('captures the Bedrock disconnect code without forwarding the server message
   });
 });
 
-test('hands the verified account to the friend-world SDK with exact owner selection', async () => {
-  const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
-  const client = new Client();
+test('hands the verified account to the friend-world runtime with exact owner selection', async () => {
   const snapshots = [];
+  const client = new Client();
   let auth;
   class Authflow {
     constructor() { auth = this; }
@@ -239,19 +241,35 @@ test('hands the verified account to the friend-world SDK with exact owner select
     signal: new AbortController().signal,
     authDependencies: { Authflow, XboxClient, Titles: { MinecraftAndroid: 'android' } },
     pickOwnerWorld,
+    joinFriendWorldImpl: async ({ ownerXuid, pickOwnerWorld: select, publish, onStage }) => {
+      assert.equal(ownerXuid, '84');
+      const handle = { id: 'handle-84', sessionRef: { name: 'target' },
+        customProperties: { ownerId: '84', protocol: 2225 } };
+      assert.equal(select([
+        { id: 'wrong', sessionRef: { name: 'other' }, ownerXuid: '84', customProperties: { ownerId: '55' } },
+        handle
+      ], ownerXuid), handle);
+      onStage('world_nonce');
+      publish({ phase: 'connection', stage: 'world_nonce' });
+      return {
+        peerId: '123',
+        signallingProtocol: 'legacy',
+        nonce: null,
+        sessionAbort: new AbortController(),
+        session: { async close() {} }
+      };
+    },
     createClient(options) {
-      queueMicrotask(async () => {
-        assert.equal(options.authflow, auth);
-        assert.equal(options.authTitle, 'android');
-        assert.equal(options.offline, false);
-        const session = { sessionRef: { name: 'target' }, customProperties: { ownerId: '84', protocol: 2225 } };
-        assert.equal(options.world.pickSession([
-          { sessionRef: { name: 'other' }, ownerXuid: '84', customProperties: { ownerId: '55' } },
-          session
-        ]), session);
+      assert.equal(options.authflow, auth);
+      assert.equal(options.authTitle, 'android');
+      assert.equal(options.offline, false);
+      assert.equal(options.transport, 'nethernet');
+      assert.equal(options.nethernet.networkId, '123');
+      client.nethernet = {};
+      queueMicrotask(() => {
         client.emit('start_game');
         client.emit('spawn');
-        client.emit('close');
+        client.close();
       });
       return client;
     }
@@ -269,9 +287,7 @@ for (const cancel of [false, true]) {
     const selected = [];
     let finishCleanup;
     let verified = 0;
-    const membershipCleaned = new Promise(resolve => {
-      finishCleanup = resolve;
-    });
+    const membershipCleaned = new Promise(resolve => { finishCleanup = resolve; });
     class Authflow {
       async getXboxToken() { verified++; }
       async getMinecraftBedrockToken() {
@@ -282,6 +298,7 @@ for (const cancel of [false, true]) {
     class XboxClient {
       async getProfile() { return { xuid: '42', gamertag: 'Bot' }; }
     }
+    let joinAttempts = 0;
     const session = run({
       ownerXuid: '84',
       signal: controller.signal,
@@ -290,19 +307,27 @@ for (const cancel of [false, true]) {
         if (cancel && snapshot.phase === 'retrying') controller.abort();
       },
       authDependencies: { Authflow, XboxClient, Titles: { MinecraftAndroid: 'android' } },
-      pickOwnerWorld(sessions, ownerXuid) {
-        assert.equal(ownerXuid, '84');
-        selected.push(sessions[0]);
-        return sessions[0];
+      pickOwnerWorld,
+      joinFriendWorldImpl: async ({ onStage, publish }) => {
+        joinAttempts++;
+        selected.push(joinAttempts === 1 ? 'first' : 'fresh');
+        onStage('world_nonce');
+        publish({ phase: 'connection', stage: 'world_nonce' });
+        return {
+          peerId: '84',
+          signallingProtocol: 'legacy',
+          nonce: null,
+          sessionAbort: new AbortController(),
+          session: { close: () => joinAttempts === 1 ? membershipCleaned : Promise.resolve() }
+        };
       },
-      createClient(options) {
+      createClient() {
         const client = new Client();
+        client.nethernet = {};
         clients.push(client);
-        if (clients.length === 1) client._nethernetCleanup = membershipCleaned;
         queueMicrotask(() => {
-          options.world.pickSession([clients.length === 1 ? 'first' : 'fresh']);
           client.emit('minepilot_join_step', 'nethernet_peer');
-          client.emit('error', Object.assign(new Error('NetherNet peer closed'), { nethernetCode: 14 }));
+          client.close('connecterror:14');
         });
         return client;
       }
