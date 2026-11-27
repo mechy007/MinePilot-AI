@@ -248,3 +248,25 @@ test('movement readiness refreshes stale unknown terrain after the missing block
   assert.ok(resumed.position.z > world.position.z);
   controller.stop('session_closed');
 });
+
+
+test('manual input is emitted by the live tick queue and release emits a neutral frame', () => {
+  const { controller, world, client } = movementWorld();
+  assert.equal(controller.startPresence(world), true);
+  assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
+
+  const anchor = world.serverTickObservedAt;
+  assert.equal(controller.inputQueue.pump(anchor + 50), 1);
+  const moving = client.packets.at(-1);
+  assert.equal(moving.name, 'player_auth_input');
+  assert.ok(moving.packet.input_data.includes('up'));
+  assert.ok(Math.hypot(moving.packet.move_vector.x, moving.packet.move_vector.z) > 0.01);
+
+  controller.releaseManual();
+  assert.equal(controller.inputQueue.pump(anchor + 100), 1);
+  const stopped = client.packets.at(-1);
+  assert.equal(stopped.name, 'player_auth_input');
+  assert.deepEqual(stopped.packet.move_vector, { x: 0, z: 0 });
+  assert.equal(stopped.packet.input_data.includes('up'), false);
+  controller.stop('session_closed');
+});
