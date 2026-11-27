@@ -1480,5 +1480,5 @@ test('movement presence retries after spawn when terrain was not ready on the fi
   bridge.tickControlPlane();
   assert.equal(attempts, 2);
   assert.equal(bridge.snapshot().movementPresence.state, 'active');
-  bridge.close();
+  bridge.stop();
 });
