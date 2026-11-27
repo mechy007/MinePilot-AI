@@ -105,6 +105,10 @@ final class RuntimeLog {
             case "runtime_ready" -> "Android runtime ready";
             case "runtime_failed" -> "Android runtime failed";
             case "runtime_interrupted" -> "Android runtime interrupted";
+            case "manual_input_sent" -> "Android manual input dispatched";
+            case "manual_input_accepted" -> "Runtime accepted manual input";
+            case "manual_input_rejected" -> "Runtime rejected manual input";
+            case "manual_input_released" -> "Android manual input released";
             case "device_code" -> "Waiting for Microsoft approval";
             case "microsoft_approved" -> "Microsoft approval received";
             case "bedrock_credentials" -> "Verifying Minecraft credentials";
@@ -133,6 +137,20 @@ final class RuntimeLog {
             default -> "";
         };
         if (!reason.isEmpty()) message += " · " + reason;
+        JSONObject details = event.optJSONObject("details");
+        if (details != null) {
+            String mode = details.optString("mode", "");
+            if (!mode.isEmpty()) message += "\\nInput mode: " + mode;
+            if (details.has("motionX") || details.has("motionY"))
+                message += "\\nAnalog vector: x=" + details.optDouble("motionX") +
+                        " y=" + details.optDouble("motionY");
+            if (details.has("jump")) message += "\\nActions: jump=" + details.optBoolean("jump") +
+                    " sprint=" + details.optBoolean("sprint") +
+                    " sneak=" + details.optBoolean("sneak");
+            String commandStatus = details.optString("status", "");
+            if (!commandStatus.isEmpty()) message += "\\nCommand result: " + commandStatus +
+                    (details.optString("reason").isEmpty() ? "" : " · " + details.optString("reason"));
+        }
         int http = event.optInt("httpStatus");
         if (http >= 400 && http <= 599) message += " · HTTP " + http;
         int nethernet = event.optInt("nethernetCode");
