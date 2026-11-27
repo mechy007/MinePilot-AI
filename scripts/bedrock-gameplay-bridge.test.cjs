@@ -1511,3 +1511,24 @@ test('session diagnostics retain bounded packet and command summaries without ra
   assert.equal(snapshot.commandTelemetry.last.status, 'ok');
   bridge.stop();
 });
+
+
+test('outbound Bedrock packets are counted and the original queue is restored on stop', () => {
+  const client = new Client();
+  const originalQueue = client.queue;
+  const bridge = new BedrockGameplayBridge(client).start();
+  client.queue('player_auth_input', {
+    position: { x: 1, y: 64, z: 2 },
+    move_vector: { x: 0, z: 1 },
+    input_data: ['up', 'sprint'],
+    input_mode: 'touch'
+  });
+  const telemetry = bridge.snapshot().packetTelemetry;
+  assert.equal(telemetry.sentByType.player_auth_input, 1);
+  assert.equal(telemetry.lastSentType, 'player_auth_input');
+  assert.equal(telemetry.events.some(event =>
+    event.direction === 'out' && event.type === 'player_auth_input'), true);
+  assert.deepEqual(telemetry.lastSentSummary.position, { x: 1, y: 64, z: 2 });
+  bridge.stop();
+  assert.equal(client.queue, originalQueue);
+});
