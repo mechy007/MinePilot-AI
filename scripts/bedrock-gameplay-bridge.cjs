@@ -662,7 +662,11 @@ class BedrockGameplayBridge {
       this.movementAuthority = next;
       this.movementAuthoritySource = 'explicit_authority_update';
       if (this.spawned && [1,2].includes(next)) this.ensureMovementPresence(true);
-      else this.movement?.stopPresence?.('authority_changed');
+      else {
+        this.movement?.stopPresence?.('authority_changed');
+        this.movementPresence = { ...this.movementPresence, state: 'waiting',
+          reason: next === 0 ? 'client_authoritative_movement_not_supported' : 'authority_changed' };
+      }
     }
   }
   attributes(packet) {
