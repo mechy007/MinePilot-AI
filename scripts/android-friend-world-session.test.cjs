@@ -505,8 +505,8 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   assert.ok(snapshots.some(event => event.step === 'offer_sent'));
   assert.match(offer.message, /^a=candidate:.*127\\.0\\.0\\.1/m);
   assert.equal(client.connection.nethernet.serverNetworkId, hostPlayerId);
-  assert.equal(client.connection.nethernet.responseTimeoutMs, 25000);
-  assert.equal(client.connection.nethernet.inactivityTimeoutMs, 12000);
+  assert.equal(client.options.nethernet.responseTimeoutMs, 25000);
+  assert.equal(client.options.nethernet.inactivityTimeoutMs, 12000);
   assert.deepEqual(snapshots.at(-1), {
     phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37
   });
