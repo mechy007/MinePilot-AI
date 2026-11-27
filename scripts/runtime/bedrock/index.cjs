@@ -79,7 +79,7 @@ function createRuntimeExtensions(options={}) {
     externalRegistries:'cross_check_only'}
   }),
   close:(reason='session_closed')=>{
-   if(closed)return;closed=true;tasks.cancel(reason);outcomes.clear();
+   if(closed)return;closed=true;tasks.cancel(reason);stuckRecovery.reset();capabilities.reset();outcomes.clear();
    plugins.close(reason);events.close();world.close();recorder.recordSystem('session_closed',{reason});
   }
  };
