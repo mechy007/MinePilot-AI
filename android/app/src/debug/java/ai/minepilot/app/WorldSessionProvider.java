@@ -688,7 +688,8 @@ public final class WorldSessionProvider extends ContentProvider {
                 !"review_checkpoint".equals(action) && !"advisor_mode".equals(action) &&
                 !"advisor_review".equals(action) &&
                 !"stop_movement".equals(action) && !"manual_move".equals(action) &&
-                !"manual_stop".equals(action) && !"verified_step".equals(action) &&
+                !"manual_stop".equals(action) && !"immediate_respawn".equals(action) &&
+                !"verified_step".equals(action) &&
                 !"autonomy_follow".equals(action) && !"follow_player".equals(action) && !"autonomy_stop".equals(action) &&
                 !"agent_start".equals(action) && !"agent_stop".equals(action) &&
                 !"experimental_break".equals(action) && !"learning_start".equals(action) && !"native_skill_start".equals(action) &&
