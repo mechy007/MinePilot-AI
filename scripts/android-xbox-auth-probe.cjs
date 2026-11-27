@@ -81,7 +81,7 @@ function runtimeLogger(file) {
     try {
       rotate();
       fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-      fs.appendFileSync(file, JSON.stringify(event) + '\\n', { mode: 0o600 });
+      fs.appendFileSync(file, JSON.stringify(event) + String.fromCharCode(10), { mode: 0o600 });
       previous = key;
     } catch {
       // Logging is best-effort; never interrupt authentication or gameplay.
