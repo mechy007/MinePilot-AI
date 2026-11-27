@@ -829,7 +829,7 @@ public final class DashboardActivity extends Activity {
             }
             String movementPresence = current.getString("movement_presence_state", "");
             if (!movementPresence.isEmpty()) {
-                message += "\nMovement engine: " + movementPresence.replace('_', ' ');
+                message += "\nMovement input queue: " + movementPresence.replace('_', ' ');
                 if ("waiting".equals(movementPresence)) {
                     String presenceReason = current.getString("movement_presence_reason", "");
                     if (!presenceReason.isEmpty())
