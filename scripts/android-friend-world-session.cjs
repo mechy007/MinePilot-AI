@@ -162,10 +162,17 @@ function installNethernetTelemetry(client, peerId, signallingProtocol) {
           try {
             const raw = typeof message === 'string' ? message : message?.toString?.();
             const packet = raw ? JSON.parse(raw) : null;
-            const from = packet?.params?.From;
+            const from = packet?.params?.From ?? packet?.params?.from ?? packet?.params?.fromPlayerId;
             if (packet?.method === 'Signaling_ReceiveMessage_v1_0' &&
-                typeof from === 'string' && from.toLowerCase() === peerId.toLowerCase()) {
-              packet.params.From = peerId;
+                typeof from === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(from)) {
+              // Normalize all supported SDK field spellings. Older SDK builds read
+              // from/fromPlayerId rather than Xbox's From; preserve unrelated senders
+              // too so node-nethernet can reject them by peer identity.
+              const normalizedFrom = from.toLowerCase();
+              packet.params.From = normalizedFrom;
+              packet.params.from = normalizedFrom;
+              packet.params.fromPlayerId = normalizedFrom;
               const encoded = JSON.stringify(packet);
               normalized = typeof message === 'string' ? encoded : Buffer.from(encoded);
             }
