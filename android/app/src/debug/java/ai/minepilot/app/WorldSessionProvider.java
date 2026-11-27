@@ -405,6 +405,18 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (inputStatus.matches("[a-z_]{1,32}")) result.putString("movement_input_state", inputStatus);
                     if (inputReason.matches("[a-z_]{1,64}")) result.putString("movement_input_reason", inputReason);
                 }
+                JSONObject movementPresence = gameplay.optJSONObject("movementPresence");
+                if (movementPresence != null) {
+                    String presenceState = movementPresence.optString("state", "");
+                    String presenceReason = movementPresence.optString("reason", "");
+                    if (presenceState.matches("[a-z_]{1,24}"))
+                        result.putString("movement_presence_state", presenceState);
+                    if (presenceReason.matches("[a-z_]{1,64}"))
+                        result.putString("movement_presence_reason", presenceReason);
+                    int attempts = movementPresence.optInt("attempts", 0);
+                    if (attempts >= 0 && attempts <= 100000)
+                        result.putInt("movement_presence_attempts", attempts);
+                }
                 JSONObject runtimeExtensions = gameplay.optJSONObject("runtimeExtensions");
                 if (runtimeExtensions != null) {
                     JSONObject capabilityAssessment = runtimeExtensions.optJSONObject("capabilityAssessment");
