@@ -4,7 +4,7 @@ const SUPPORTED=Object.freeze([{gameVersion:CODEC_BASELINE.gameVersion,protocol:
 function detectCompatibility(meta={}) {
  const gameVersion=typeof meta.gameVersion==='string'?meta.gameVersion:null;
  const protocol=Number.isInteger(meta.protocol)?meta.protocol:null;
- const match=SUPPORTED.find(v=>(!gameVersion||v.gameVersion===gameVersion)&&(!Number.isInteger(protocol)||v.protocol===protocol));
+ const match=gameVersion&&Number.isInteger(protocol)?SUPPORTED.find(v=>v.gameVersion===gameVersion&&v.protocol===protocol):null;
  const exact=!!match&&(!gameVersion||match.gameVersion===gameVersion)&&(!Number.isInteger(protocol)||match.protocol===protocol);
  return {gameVersion,protocol,targetGameVersion:TARGET_GAME_VERSION,adapter:exact?match.adapter:null,
   status:exact?'known_baseline':'unknown_or_unverified',verified:exact,
