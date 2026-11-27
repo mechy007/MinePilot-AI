@@ -31,7 +31,8 @@ class Client extends EventEmitter {
     if (this.closed) return;
     this.closed++;
     const cleanup = this.nethernet?.session?.close?.();
-    this._nethernetCleanup = Promise.resolve(cleanup);
+    if (cleanup !== undefined) this._nethernetCleanup = Promise.resolve(cleanup);
+    else this._nethernetCleanup ??= Promise.resolve();
     this.emit('close', reason);
   }
 }
