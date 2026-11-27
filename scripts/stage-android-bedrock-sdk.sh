@@ -404,6 +404,8 @@ require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
 console.log('Verified Bedrock 1.26.60 collision geometry and physics engine');
 JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
+# Tests execute from verify/, so provide their expected source-module basename there too.
+cp "$temp/friend-world-session.cjs" "$temp/verify/android-friend-world-session.cjs"
 cp "$root/scripts/bedrock-movement-controller.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-gameplay-bridge.test.cjs" "$temp/verify/"
 cp "$temp/bedrock-manual-terrain.test.cjs" "$temp/verify/"
