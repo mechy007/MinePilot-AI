@@ -254,6 +254,7 @@ test('hands the verified account to the friend-world runtime with exact owner se
       onStage('world_nonce');
       publish({ phase: 'connection', stage: 'world_nonce' });
       return {
+        networkId: '123',
         peerId: '123',
         signallingProtocol: 'legacy',
         nonce: null,
@@ -267,6 +268,7 @@ test('hands the verified account to the friend-world runtime with exact owner se
       assert.equal(options.offline, false);
       assert.equal(options.transport, 'nethernet');
       assert.equal(options.nethernet.networkId, '123');
+      assert.equal(options.nethernet._peerPlayerId, undefined);
       client.nethernet = {};
       queueMicrotask(() => {
         client.emit('start_game');
@@ -488,7 +490,8 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
     signal: AbortSignal.timeout(5000),
     authDependencies: { Authflow, XboxClient, XboxRTASocket, Titles },
     createClient: options => {
-      assert.equal(options.nethernet.networkId, hostPlayerId);
+      assert.equal(options.nethernet.networkId, hostNetworkId);
+      assert.equal(options.nethernet._peerPlayerId, hostPlayerId);
       assert.equal(options.nethernet._signallingProtocol, 'jsonrpc');
       client = createClient(options);
       return client;
