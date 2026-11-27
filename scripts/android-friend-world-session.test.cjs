@@ -513,7 +513,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
           'a=sctp-port:5000',
           'a=fingerprint:sha-256 00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF',
           'a=candidate:1 1 UDP 2122260223 127.0.0.1 12345 typ host'
-        ].join('\\r\\n');
+        ].join('\r\n');
         this.signalHandler(new SignalStructure(
           SignalType.ConnectRequest, this.connectionId, offerSdp, this.serverNetworkId
         ));
