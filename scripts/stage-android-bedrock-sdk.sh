@@ -219,6 +219,8 @@ echo "70458c05b33622a05e4e2bbc5811f6221e4085003db25292ef122e0c830397a1  $data_no
 cp "$root/scripts/android-node-bedrock-smoke.cjs" "$temp/node-smoke.cjs"
 cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
+# The staged contract test imports the source filename; keep that alias beside it.
+cp "$temp/friend-world-session.cjs" "$temp/android-friend-world-session.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
 cp "$root/scripts/bedrock-stack-request-manager.cjs" "$temp/bedrock-stack-request-manager.cjs"
 cp "$root/scripts/bedrock-recipe-catalog.cjs" "$temp/bedrock-recipe-catalog.cjs"
