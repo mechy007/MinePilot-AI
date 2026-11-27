@@ -1640,10 +1640,27 @@ public final class DashboardActivity extends Activity {
         if (taskId != null) extras.putString("task_id", taskId);
         int generation = worldViewGeneration;
         worldReader.execute(() -> {
+            org.json.JSONObject sent = new org.json.JSONObject();
+            try {
+                sent.put("action", action).put("confirmed", confirmed)
+                        .put("hasPlayerTarget", playerName != null)
+                        .put("item", itemName == null ? "" : itemName)
+                        .put("itemCount", itemCount).put("hasTaskId", taskId != null);
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, "app_command_sent", sent);
             Bundle receipt = worldRequest("gameplay", session, extras);
+            org.json.JSONObject outcome = new org.json.JSONObject();
+            boolean accepted = receipt != null && receipt.getBoolean("accepted");
+            try {
+                outcome.put("action", action)
+                        .put("status", accepted ? "accepted" : "rejected")
+                        .put("reason", receipt == null ? "no_receipt_from_world_session_provider"
+                                : receipt.getString("reason", "unspecified"));
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, accepted ? "app_command_accepted" : "app_command_rejected", outcome);
             runOnUiThread(() -> {
                 if (generation != worldViewGeneration || !dashboardVisible) return;
-                showStatus(receipt != null && receipt.getBoolean("accepted")
+                showStatus(accepted
                         ? "Gameplay command queued. Check the server response below."
                         : "Gameplay request could not be queued for this session.");
             });
