@@ -12,7 +12,7 @@ import java.util.List;
 public final class RakNetUdpDispatcher implements Closeable {
     private final BedrockUdpTransport transport;
     private final RakNetControlPlane control = new RakNetControlPlane();
-    private boolean closed;
+    private volatile boolean closed;
 
     public RakNetUdpDispatcher(BedrockUdpTransport transport) {
         if (transport == null) throw new IllegalArgumentException("Missing transport");
@@ -26,8 +26,14 @@ public final class RakNetUdpDispatcher implements Closeable {
     public synchronized byte[] poll(long nowMillis) throws IOException {
         ensureOpen();
         if (nowMillis < 0) throw new IllegalArgumentException("Invalid time");
-        byte[] packet = transport.receive();
-        if (packet == null || packet.length == 0) return null;
+        final byte[] packet;
+        try {
+            packet = transport.receive();
+        } catch (IOException receiveFailure) {
+            if (closed || transport.isClosed()) return null;
+            throw receiveFailure;
+        }
+        if (closed || packet == null || packet.length == 0) return null;
         int type = packet[0] & 0xff;
         if (type == RakNetAckCodec.ACK || type == RakNetAckCodec.NACK) {
             final List<RakNetReliabilityWindow.Pending> retries;
@@ -36,20 +42,38 @@ public final class RakNetUdpDispatcher implements Closeable {
             } catch (IllegalArgumentException malformed) {
                 return null;
             }
-            for (RakNetReliabilityWindow.Pending retry : retries) transport.send(retry.packet);
+            for (RakNetReliabilityWindow.Pending retry : retries) {
+                if (closed) return null;
+                try {
+                    transport.send(retry.packet);
+                } catch (IOException sendFailure) {
+                    if (closed || transport.isClosed()) return null;
+                    throw sendFailure;
+                }
+            }
             return null;
         }
         if (type < 0x80 || type > 0x8f || packet.length < 4) return null;
         int sequence = (packet[1] & 255) | ((packet[2] & 255) << 8)
                 | ((packet[3] & 255) << 16);
         RakNetControlPlane.Incoming incoming = control.onDatagram(sequence);
-        for (byte[] response : incoming.controlPackets) transport.send(response);
-        return incoming.result == RakNetReceiveWindow.Result.ACCEPTED ? packet : null;
+        for (byte[] response : incoming.controlPackets) {
+            if (closed) return null;
+            try {
+                transport.send(response);
+            } catch (IOException sendFailure) {
+                if (closed || transport.isClosed()) return null;
+                throw sendFailure;
+            }
+        }
+        return closed || incoming.result != RakNetReceiveWindow.Result.ACCEPTED ? null : packet;
     }
 
     public synchronized int pendingCount() { return control.pendingCount(); }
 
-    @Override public synchronized void close() {
+    @Override public void close() {
+        // Do not acquire the poll() monitor here: poll() can be blocked inside
+        // DatagramSocket.receive(). Closing the socket from this thread wakes it.
         if (!closed) {
             closed = true;
             transport.close();

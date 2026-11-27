@@ -24,6 +24,9 @@ public class RakNetReliabilityWindowTest {
         assertEquals(4, w.negativeAcknowledge(p.sequence, 23).attempts);
         assertEquals(5, w.negativeAcknowledge(p.sequence, 24).attempts);
         assertNull(w.negativeAcknowledge(p.sequence, 25));
+        assertEquals("exhausted datagrams must not occupy the bounded pending window",
+                0, w.pendingCount());
+        assertFalse(w.acknowledge(p.sequence));
     }
     @Test public void receivesMonotonicAndRejectsDuplicates() {
         RakNetReliabilityWindow w = new RakNetReliabilityWindow();
