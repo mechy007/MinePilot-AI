@@ -114,7 +114,7 @@ function installNethernetTelemetry(client) {
       if (typeof callback !== 'function' || callback.__minepilotCloseWrapped) return callback;
       const wrapped = function (reason, ...args) {
         const value = typeof reason === 'string' ? reason : reason?.message;
-        const match = typeof value === 'string' && /connecterror:(\\d+)/i.exec(value);
+        const match = typeof value === 'string' && /connecterror:(\d+)/i.exec(value);
         if (match) {
           client.emit('minepilot_join_failure', {
             reason: 'nethernet_closed', nethernetCode: Number(match[1])
