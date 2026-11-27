@@ -1,0 +1,7 @@
+{
+  "name": "minepilot-bedboo-physics",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "Pinned Bedboo-derived Bedrock physics runtime used by MinePilot"
+}
