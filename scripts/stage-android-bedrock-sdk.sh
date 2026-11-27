@@ -221,6 +221,7 @@ cp "$root/scripts/android-xbox-auth-probe.cjs" "$temp/xbox-auth-probe.cjs"
 # The session module uses the source filename; preserve it in the packaged runtime too.
 cp "$temp/xbox-auth-probe.cjs" "$temp/android-xbox-auth-probe.cjs"
 cp "$root/scripts/android-friend-world-session.cjs" "$temp/friend-world-session.cjs"
+cp "$root/scripts/android-friend-world-join.cjs" "$temp/android-friend-world-join.cjs"
 # The staged contract test imports the source filename; keep that alias beside it.
 cp "$temp/friend-world-session.cjs" "$temp/android-friend-world-session.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.cjs" "$temp/bedrock-gameplay-bridge.cjs"
@@ -278,6 +279,7 @@ printf '{"type":"module"}\n' > "$temp/gameplay/package.json"
 cp "$root/dist/src/connection/prismarine-world-client.js" "$temp/prismarine-world-client.mjs"
 cp "$root/dist/src/core/bot-awareness.js" "$temp/bot-awareness.mjs"
 cp "$root/scripts/android-friend-world-session.test.cjs" "$temp/friend-world-session.test.cjs"
+cp "$root/scripts/android-friend-world-join.test.cjs" "$temp/friend-world-join.test.cjs"
 cp "$root/scripts/bedrock-gameplay-bridge.test.cjs" "$temp/bedrock-gameplay-bridge.test.cjs"
 cp "$root/scripts/bedrock-manual-terrain.test.cjs" "$temp/bedrock-manual-terrain.test.cjs"
 cp "$root/scripts/bedrock-terrain-check.test.cjs" "$temp/bedrock-terrain-check.test.cjs"
@@ -295,7 +297,7 @@ runtime = Path(sys.argv[1])
 zip_path = runtime / "bedrock-sdk.zip"
 with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
     for entrypoint in (
-        "node-smoke.cjs", "xbox-auth-probe.cjs", "android-xbox-auth-probe.cjs", "friend-world-session.cjs",
+        "node-smoke.cjs", "xbox-auth-probe.cjs", "android-xbox-auth-probe.cjs", "friend-world-session.cjs", "android-friend-world-join.cjs",
         "bedrock-gameplay-bridge.cjs", "bedrock-movement-controller.cjs", "bedrock-collision-data.cjs",
         "bedrock-terrain-cache.cjs", "bedrock-terrain-check.cjs", "bedrock-runtime-registry.cjs",
         "bedrock-vanilla-12660-states.json", "bedrock-vanilla-12660-hashed-states.json",
@@ -327,7 +329,7 @@ with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
 
 with ZipFile(zip_path) as archive:
     required = {
-        "android-xbox-auth-probe.cjs", "bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs",
+        "android-xbox-auth-probe.cjs", "android-friend-world-join.cjs", "bedrock-gameplay-bridge.cjs", "bedrock-terrain-check.cjs",
         "runtime/bedrock/index.cjs",
         "runtime/bedrock/events/event-bus.cjs",
         "runtime/bedrock/adapters/packet-normalizer.cjs",
@@ -406,6 +408,7 @@ require(path.join(root, 'vendor/bedboo-physics/lib/physics'));
 console.log('Verified Bedrock 1.26.60 collision geometry and physics engine');
 JS
 cp "$temp/friend-world-session.test.cjs" "$temp/verify/"
+cp "$temp/friend-world-join.test.cjs" "$temp/verify/"
 # Tests execute from verify/, so provide their expected source-module basename there too.
 cp "$temp/friend-world-session.cjs" "$temp/verify/android-friend-world-session.cjs"
 cp "$root/scripts/bedrock-movement-controller.test.cjs" "$temp/verify/"
@@ -433,7 +436,7 @@ mkdir -p "$destination"
 cp "$temp/bedrock-sdk.zip" "$destination/bedrock-sdk.zip"
 
 if [[ "${MINEPILOT_SKIP_SDK_CONTRACT_TESTS:-0}" != "1" ]]; then
-  timeout --signal=TERM --kill-after=10s 180s node --test --test-concurrency=1 "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-movement-controller.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-manual-terrain.test.cjs" "$temp/verify/bedrock-terrain-check.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-native-skill-system.test.cjs" "$temp/verify/bedrock-block-placement.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs" "$temp/verify/bedrock-recipe-catalog.test.cjs"
+  timeout --signal=TERM --kill-after=10s 180s node --test --test-concurrency=1 "$temp/verify/friend-world-join.test.cjs" "$temp/verify/friend-world-session.test.cjs" "$temp/verify/bedrock-movement-controller.test.cjs" "$temp/verify/bedrock-gameplay-bridge.test.cjs" "$temp/verify/bedrock-manual-terrain.test.cjs" "$temp/verify/bedrock-terrain-check.test.cjs" "$temp/verify/bedrock-autonomy-runtime.test.cjs" "$temp/verify/bedrock-block-break.test.cjs" "$temp/verify/bedrock-respawn-recovery.test.cjs" "$temp/verify/bedrock-life-senses.test.cjs" "$temp/verify/bedrock-intelligence-core.test.cjs" "$temp/verify/bedrock-gameplay-agent.test.cjs" "$temp/verify/bedrock-voyager-learning.test.cjs" "$temp/verify/bedrock-native-skill-system.test.cjs" "$temp/verify/bedrock-block-placement.test.cjs" "$temp/verify/bedrock-odyssey-skill-library.test.cjs" "$temp/verify/bedrock-odyssey-bedrock-adapter.test.cjs" "$temp/verify/bedrock-odyssey-observation-executor.test.cjs" "$temp/verify/bedrock-stack-request-manager.test.cjs" "$temp/verify/bedrock-inventory-ledger.test.cjs" "$temp/verify/bedrock-survival-mission.test.cjs" "$temp/verify/bedrock-first-person-scene.test.cjs" "$temp/verify/bedrock-recipe-catalog.test.cjs"
 else
   echo "Full SDK contract suite is scheduled in its own CI job."
 fi
