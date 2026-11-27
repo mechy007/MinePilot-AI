@@ -107,3 +107,13 @@ A unit test or successful APK build alone is not enough.
 - Manual movement: action-envelope preflight plus existing physics controller.
 - A*: heap implementation now backs the existing local-route facade and still requires conservative MinePilot terrain classification.
 - Task runner, outcome verifier, curriculum and survival policy: available as modules; no new autonomous gameplay loop is enabled.
+
+## 10. Recovery, execution and perception foundations
+
+- CapabilityRecoveryEngine reports session, spawn, movement, terrain, inventory and recipe-catalog readiness; strategy selection is fail-closed and recovery attempts are bounded.
+- StuckRecovery detects sustained active input without authoritative horizontal progress and recommends stop/reorient/repath. It does not issue movement or packet actions by itself.
+- Adapter selection requires an exact known game-version and protocol pair. The only verified entry remains Bedrock 1.26.60 / protocol 2225; Bedrock 1.26.66.1 remains unverified.
+- WorldPerception exposes nearby observed entities, recent block updates and freshness metadata from the bounded session-local store. It does not infer unseen blocks.
+- TaskExecutionCoordinator gates a caller-supplied adapter on current capabilities and requires server-observed postconditions for every step. No production gameplay adapter is wired by default.
+
+These are integration foundations, not a claim that autonomous mining, gathering, combat or crafting is now enabled in the live Android session.
