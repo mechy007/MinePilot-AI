@@ -53,8 +53,6 @@ function runtimeLogger(file) {
     if (!file || !snapshot || !phases.has(snapshot.phase)) return;
     const event = {
       schema: 'minepilot.session-diagnostic.v1',
-      sequence: ++sequence,
-      at: Date.now(),
       phase: snapshot.phase
     };
     if (typeof snapshot.stage === 'string' && stages.has(snapshot.stage)) event.stage = snapshot.stage;
@@ -81,8 +79,14 @@ function runtimeLogger(file) {
           ? snapshot.error.name : 'Error'
       };
     }
-    const key = JSON.stringify(event);
+    // A changing heartbeat clock is not a new diagnostic event. Keep its
+    // elapsed time in the first record, but deduplicate otherwise identical state.
+    const comparable = { ...event };
+    delete comparable.seconds;
+    const key = JSON.stringify(comparable);
     if (key === previous) return;
+    event.sequence = ++sequence;
+    event.at = Date.now();
     try {
       rotate();
       fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
