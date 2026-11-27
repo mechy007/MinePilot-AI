@@ -73,6 +73,7 @@ async function waitForWorldNonce({ xbox, sessionName, xuid, session, subscriptio
   return new Promise((resolve, reject) => {
     let settled = false;
     let reading = false;
+    let pendingRefresh = false;
     const finish = (nonce, error) => {
       if (settled) return;
       settled = true;
@@ -85,7 +86,12 @@ async function waitForWorldNonce({ xbox, sessionName, xuid, session, subscriptio
     };
     const aborted = () => finish(null, signal.reason ?? new Error('Friend-world join cancelled'));
     const refresh = async () => {
-      if (settled || reading) return;
+      if (settled) return;
+      if (reading) {
+        pendingRefresh = true;
+        return;
+      }
+      pendingRefresh = false;
       reading = true;
       try {
         const latest = await xbox.getSession(sessionName, { signal, timeout: 5_000 });
@@ -95,6 +101,7 @@ async function waitForWorldNonce({ xbox, sessionName, xuid, session, subscriptio
         if (signal?.aborted) finish(null, signal.reason ?? error);
       } finally {
         reading = false;
+        if (pendingRefresh && !settled) void refresh();
       }
     };
     const timer = setTimeout(() => finish(null), timeoutMs);
@@ -126,17 +133,46 @@ function createManagedSession({ xbox, world, rta, subscription, controller, init
   let closed = false;
   let closing = null;
   let activeConnectionId = connectionId;
-  const updateConnection = async data => {
+  let pendingConnectionId = null;
+  let updateInFlight = false;
+  const retryDelaysMs = [250, 750];
+  const applyPendingConnection = async () => {
+    if (updateInFlight || closed) return;
+    updateInFlight = true;
+    try {
+      while (!closed && pendingConnectionId) {
+        const target = pendingConnectionId;
+        let committed = false;
+        for (let attempt = 0; attempt <= retryDelaysMs.length && !closed &&
+             pendingConnectionId === target; attempt++) {
+          try {
+            await xbox.updateSession(world.sessionRef.name, {
+              members: { me: { properties: { system: { active: true, connection: target } } } }
+            }, { timeout: 10_000 });
+            activeConnectionId = target;
+            committed = true;
+            break;
+          } catch {
+            publish?.({ phase: 'connection', stage: 'world_transport', reason: 'network' });
+            if (attempt < retryDelaysMs.length && pendingConnectionId === target && !closed) {
+              await new Promise(resolve => setTimeout(resolve, retryDelaysMs[attempt]));
+            }
+          }
+        }
+        if (pendingConnectionId === target) pendingConnectionId = null;
+        // If a newer RTA ID arrived during the update, process it next.
+        if (!committed && pendingConnectionId === target) break;
+      }
+    } finally {
+      updateInFlight = false;
+      if (!closed && pendingConnectionId) void applyPendingConnection();
+    }
+  };
+  const updateConnection = data => {
     const next = typeof data?.ConnectionId === 'string' ? data.ConnectionId : null;
     if (!next || next === activeConnectionId || closed) return;
-    activeConnectionId = next;
-    try {
-      await xbox.updateSession(world.sessionRef.name, {
-        members: { me: { properties: { system: { active: true, connection: next } } } }
-      }, { timeout: 10_000 });
-    } catch {
-      publish?.({ phase: 'connection', stage: 'world_transport', reason: 'network' });
-    }
+    pendingConnectionId = next;
+    void applyPendingConnection();
   };
   subscription.on('ready', updateConnection);
 
