@@ -1483,12 +1483,25 @@ class BedrockGameplayBridge {
   }
   execute(raw) {
     const startedAt = this.clock();
-    const result = this.executeCommand(raw);
     const action = typeof raw?.action === 'string' && /^[a-z_]{1,48}$/.test(raw.action)
       ? raw.action : 'invalid';
     const telemetry = this.commandTelemetry;
     telemetry.received++;
     telemetry.byAction[action] = Math.min(1000000000, (telemetry.byAction[action] ?? 0) + 1);
+    let result;
+    try {
+      result = this.executeCommand(raw);
+    } catch (error) {
+      telemetry.last = {
+        action, status: 'failed', reason: 'command_exception',
+        errorName: ['TypeError','RangeError','SyntaxError','AbortError'].includes(error?.name)
+          ? error.name : 'Error',
+        durationMs: Math.max(0, this.clock() - startedAt), at: this.clock()
+      };
+      telemetry.events.push({ ...telemetry.last });
+      if (telemetry.events.length > 64) telemetry.events.shift();
+      throw error;
+    }
     telemetry.last = {
       action,
       status: typeof result?.status === 'string' ? result.status : 'unknown',
