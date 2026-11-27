@@ -39,10 +39,12 @@ function validPmsgId(value) {
 function selectFriendWorldConnection(customProperties) {
   const entries = Array.isArray(customProperties?.SupportedConnections)
     ? customProperties.SupportedConnections : [];
-  const jsonRpc = entries.find(entry => Number(entry?.ConnectionType) === 7 && validPmsgId(entry?.PmsgId));
+  const jsonRpc = entries.find(entry => Number(entry?.ConnectionType) === 7 &&
+    validPmsgId(entry?.PmsgId) && validNetherNetId(entry?.NetherNetId));
   if (jsonRpc) {
     return {
       connectionType: 7,
+      networkId: validNetherNetId(jsonRpc.NetherNetId),
       peerId: validPmsgId(jsonRpc.PmsgId),
       signallingProtocol: 'jsonrpc'
     };
@@ -52,6 +54,7 @@ function selectFriendWorldConnection(customProperties) {
   if (!legacy) return null;
   return {
     connectionType: Number(legacy.ConnectionType),
+    networkId: validNetherNetId(legacy.NetherNetId),
     peerId: validNetherNetId(legacy.NetherNetId),
     signallingProtocol: 'legacy'
   };
