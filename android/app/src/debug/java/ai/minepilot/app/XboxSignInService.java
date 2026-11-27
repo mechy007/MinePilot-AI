@@ -32,6 +32,7 @@ public final class XboxSignInService extends Service {
     private volatile int latestStartId;
     private static final int ACTIVE_NOTIFICATION = 6202;
     private static final int SIGN_IN_NOTIFICATION = 6201;
+    private static final int MAX_ACCOUNT_JSON_BYTES = 64 * 1024;
     private static final String SIGN_IN_CHANNEL = "minepilot_sign_in";
     private static final String WORLD_SESSION_PREFERENCES = "minepilot_world_session";
     private static final String WORLD_SESSION_ACTIVE = "active";
@@ -209,11 +210,15 @@ public final class XboxSignInService extends Service {
                 for (int i = 0; i < count; i++) {
                     if (buffer[i] == '\n') {
                         // The newline can arrive in the same pipe read as the JSON.
+                        if (bytes.size() + i > MAX_ACCOUNT_JSON_BYTES)
+                            throw new IOException("Xbox account payload is too large");
                         bytes.write(buffer, 0, i);
                         persistAccount(bytes);
                         return;
                     }
                 }
+                if (bytes.size() + count > MAX_ACCOUNT_JSON_BYTES)
+                    throw new IOException("Xbox account payload is too large");
                 bytes.write(buffer, 0, count);
             }
             persistAccount(bytes);
