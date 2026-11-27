@@ -159,25 +159,45 @@ function installNethernetTelemetry(client, peerId, signallingProtocol) {
         const originalOnMessage = value.onMessage;
         value.onMessage = function (message) {
           let normalized = message;
+          let senderIds = [];
           try {
             const raw = typeof message === 'string' ? message : message?.toString?.();
             const packet = raw ? JSON.parse(raw) : null;
-            const from = packet?.params?.From ?? packet?.params?.from ?? packet?.params?.fromPlayerId;
-            if (packet?.method === 'Signaling_ReceiveMessage_v1_0' &&
-                typeof from === 'string' &&
-                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(from)) {
-              // Normalize all supported SDK field spellings. Older SDK builds read
-              // from/fromPlayerId rather than Xbox's From; preserve unrelated senders
-              // too so node-nethernet can reject them by peer identity.
-              const normalizedFrom = from.toLowerCase();
-              packet.params.From = normalizedFrom;
-              packet.params.from = normalizedFrom;
-              packet.params.fromPlayerId = normalizedFrom;
+            if (packet?.method === 'Signaling_ReceiveMessage_v1_0') {
+              const items = Array.isArray(packet.params) ? packet.params : [packet.params];
+              senderIds = items.map(item => {
+                const from = item?.From ?? item?.from ?? item?.fromPlayerId;
+                return typeof from === 'string' &&
+                  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(from)
+                  ? from.toLowerCase() : null;
+              });
+              for (let index = 0; index < items.length; index++) {
+                const sender = senderIds[index];
+                if (!sender || !items[index] || typeof items[index] !== 'object') continue;
+                items[index].From = sender;
+                items[index].from = sender;
+                items[index].fromPlayerId = sender;
+              }
               const encoded = JSON.stringify(packet);
               normalized = typeof message === 'string' ? encoded : Buffer.from(encoded);
             }
           } catch {}
-          return originalOnMessage.call(this, normalized);
+          if (senderIds.length === 0) return originalOnMessage.call(this, normalized);
+          // SDK releases disagree on whether signal.networkId comes from the
+          // inner numeric NetherNet ID or the outer Xbox PmsgId. For JSON-RPC,
+          // the outer sender is authoritative and must drive peer validation.
+          const originalEmit = this.emit;
+          let senderIndex = 0;
+          this.emit = function (event, ...args) {
+            if (event === 'signal' && args[0] && typeof args[0] === 'object') {
+              while (senderIndex < senderIds.length && !senderIds[senderIndex]) senderIndex++;
+              const sender = senderIds[senderIndex++];
+              if (sender) args[0].networkId = sender;
+            }
+            return originalEmit.call(this, event, ...args);
+          };
+          try { return originalOnMessage.call(this, normalized); }
+          finally { this.emit = originalEmit; }
         };
       }
       if (typeof value.write === 'function') {
