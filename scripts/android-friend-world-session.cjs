@@ -30,6 +30,16 @@ async function importRuntimeModule(stagedRelative, builtRelative) {
   return import(require('node:url').pathToFileURL(target).href);
 }
 
+function requireRuntimeModule(stagedRelative, builtRelative) {
+  const stagedPath = path.resolve(__dirname, stagedRelative);
+  const builtPath = path.resolve(__dirname, '..', 'dist', 'src', builtRelative);
+  const target = existsSync(stagedPath) ? stagedPath : builtPath;
+  if (!existsSync(target)) throw new Error(`Runtime module is not staged or built: ${stagedRelative}`);
+  return require(target);
+}
+
+const { BotAwareness } = requireRuntimeModule('bot-awareness.mjs', 'core/bot-awareness.js');
+
 function androidNetworkInterfaces(readInterfaces, readAddresses) {
   return () => {
     try {
@@ -94,7 +104,6 @@ function bedrockDisconnectCode(reason) {
 }
 
 async function observeSession(client, publish, signal, getStage, timeoutMs = ATTEMPT_TIMEOUT_MS, gameplayOptions = null) {
-  const { BotAwareness } = await importRuntimeModule('bot-awareness.mjs', 'core/bot-awareness.js');
   const awareness = new BotAwareness();
   // The gameplay bridge observes and commands the SAME authenticated world client.
   // Default remains off for existing join checks and fixture clients.
