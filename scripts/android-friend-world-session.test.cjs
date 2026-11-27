@@ -402,22 +402,18 @@ test('friend-world join sends the MPSD handle membership request for the exact o
 });
 
 test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters unrelated peers', { timeout: 10000 }, async context => {
-  const os = require('node:os');
   const { createClient } = require('bedrock-protocol');
   const { NethernetSignal } = require('bedrock-protocol/src/nethernet/signalling');
   const { parseJson } = require('bedrock-protocol/src/nethernet/signallingCodec');
   const { Titles } = require('prismarine-auth');
   const { XboxClient, XboxRTASocket } = require('prismarine-xbox-services');
-  const { SignalType } = require('nethernet');
+  const { SignalType, SignalStructure } = require('nethernet');
   const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
   const ownerXuid = '2533274790000002';
   const botXuid = '2533274790000001';
   const hostNetworkId = '18446744073709551610';
   const hostPlayerId = '1e95d572-0f41-481e-44c9-a47d46d4fc70';
   const botNonce = 'a123b456c789d012';
-  context.mock.method(os, 'networkInterfaces', () => ({
-    fixture: [{ address: '127.0.0.1', family: 'IPv4', internal: false }]
-  }));
   context.mock.method(XboxClient.prototype, 'getProfile', async () => ({ xuid: botXuid, gamertag: 'FixtureBot' }));
   context.mock.method(XboxClient.prototype, 'getActivityHandles', async () => [{
     id: 'expected-handle',
@@ -494,6 +490,34 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
       assert.equal(options.nethernet._peerPlayerId, hostPlayerId);
       assert.equal(options.nethernet._signallingProtocol, 'jsonrpc');
       client = createClient(options);
+      const transport = client.connection.nethernet;
+      transport.connect = function () {
+        let closed = false;
+        this.connection = {
+          close: reason => {
+            if (closed) return;
+            closed = true;
+            this.connection = null;
+            this.emit('disconnect', this.connectionId, reason);
+          }
+        };
+        const offerSdp = [
+          'v=0',
+          'o=- 0 0 IN IP4 127.0.0.1',
+          's=-',
+          't=0 0',
+          'a=group:BUNDLE 0',
+          'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+          'c=IN IP4 0.0.0.0',
+          'a=mid:0',
+          'a=sctp-port:5000',
+          'a=fingerprint:sha-256 00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF',
+          'a=candidate:1 1 UDP 2122260223 127.0.0.1 12345 typ host'
+        ].join('\\r\\n');
+        this.signalHandler(new SignalStructure(
+          SignalType.ConnectRequest, this.connectionId, offerSdp, this.serverNetworkId
+        ));
+      };
       return client;
     },
     pickOwnerWorld
