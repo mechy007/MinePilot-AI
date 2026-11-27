@@ -19,12 +19,6 @@ const { MinePilotIntelligence } = require('./bedrock-intelligence-core.cjs');
 const { BedrockGameplayAgent } = require('./bedrock-gameplay-agent.cjs');
 const { joinFriendWorld } = require('./android-friend-world-join.cjs');
 
-const MINECRAFT_TITLE = {
-  titleId: '896928775',
-  scid: '4fc10100-5f7a-4470-899b-280835760c07',
-  templateName: 'MinecraftLobby'
-};
-
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
 const RETRY_DELAY_MS = 1_000;
@@ -204,7 +198,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   const originalClose = client.close;
   if (typeof originalClose === 'function') {
     client.close = function (reason, ...args) {
-      const match = typeof reason === 'string' && /^connecterror:(\\d+)$/.exec(reason);
+      const match = typeof reason === 'string' && /^connecterror:(\d+)$/.exec(reason);
       if (match) {
         connectionStage = 'nethernet_peer';
         disconnectDetails = { reason: 'nethernet_closed', nethernetCode: Number(match[1]) };
@@ -319,7 +313,7 @@ async function run({
     const { auth, profile, xbox } = await verifyXbox(authDependencies, publish, saveAccount);
     signal.throwIfAborted();
     stage = 'owner';
-    if (!/^\\d+$/.test(ownerXuid)) {
+    if (!/^\d+$/.test(ownerXuid)) {
       const friend = await xbox.getProfile({ gamertag: ownerXuid });
       ownerXuid = friend.xuid;
       signal.throwIfAborted();
