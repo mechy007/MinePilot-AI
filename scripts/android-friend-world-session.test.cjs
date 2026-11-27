@@ -499,6 +499,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
     },
     pickOwnerWorld
   });
+  assert.equal(client.connection.nethernet.serverNetworkId, hostPlayerId);
   assert.equal(sent[0]?.method, 'Signaling_SendClientMessage_v1_0', JSON.stringify(snapshots));
   assert.equal(get.mock.callCount(), 0);
   assert.equal(signedNonce, botNonce);
