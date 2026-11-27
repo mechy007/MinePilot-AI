@@ -108,3 +108,30 @@ test('BedrockGameplayBridge feeds normalized events after original packet handle
  assert.deepEqual(seen,[3]);assert.equal(runtime.world.snapshot().dimension,0);assert.equal(runtime.world.snapshot().chunks,1);
  bridge.stop();assert.equal(runtime.snapshot().integrations.events.closed,true);
 });
+
+
+test('runtime facade consumes live bridge telemetry for capability and stuck assessments',()=>{
+ let now=1000;
+ const runtime=createRuntimeExtensions({clock:()=>now});
+ const bridge={
+  closed:false,spawned:true,position:{x:4,y:64,z:9},
+  movement:{capability:()=> 'ready',snapshot:()=>({capability:'ready',active:true,corrections:0,
+   predictedPosition:{x:4,y:64,z:9}})},
+  terrain:{snapshot:()=>({decodedSections:1,collisionClassificationReady:true})},
+  inventoryLedger:{playerInventory:()=>({known:true,fresh:true,fullSnapshotFresh:true,
+   registryKnown:true,unresolvedItemCount:0})},
+  recipeCatalog:{snapshot:()=>({observedAt:now,ageMs:0})}
+ };
+ let assessment=runtime.observeBridge(bridge);
+ assert.equal(assessment.capabilities.status,'ready');
+ assert.equal(assessment.capabilities.canExecute,true);
+ assert.equal(assessment.stuckRecovery.stuck,false);
+ for(let i=0;i<4;i++){now+=1000;assessment=runtime.observeBridge(bridge);}
+ assert.equal(assessment.stuckRecovery.stuck,true);
+ assert.equal(assessment.stuckRecovery.executable,false);
+ const snapshot=runtime.snapshot();
+ assert.equal(snapshot.capabilityAssessment.status,'ready');
+ assert.equal(snapshot.taskExecution.configured,false);
+ assert.equal(snapshot.taskExecution.runner.emitsPackets,false);
+ runtime.close();
+});
