@@ -413,6 +413,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   const botXuid = '2533274790000001';
   const hostNetworkId = '18446744073709551610';
   const hostPlayerId = '1e95d572-0f41-481e-44c9-a47d46d4fc70';
+  const unrelatedPlayerId = '4a62d29e-2f5e-4f2c-87ec-42001f84ff01';
   const botNonce = 'a123b456c789d012';
   context.mock.method(XboxClient.prototype, 'getProfile', async () => ({ xuid: botXuid, gamertag: 'FixtureBot' }));
   context.mock.method(XboxClient.prototype, 'getActivityHandles', async () => [{
@@ -451,8 +452,6 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   let client;
   let signedNonce;
   context.mock.method(NethernetSignal.prototype, 'connect', async function () {
-    snapshots.push({ testOnMessageWrapped: Object.prototype.hasOwnProperty.call(this, 'onMessage'),
-      testOnMessageMarker: String(this.onMessage).includes('normalizedFrom') });
     client.createClientUserChain(client.ecdhKeyPair.privateKey);
     signedNonce = JSON.parse(Buffer.from(client.clientUserChain.split('.')[1], 'base64url')).Nonce;
     this.ws = { readyState: 1, terminate() {}, send: text => {
@@ -546,12 +545,15 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   assert.match(offer.message, /^CONNECTREQUEST /);
   assert.ok(snapshots.some(event => event.step === 'offer_sent'));
   assert.match(offer.message, /^a=candidate:[^\r\n]*127\.0\.0\.1/m);
+  const receivedPeerIds = snapshots.filter(event => event.testSignal)
+    .map(event => event.testSignal.networkId);
+  assert.deepEqual(receivedPeerIds.slice(0, 2), [unrelatedPlayerId, hostPlayerId]);
   assert.equal(client.connection.nethernet.serverNetworkId, hostPlayerId);
   assert.equal(client.options.nethernet.responseTimeoutMs, 25000);
   assert.equal(client.options.nethernet.inactivityTimeoutMs, 12000);
   assert.deepEqual(snapshots.at(-1), {
     phase: 'failed', stage: 'nethernet_peer', reason: 'nethernet_closed', nethernetCode: 37
-  }, JSON.stringify({ snapshots, sent, serverNetworkId: String(client.connection.nethernet.serverNetworkId) }));
+  });
   assert.equal(subscriptionClose.mock.callCount(), 1);
   assert.equal(rtaClose.mock.callCount(), 1);
   assert.ok(request.mock.callCount() >= 2);
