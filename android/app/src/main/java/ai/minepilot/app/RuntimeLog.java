@@ -33,8 +33,13 @@ final class RuntimeLog {
     }
 
     static void record(Context context, String phase) {
+        record(context, phase, null);
+    }
+
+    static void record(Context context, String phase, JSONObject details) {
         try {
             JSONObject event = new JSONObject().put("at", System.currentTimeMillis()).put("phase", phase);
+            if (details != null) event.put("details", details);
             Files.write(file(context), (event + "\n").getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException | JSONException ignored) {
