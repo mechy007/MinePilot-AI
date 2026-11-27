@@ -827,6 +827,16 @@ public final class DashboardActivity extends Activity {
                 message += "\nLocal input: " + (inputState.isEmpty() ? "waiting" : inputState.replace('_', ' '));
                 if (!inputReason.isEmpty()) message += " · " + inputReason.replace('_', ' ');
             }
+            String movementPresence = current.getString("movement_presence_state", "");
+            if (!movementPresence.isEmpty()) {
+                message += "\nMovement engine: " + movementPresence.replace('_', ' ');
+                if ("waiting".equals(movementPresence)) {
+                    String presenceReason = current.getString("movement_presence_reason", "");
+                    if (!presenceReason.isEmpty())
+                        message += " · " + presenceReason.replace('_', ' ');
+                    message += " (retrying)";
+                }
+            }
             String runtimeCapability = current.getString("runtime_capability_state", "");
             if (!runtimeCapability.isEmpty())
                 message += "\nSystem capability assessment: " + runtimeCapability.replace('_', ' ');
