@@ -4,6 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { generateKeyPairSync } = require('node:crypto');
 
+const MINECRAFT_TITLE = {
+  titleId: '896928775',
+  scid: '4fc10100-5f7a-4470-899b-280835760c07',
+  templateName: 'MinecraftLobby'
+};
+
 function runtimeLogger(file) {
   const phases = ['device_code', 'microsoft_approved', 'bedrock_credentials', 'verified', 'account_sent',
     'friends_loaded', 'discovery', 'connection', 'retrying', 'spawned', 'failed', 'disconnected', 'stopped'];
@@ -124,7 +130,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
     // Wait for interactive sign-in before the Xbox profile request starts its deadline.
     await auth.getXboxToken('http://xboxlive.com');
     stage = 'xbox_profile';
-    const xbox = new XboxClient(auth);
+    const xbox = new XboxClient(auth, MINECRAFT_TITLE);
     const profile = await xbox.getProfile('me');
     if (typeof profile.xuid !== 'string' || !/^\d{1,20}$/.test(profile.xuid) || typeof profile.gamertag !== 'string' || !profile.gamertag) {
       throw new Error('Xbox profile identity missing');
@@ -142,7 +148,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
       await saveAccount({ refreshToken: savedRefreshToken, gamertag: profile.gamertag, xuid: profile.xuid });
     }
 
-    return { auth, profile };
+    return { auth, profile, xbox };
   } catch (error) {
     const result = { phase: 'failed', stage };
     if (stage === 'xbox_token') {
@@ -168,7 +174,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
 }
 
 async function verifyXbox(dependencies, publish, saveAccount = null) {
-  const { auth, profile } = await connectXboxAccount(dependencies, publish, saveAccount);
+  const { auth, profile, xbox } = await connectXboxAccount(dependencies, publish, saveAccount);
   try {
     publish({ phase: 'bedrock_credentials' });
     const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'secp384r1' });
@@ -180,7 +186,7 @@ async function verifyXbox(dependencies, publish, saveAccount = null) {
     const identity = JSON.parse(Buffer.from(chain[1].split('.')[1], 'base64url').toString('utf8'));
     if (identity.extraData?.XUID !== profile.xuid) throw new Error('Bedrock and Xbox identities differ');
     publish({ phase: 'verified', gamertag: profile.gamertag, xuid: profile.xuid });
-    return { auth, profile };
+    return { auth, profile, xbox };
   } catch {
     publish({ phase: 'failed', stage: 'bedrock_credentials' });
     throw new Error('Xbox authentication probe failed');
