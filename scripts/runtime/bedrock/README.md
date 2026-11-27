@@ -31,4 +31,13 @@ All new navigation, GOAP, obtain, click and inventory plans remain previews (exe
 
 ## Target version
 
-MinePilot targets Bedrock 1.26.66.1, but the known codec baseline remains Bedrock 1.26.60 / protocol 2225. The new adapters do not change this status. Exact-version fixtures, Android ARM64 tests and live Xbox friend-world validation are still required.
+MinePilot targets Bedrock 1.26.66.1, but the known codec baseline remains Bedrock 1.26.60 / protocol 2225. The new adapters do not change this status. Exact-version fixtures, Android ARM64 tests and live Xbox friend-world validation are still required. 
+## Recovery, execution and perception
+
+- recovery/engine.cjs: capability assessment, safe strategy selection and bounded retry accounting.
+- navigation/stuck-recovery.cjs: detects active movement without server-observed progress; returns a recovery recommendation only.
+- compatibility/adapter-selector.cjs: selects only exact verified game-version/protocol pairs; unknown versions fail closed.
+- world/perception.cjs: freshness-aware queries over observed block updates and entities.
+- tasks/execution-coordinator.cjs: capability-gated task runner adapter; requires server-observed completion.
+
+These modules do not create a second client or send packets. No default live gameplay executor is installed; autonomous gathering/mining/combat remains disabled.
