@@ -451,6 +451,8 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   let client;
   let signedNonce;
   context.mock.method(NethernetSignal.prototype, 'connect', async function () {
+    snapshots.push({ testOnMessageWrapped: Object.prototype.hasOwnProperty.call(this, 'onMessage'),
+      testOnMessageMarker: String(this.onMessage).includes('normalizedFrom') });
     client.createClientUserChain(client.ecdhKeyPair.privateKey);
     signedNonce = JSON.parse(Buffer.from(client.clientUserChain.split('.')[1], 'base64url')).Nonce;
     this.ws = { readyState: 1, terminate() {}, send: text => {
