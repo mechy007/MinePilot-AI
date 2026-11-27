@@ -13,12 +13,17 @@ class WorldKnowledgeStore {
   this.lastObservationAt=null;this.lastPrunedAt=0;this.closed=false;
  }
  reset(meta={}) {
-  this.generation++;this.dimension=Number.isInteger(meta.dimension)?meta.dimension:null;
+  this.generation++;this.dimension=Number.isInteger(meta.dimension)&&meta.dimension>=0&&meta.dimension<=2?meta.dimension:null;
   this.gameVersion=typeof meta.gameVersion==='string'?meta.gameVersion:null;this.position=meta.position??null;this.time=null;
   this.chunks.clear();this.sections.clear();this.blockUpdates.clear();this.entities.clear();
   this.lastObservationAt=Number.isFinite(meta.at)?meta.at:this.clock();this.closed=false;return this.snapshot();
  }
  key(d,x,y,z){return [d,x,y,z].join(':');}
+ matchDimension(d){
+  if(!Number.isInteger(d)||d<0||d>2)return false;
+  if(this.dimension===null)this.dimension=d;
+  return d===this.dimension;
+ }
  touch(map,key,value,limit){map.delete(key);map.set(key,value);while(map.size>limit)map.delete(map.keys().next().value);}
  prune(now=this.clock()){
   for(const[k,v]of this.chunks)if(now-v.at>this.maxAgeMs)this.chunks.delete(k);
@@ -35,21 +40,22 @@ class WorldKnowledgeStore {
   this.lastObservationAt=now;
   switch(event.type){
   case 'world.chunk.observed':{
-   if(event.dimension!==this.dimension&&this.dimension!==null)return false;
+   if(!this.matchDimension(event.dimension))return false;
    this.touch(this.chunks,this.key(event.dimension,event.x,0,event.z),{dimension:event.dimension,x:event.x,z:event.z,
     subChunkCount:event.subChunkCount,cacheEnabled:event.cacheEnabled,payloadBytes:event.payloadBytes,at:now},this.maxChunks);break;}
   case 'world.subchunks.observed':{
-   if(event.dimension!==this.dimension&&this.dimension!==null)return false;
+   if(!this.matchDimension(event.dimension))return false;
    for(const s of(event.sections??[]).slice(0,48)){
     if(![s.x,s.y,s.z].every(Number.isInteger))continue;
     this.touch(this.sections,this.key(event.dimension,s.x,s.y,s.z),{dimension:event.dimension,...s,at:now},this.maxSections);
    }break;}
   case 'world.block.updated':{
-   if(event.dimension!==this.dimension&&this.dimension!==null)return false;const p=event.position;
+   if(!this.matchDimension(event.dimension))return false;const p=event.position;
    if(!p||![p.x,p.y,p.z,event.runtimeId].every(Number.isFinite))return false;
    this.touch(this.blockUpdates,this.key(event.dimension,Math.floor(p.x),Math.floor(p.y),Math.floor(p.z)),
     {dimension:event.dimension,position:p,runtimeId:event.runtimeId,layer:event.layer,at:now},this.maxBlockUpdates);break;}
   case 'world.entity.added':case 'world.entity.moved':{
+   if(event.dimension!==null&&event.dimension!==undefined&&!this.matchDimension(event.dimension))return false;
    const id=String(event.entityId??'');if(!/^[0-9]{1,20}$/.test(id)||!event.position)return false;
    const old=this.entities.get(id);
    this.touch(this.entities,id,{entityId:id,entityType:event.entityType??old?.entityType??'entity',
@@ -72,8 +78,7 @@ class WorldKnowledgeStore {
   return {x:v.position.x,y:v.position.y,z:v.position.z};
  }
  nearestEntities(position,options={}) {
-  this.prune();
-  if(!position||!['x','y','z'].every(k=>Number.isFinite(position[k])))return [];
+  this.prune();if(!position||!['x','y','z'].every(k=>Number.isFinite(position[k])))return [];
   const radius=Number.isFinite(options.radius)?Math.max(0,Math.min(256,options.radius)):32;
   const types=Array.isArray(options.types)?new Set(options.types.slice(0,8)):null;
   return [...this.entities.values()].filter(e=>(!types||types.has(e.entityType))&&e.dimension===(options.dimension??this.dimension))
