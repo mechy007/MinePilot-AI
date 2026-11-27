@@ -64,6 +64,8 @@ class BedrockGameplayBridge {
     this.lastManualInputRequestId = null;
     this.manualInputState = { active: false, status: 'idle', reason: 'no_manual_input', expiresAt: null };
     this.movement = options.movement ?? null;
+    this.movementPresence = { state: 'idle', reason: 'not_started', attempts: 0, lastAttemptAt: null };
+    this.lastMovementStartAttemptAt = -Infinity;
     this.layerOne = options.layerOne ?? null;
     this.layerTwo = options.layerTwo ?? null;
     this.layerThree = options.layerThree ?? null;
@@ -526,7 +528,7 @@ class BedrockGameplayBridge {
     recovery.resumeTask = null;
     recovery.error = null;
     this.spawned = true;
-    this.movement?.startPresence?.(this);
+    this.ensureMovementPresence(true);
     this.restoreRespawnTask(resumeTask);
     return true;
   }
@@ -633,7 +635,7 @@ class BedrockGameplayBridge {
       // movement stream before the SDK emits its companion spawn event.
       if (this.spawnTrace.loadingCompleted &&
           this.movement?.snapshot?.()?.presenceActive !== true)
-        this.movement?.startPresence?.(this);
+        this.ensureMovementPresence(true);
       return;
     }
     try {
@@ -642,7 +644,7 @@ class BedrockGameplayBridge {
       this.client.queue('serverbound_loading_screen', { type: 2 });
       this.spawnTrace.loadingPacketsSent++;
       this.spawnTrace.loadingCompleted = true;
-      this.movement?.startPresence?.(this);
+      this.ensureMovementPresence(true);
     } catch { this.spawnTrace.handshakeErrors++; }
   }
   authorityChange(packet) {
@@ -656,7 +658,7 @@ class BedrockGameplayBridge {
       this.movement?.stop?.('movement_authority_changed', { silent: true });
       this.movementAuthority = next;
       this.movementAuthoritySource = 'explicit_authority_update';
-      if (this.spawned && [1,2].includes(next)) this.movement?.startPresence?.(this);
+      if (this.spawned && [1,2].includes(next)) this.ensureMovementPresence(true);
       else this.movement?.stopPresence?.('authority_changed');
     }
   }
@@ -1219,12 +1221,43 @@ class BedrockGameplayBridge {
     this.lastIntelligenceDecision = result;
     return result;
   }
+  ensureMovementPresence(force = false) {
+    if (this.closed || !this.spawned || !this.movement ||
+        typeof this.movement.startPresence !== 'function') return false;
+    const before = this.movement.snapshot?.() ?? {};
+    if (before.presenceActive === true) {
+      this.movementPresence = { ...this.movementPresence, state: 'active',
+        reason: 'movement_queue_running' };
+      return true;
+    }
+    if (![1, 2].includes(this.movementAuthority)) {
+      this.movementPresence = { ...this.movementPresence, state: 'waiting',
+        reason: 'movement_authority_unavailable' };
+      return false;
+    }
+    const now = this.clock();
+    if (!force && now - this.lastMovementStartAttemptAt < 500) return false;
+    this.lastMovementStartAttemptAt = now;
+    const attempts = this.movementPresence.attempts + 1;
+    let started = false;
+    try { started = this.movement.startPresence(this) === true; } catch {}
+    const after = this.movement.snapshot?.() ?? {};
+    this.movementPresence = {
+      state: started || after.presenceActive === true ? 'active' : 'waiting',
+      reason: started || after.presenceActive === true ? 'movement_queue_running' :
+        (typeof after.lastError === 'string' ? after.lastError : 'terrain_or_physics_not_ready'),
+      attempts, lastAttemptAt: now
+    };
+    return this.movementPresence.state === 'active';
+  }
+
   tickControlPlane() {
     if (this.closed) return;
     try {
       // The gameplay agent owns its own cadence while active; otherwise keep
       // safety observations fresh from the bridge's 100 ms control loop.
       this.checkTerrainReadiness();
+      this.ensureMovementPresence(false);
       // Feed the same authenticated session into recovery and stuck detection.
       // Extension failures are isolated and must never interrupt Bedrock control.
       try { this.runtimeExtensions?.observeBridge?.(this); }
