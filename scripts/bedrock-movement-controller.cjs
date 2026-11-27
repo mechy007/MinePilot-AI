@@ -700,6 +700,7 @@ class BedrockMovementController {
       lastCorrection: this.lastCorrection,
       lastInput: this.lastInput,
       lastMovementResult: this.lastMovementResult,
+      lastError: this.lastError,
       physics: this.collisionData ? { blocks: this.collisionData.blockCount, states: this.collisionData.stateCount } : null,
       terrain: this.physicsWorld ? {
         unknown: this.physicsWorld.unknown,
