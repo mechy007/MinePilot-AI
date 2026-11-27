@@ -156,6 +156,7 @@ class BedrockGameplayBridge {
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
     this.lastIntelligenceDecision = null;
     this.lastAddonNavigationSnapshot = null;
+    this.commandTelemetry = { received: 0, byAction: {}, last: null };
     this.packetTelemetry = { received: 0, errors: 0, byType: {}, lastType: null,
       lastAt: null, lastSummary: null, lastError: null };
     this.listeners = [];
@@ -1341,6 +1342,8 @@ class BedrockGameplayBridge {
     const movementSystem = this.movement?.snapshot?.() ?? null;
     const terrainCheck = this.checkTerrainReadiness();
     return {
+      commandTelemetry: { ...this.commandTelemetry, byAction: { ...this.commandTelemetry.byAction },
+        last: this.commandTelemetry.last ? { ...this.commandTelemetry.last } : null },
       packetTelemetry: { ...this.packetTelemetry, byType: { ...this.packetTelemetry.byType },
         lastSummary: this.packetTelemetry.lastSummary ? { ...this.packetTelemetry.lastSummary } : null,
         lastError: this.packetTelemetry.lastError ? { ...this.packetTelemetry.lastError } : null },
@@ -1429,6 +1432,23 @@ class BedrockGameplayBridge {
     };
   }
   execute(raw) {
+    const startedAt = this.clock();
+    const result = this.executeCommand(raw);
+    const action = typeof raw?.action === 'string' && /^[a-z_]{1,48}$/.test(raw.action)
+      ? raw.action : 'invalid';
+    const telemetry = this.commandTelemetry;
+    telemetry.received++;
+    telemetry.byAction[action] = Math.min(1000000000, (telemetry.byAction[action] ?? 0) + 1);
+    telemetry.last = {
+      action,
+      status: typeof result?.status === 'string' ? result.status : 'unknown',
+      reason: typeof result?.reason === 'string' ? result.reason.slice(0, 96) : null,
+      durationMs: Math.max(0, this.clock() - startedAt),
+      at: this.clock()
+    };
+    return result;
+  }
+  executeCommand(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
       raw.version !== 'minepilot.gameplay.v1' ||
       typeof raw.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(raw.requestId) ||
