@@ -43,7 +43,7 @@ function runtimeLogger(file) {
   const rotate = () => {
     try {
       if (fs.existsSync(file) && fs.statSync(file).size >= 4 * 1024 * 1024) {
-        const old = file + '.previous';
+        const old = file.endsWith('.jsonl') ? file.slice(0, -6) + '.previous.jsonl' : file + '.previous';
         try { fs.unlinkSync(old); } catch {}
         fs.renameSync(file, old);
       }
