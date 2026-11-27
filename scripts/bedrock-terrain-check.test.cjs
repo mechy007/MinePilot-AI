@@ -107,3 +107,24 @@ test('terrain preflight distinguishes collision registry failures from missing t
   assert.equal(result.requestableCells, 0);
   assert.equal(result.unrequestableCells, 1);
 });
+
+
+test('terrain recovery reads unknown cells from the movement controller terrain snapshot', () => {
+  const requests = [];
+  const check = new BedrockTerrainCheck();
+  const result = check.check({
+    now: 3000, spawned: true, position: { x: 8.5, y: 65.62, z: 10.5 }, dimension: 0,
+    movementCapability: 'unavailable',
+    movementSnapshot: { terrain: { unknown: true, unknownCells: [
+      { x: 17, y: 64, z: -1, reason: 'block_not_observed' }
+    ] } },
+    terrainSnapshot: { collisionClassificationReady: true },
+    requestSubchunks: request => { requests.push(request); return 1; }
+  });
+  assert.equal(result.state, 'requesting_terrain');
+  assert.equal(result.requestableCells, 1);
+  assert.equal(result.subchunksRequested, 1);
+  assert.deepEqual(requests, [{
+    x: 1, z: -1, dimension: 0, targetSections: [4]
+  }]);
+});
