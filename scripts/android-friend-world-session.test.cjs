@@ -467,7 +467,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
           params: { netherNetId: networkId, message: `CONNECTERROR ${id} ${code}` }
         }) }
       }));
-      respond('4a62d29e-2f5e-4f2c-87ec-42001f84ff01', hostNetworkId, 38);
+      respond(unrelatedPlayerId, hostNetworkId, 38);
       respond(hostPlayerId.toUpperCase(), hostNetworkId, 37);
       respond(hostPlayerId, '124', 39);
     } };
@@ -547,7 +547,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   assert.match(offer.message, /^a=candidate:[^\r\n]*127\.0\.0\.1/m);
   const receivedPeerIds = snapshots.filter(event => event.testSignal)
     .map(event => event.testSignal.networkId);
-  assert.deepEqual(receivedPeerIds.slice(0, 2), [unrelatedPlayerId, hostPlayerId]);
+  assert.deepEqual(receivedPeerIds, [hostPlayerId, hostPlayerId]);
   assert.equal(client.connection.nethernet.serverNetworkId, hostPlayerId);
   assert.equal(client.options.nethernet.responseTimeoutMs, 25000);
   assert.equal(client.options.nethernet.inactivityTimeoutMs, 12000);
