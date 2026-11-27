@@ -106,7 +106,7 @@ function installNonceUserChain(client, nonce) {
   };
 }
 
-function installNethernetTelemetry(client, peerId, signallingProtocol) {
+function installNethernetTelemetry(client, peerId, signallingProtocol, expectedNetworkId) {
   if (!client.nethernet || typeof client.nethernet !== 'object') client.nethernet = {};
   const connection = client.connection;
   if (signallingProtocol === 'jsonrpc' && typeof peerId === 'string' &&
@@ -164,20 +164,29 @@ function installNethernetTelemetry(client, peerId, signallingProtocol) {
             const raw = typeof message === 'string' ? message : message?.toString?.();
             const packet = raw ? JSON.parse(raw) : null;
             if (packet?.method === 'Signaling_ReceiveMessage_v1_0') {
-              const items = Array.isArray(packet.params) ? packet.params : [packet.params];
-              senderIds = items.map(item => {
+              const isArray = Array.isArray(packet.params);
+              const items = isArray ? packet.params : [packet.params];
+              const accepted = [];
+              senderIds = [];
+              for (const item of items) {
                 const from = item?.From ?? item?.from ?? item?.fromPlayerId;
-                return typeof from === 'string' &&
-                  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(from)
-                  ? from.toLowerCase() : null;
-              });
-              for (let index = 0; index < items.length; index++) {
-                const sender = senderIds[index];
-                if (!sender || !items[index] || typeof items[index] !== 'object') continue;
-                items[index].From = sender;
-                items[index].from = sender;
-                items[index].fromPlayerId = sender;
+                if (typeof from !== 'string' || from.toLowerCase() !== peerId.toLowerCase()) continue;
+                const rawEnvelope = item?.Message ?? item?.message;
+                let envelope;
+                try { envelope = typeof rawEnvelope === 'string' ? JSON.parse(rawEnvelope) : rawEnvelope; }
+                catch { continue; }
+                const innerNetworkId = envelope?.params?.netherNetId ?? envelope?.params?.nethernetId;
+                if (innerNetworkId == null || String(innerNetworkId) !== String(expectedNetworkId)) continue;
+                const normalizedItem = { ...item };
+                const normalizedFrom = from.toLowerCase();
+                normalizedItem.From = normalizedFrom;
+                normalizedItem.from = normalizedFrom;
+                normalizedItem.fromPlayerId = normalizedFrom;
+                accepted.push(normalizedItem);
+                senderIds.push(normalizedFrom);
               }
+              if (accepted.length === 0) return;
+              packet.params = isArray ? accepted : accepted[0];
               const encoded = JSON.stringify(packet);
               normalized = typeof message === 'string' ? encoded : Buffer.from(encoded);
             }
@@ -452,7 +461,7 @@ async function run({
         client.nethernet.sessionAbort = prepared.sessionAbort;
         client.nethernet.session = prepared.session;
         installNonceUserChain(client, prepared.nonce);
-        installNethernetTelemetry(client, prepared.peerId, prepared.signallingProtocol);
+        installNethernetTelemetry(client, prepared.peerId, prepared.signallingProtocol, prepared.networkId);
         client.viewDistance = 4;
       } catch (error) {
         await prepared.session.close().catch(() => {});
