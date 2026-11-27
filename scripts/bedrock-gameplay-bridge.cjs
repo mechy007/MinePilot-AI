@@ -1225,6 +1225,10 @@ class BedrockGameplayBridge {
       // The gameplay agent owns its own cadence while active; otherwise keep
       // safety observations fresh from the bridge's 100 ms control loop.
       this.checkTerrainReadiness();
+      // Feed the same authenticated session into recovery and stuck detection.
+      // Extension failures are isolated and must never interrupt Bedrock control.
+      try { this.runtimeExtensions?.observeBridge?.(this); }
+      catch { this.runtimeExtensions?.recordSystem?.('bridge_observation_error', { source: 'control_plane' }); }
       if (!this.gameplayAgent?.snapshot?.()?.active) this.intelligenceTick();
       if (this.addonNavigation) this.updateAddonNavigation();
       this.controlTickStatus = { state: 'healthy', reason: 'control_tick_ok' };
