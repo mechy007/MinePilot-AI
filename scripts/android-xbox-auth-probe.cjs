@@ -22,7 +22,7 @@ function runtimeLogger(file) {
   const reasons = new Set(['no_transport', 'transport', 'network', 'timeout', 'host_disconnect',
     'nethernet_closed', 'nonce_unavailable']);
   const steps = new Set(['offer_sent', 'answer_received', 'peer_connected']);
-  const sensitiveKey = /token|secret|password|authorization|cookie|private.?key|refresh.?key|nonce|xuid|gamertag|username|player.?name|peer.?id|network.?id|email|device.?code|user.?code/i;
+  const sensitiveKey = /token|secret|password|authorization|cookie|private.?key|refresh.?key|nonce|xuid|gamertag|username|player.?name|peer.?id|network.?id|email|device.?code|user.?code|^name$|display.?name/i;
   const safeValue = (value, depth = 0) => {
     if (value == null || typeof value === 'boolean') return value;
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
