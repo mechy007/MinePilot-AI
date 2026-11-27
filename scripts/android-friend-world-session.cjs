@@ -106,7 +106,7 @@ function installNonceUserChain(client, nonce) {
   };
 }
 
-function installNethernetTelemetry(client) {
+function installNethernetTelemetry(client, peerId, signallingProtocol) {
   if (!client.nethernet || typeof client.nethernet !== 'object') client.nethernet = {};
   const connection = client.connection;
   if (connection && typeof connection === 'object') {
@@ -147,6 +147,24 @@ function installNethernetTelemetry(client) {
       if (!value || typeof value.on !== 'function') return;
       client.emit('minepilot_join_step', 'nethernet_signalling');
       const { SignalType } = require('nethernet');
+      if (signallingProtocol === 'jsonrpc' && typeof peerId === 'string' && typeof value.onMessage === 'function') {
+        const originalOnMessage = value.onMessage;
+        value.onMessage = function (message) {
+          let normalized = message;
+          try {
+            const raw = typeof message === 'string' ? message : message?.toString?.();
+            const packet = raw ? JSON.parse(raw) : null;
+            const from = packet?.params?.From;
+            if (packet?.method === 'Signaling_ReceiveMessage_v1_0' &&
+                typeof from === 'string' && from.toLowerCase() === peerId.toLowerCase()) {
+              packet.params.From = peerId;
+              const encoded = JSON.stringify(packet);
+              normalized = typeof message === 'string' ? encoded : Buffer.from(encoded);
+            }
+          } catch {}
+          return originalOnMessage.call(this, normalized);
+        };
+      }
       if (typeof value.write === 'function') {
         const originalWrite = value.write;
         value.write = function (signal) {
@@ -398,7 +416,7 @@ async function run({
         client.nethernet.sessionAbort = prepared.sessionAbort;
         client.nethernet.session = prepared.session;
         installNonceUserChain(client, prepared.nonce);
-        installNethernetTelemetry(client);
+        installNethernetTelemetry(client, prepared.peerId, prepared.signallingProtocol);
         client.viewDistance = 4;
       } catch (error) {
         await prepared.session.close().catch(() => {});
