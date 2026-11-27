@@ -16,7 +16,7 @@ function idString(value) {
 
 function validNetherNetId(value) {
   const text = idString(value);
-  if (!text || !/^\\d+$/.test(text)) return null;
+  if (!text || !/^\d+$/.test(text)) return null;
   try {
     const id = BigInt(text);
     return id > 0n && id <= UINT64_MAX ? id.toString() : null;
