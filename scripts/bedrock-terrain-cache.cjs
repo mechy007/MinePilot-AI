@@ -63,7 +63,7 @@ function parseStorage(buf, state) {
   // Multi-entry network palettes encode the length and each signed runtime
   // ID as ZigZag VarInts. Normalize hashes to uint32 for registry lookups.
   const paletteLength = readZigZag(buf, state);
-  if (!paletteLength || paletteLength > MAX_PALETTE || paletteLength > 2 ** bits)
+  if (paletteLength < 1 || paletteLength > MAX_PALETTE || paletteLength > 2 ** bits)
     throw new Error('invalid_palette_size');
   const palette = new Uint32Array(paletteLength);
   for (let i = 0; i < paletteLength; i++) palette[i] = readZigZag(buf, state) >>> 0;
