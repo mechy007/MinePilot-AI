@@ -754,7 +754,8 @@ public final class DashboardActivity extends Activity {
         String phase = current.getString("phase", "");
         worldSessionId = current.getString("session_id", "");
         boolean playing = "spawned".equals(phase);
-        boolean dead = "dead".equalsIgnoreCase(current.getString("life_state", ""));
+        boolean dead = WorldSessionStatus.isDead(
+                current.getString("life_state", ""), current.getString("assessment", ""));
         boolean connectedAndAlive = playing && !dead && !worldSessionId.isEmpty();
         manualMovementReady = playing && current.getBoolean("movement_ready", false);
         // Keep touch input responsive while terrain is loading. The runtime still
@@ -973,7 +974,8 @@ public final class DashboardActivity extends Activity {
         String phase = current.getString("phase", "");
         worldSessionId = current.getString("session_id", "");
         boolean playing = "spawned".equals(phase);
-        boolean dead = "dead".equals(current.getString("assessment", ""));
+        boolean dead = WorldSessionStatus.isDead(
+                current.getString("life_state", ""), current.getString("assessment", ""));
         boolean movementReady = playing && current.getBoolean("movement_ready", false);
         boolean connectedAndAlive = playing && !dead && !worldSessionId.isEmpty();
         manualMovementReady = movementReady;

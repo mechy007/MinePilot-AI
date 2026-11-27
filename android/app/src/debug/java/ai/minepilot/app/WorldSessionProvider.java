@@ -625,8 +625,13 @@ public final class WorldSessionProvider extends ContentProvider {
                 }
                 JSONObject command = gameplay.optJSONObject("lastCommand");
                 if (command != null) {
-                    result.putString("last_command", command.optString("status", "")
-                            + ": " + command.optString("reason", ""));
+                    String commandStatus = command.optString("status", "");
+                    String commandReason = command.optString("reason", "");
+                    result.putString("last_command", commandStatus + ": " + commandReason);
+                    if (commandStatus.matches("[a-z_]{1,32}"))
+                        result.putString("last_command_status", commandStatus);
+                    if (commandReason.matches("[a-z_]{1,80}"))
+                        result.putString("last_command_reason", commandReason);
                     String executionStage = command.optString("executionStage", "");
                     if (executionStage.matches("[a-z_]{1,64}"))
                         result.putString("last_command_execution_stage", executionStage);
