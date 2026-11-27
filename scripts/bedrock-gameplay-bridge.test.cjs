@@ -904,7 +904,7 @@ test('1.26.60 subchunk batches decode center-relative offsets and all-air result
   const terrain = new BedrockTerrainCache();
   terrain.reset(0);
   terrain.setRegistry(new Map([[0, { name: 'minecraft:air', boundingBox: 'empty' }]]));
-  const payload = Buffer.from([9, 1, 5, 1, 1, 0]);
+  const payload = Buffer.from([9, 1, 5, 1, 0]);
   const decoded = terrain.subChunk({
     dimension: 0,
     center: { x: 3, y: 4, z: 2 },
@@ -941,7 +941,7 @@ test('the live bridge forwards official subchunk packets into its terrain cache'
     entries: [{
       sub_chunk_pos_offset: { x: 0, y: 0, z: 0 },
       result: 1,
-      payload: Buffer.from([9, 1, 4, 1, 1, 0])
+      payload: Buffer.from([9, 1, 4, 1, 0])
     }]
   });
   assert.equal(bridge.snapshot().terrain.decodedSections, 1);
