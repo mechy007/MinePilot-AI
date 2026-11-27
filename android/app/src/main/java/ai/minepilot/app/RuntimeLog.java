@@ -163,12 +163,12 @@ final class RuntimeLog {
         String xbox = event.optString("xboxCode");
         if (xbox.matches("214[0-9]{7}")) message += " · Xbox " + xbox;
         String signalling = event.optString("signallingProtocol", "");
-        if (!signalling.isEmpty()) message += "\\nSignalling protocol: " + signalling;
+        if (!signalling.isEmpty()) message += "\nSignalling protocol: " + signalling;
         org.json.JSONArray exchangeFailures = event.optJSONArray("exchangeFailures");
         if (exchangeFailures != null) {
             for (int i = 0; i < Math.min(8, exchangeFailures.length()); i++) {
                 String failure = exchangeFailures.optString(i, "");
-                if (!failure.isEmpty()) message += "\\nAuthentication exchange issue: " + failure;
+                if (!failure.isEmpty()) message += "\nAuthentication exchange issue: " + failure;
             }
         }
 
