@@ -7,7 +7,6 @@ const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
 const { accountWriter, runtimeLogger, verifyXbox } = require('./android-xbox-auth-probe.cjs');
-const { BotAwareness } = require('./bot-awareness.mjs');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { BedrockMovementController } = require('./bedrock-movement-controller.cjs');
 const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
@@ -22,6 +21,14 @@ const { BedrockGameplayAgent } = require('./bedrock-gameplay-agent.cjs');
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
 const RETRY_DELAY_MS = 1_000;
+
+async function importRuntimeModule(stagedRelative, builtRelative) {
+  const stagedPath = path.resolve(__dirname, stagedRelative);
+  const builtPath = path.resolve(__dirname, '..', 'dist', 'src', builtRelative);
+  const target = existsSync(stagedPath) ? stagedPath : builtPath;
+  if (!existsSync(target)) throw new Error(`Runtime module is not staged or built: ${stagedRelative}`);
+  return import(require('node:url').pathToFileURL(target).href);
+}
 
 function androidNetworkInterfaces(readInterfaces, readAddresses) {
   return () => {
@@ -87,6 +94,7 @@ function bedrockDisconnectCode(reason) {
 }
 
 async function observeSession(client, publish, signal, getStage, timeoutMs = ATTEMPT_TIMEOUT_MS, gameplayOptions = null) {
+  const { BotAwareness } = await importRuntimeModule('bot-awareness.mjs', 'core/bot-awareness.js');
   const awareness = new BotAwareness();
   // The gameplay bridge observes and commands the SAME authenticated world client.
   // Default remains off for existing join checks and fixture clients.
@@ -310,16 +318,16 @@ if (require.main === module) {
     const { Authflow, Titles } = require('prismarine-auth');
     const { XboxClient } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
-    const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
-    const { LayerOneController } = await import('./gameplay/layer-one.js');
-    const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-    const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
-    const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
-    const { LayerFivePlanner } = await import('./gameplay/layer-five.js');
-    const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
-    const { LayerSevenAdvisor } = await import('./gameplay/layer-seven.js');
-    const { LayerEightReadiness } = await import('./gameplay/layer-eight.js');
-    const { BedrockMotionArbiter } = await import('./gameplay/addon-navigation.js');
+    const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
+    const { LayerOneController } = await importRuntimeModule('gameplay/layer-one.js', 'gameplay/layer-one.js');
+    const { LayerTwoPlanner } = await importRuntimeModule('gameplay/layer-two.js', 'gameplay/layer-two.js');
+    const { LayerThreePlanner } = await importRuntimeModule('gameplay/layer-three.js', 'gameplay/layer-three.js');
+    const { LayerFourSupervisor } = await importRuntimeModule('gameplay/layer-four.js', 'gameplay/layer-four.js');
+    const { LayerFivePlanner } = await importRuntimeModule('gameplay/layer-five.js', 'gameplay/layer-five.js');
+    const { LayerSixWorkflow } = await importRuntimeModule('gameplay/layer-six.js', 'gameplay/layer-six.js');
+    const { LayerSevenAdvisor } = await importRuntimeModule('gameplay/layer-seven.js', 'gameplay/layer-seven.js');
+    const { LayerEightReadiness } = await importRuntimeModule('gameplay/layer-eight.js', 'gameplay/layer-eight.js');
+    const { BedrockMotionArbiter } = await importRuntimeModule('gameplay/addon-navigation.js', 'gameplay/addon-navigation.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
