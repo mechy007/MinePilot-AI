@@ -405,6 +405,37 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (inputStatus.matches("[a-z_]{1,32}")) result.putString("movement_input_state", inputStatus);
                     if (inputReason.matches("[a-z_]{1,64}")) result.putString("movement_input_reason", inputReason);
                 }
+                JSONObject runtimeExtensions = gameplay.optJSONObject("runtimeExtensions");
+                if (runtimeExtensions != null) {
+                    JSONObject capabilityAssessment = runtimeExtensions.optJSONObject("capabilityAssessment");
+                    if (capabilityAssessment != null) {
+                        String state = capabilityAssessment.optString("status", "");
+                        if (state.matches("[a-z_]{1,24}"))
+                            result.putString("runtime_capability_state", state);
+                        org.json.JSONArray missing = capabilityAssessment.optJSONArray("missing");
+                        if (missing != null) {
+                            java.util.ArrayList<String> values = new java.util.ArrayList<>();
+                            for (int i = 0; i < Math.min(6, missing.length()); i++) {
+                                String value = missing.optString(i, "");
+                                if (value.matches("[a-zA-Z][a-zA-Z0-9_]{0,31}")) values.add(value);
+                            }
+                            result.putStringArray("runtime_capability_missing", values.toArray(new String[0]));
+                        }
+                    }
+                    JSONObject stuckRecovery = runtimeExtensions.optJSONObject("stuckRecovery");
+                    JSONObject stuckAssessment = stuckRecovery == null ? null :
+                            stuckRecovery.optJSONObject("lastAssessment");
+                    if (stuckAssessment != null) {
+                        result.putBoolean("movement_stuck_suspected",
+                                stuckAssessment.optBoolean("stuck", false));
+                        String stuckReason = stuckAssessment.optString("reason", "");
+                        if (stuckReason.matches("[a-z_]{1,64}"))
+                            result.putString("movement_stuck_reason", stuckReason);
+                        double progress = stuckAssessment.optDouble("progress", Double.NaN);
+                        if (Double.isFinite(progress) && progress >= 0 && progress <= 1000)
+                            result.putFloat("movement_stuck_progress", (float) progress);
+                    }
+                }
                 JSONObject position = gameplay.optJSONObject("position");
                 if (position != null) {
                     result.putString("position", position.optString("x") + ", "
