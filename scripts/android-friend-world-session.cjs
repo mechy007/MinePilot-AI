@@ -176,7 +176,7 @@ function installNethernetTelemetry(client, peerId, signallingProtocol, expectedN
                 try { envelope = typeof rawEnvelope === 'string' ? JSON.parse(rawEnvelope) : rawEnvelope; }
                 catch { continue; }
                 const rawInnerId = typeof rawEnvelope === 'string'
-                  ? rawEnvelope.match(/["'](?:netherNetId|nethernetId)["']\\s*:\\s*["']?(\\d+)["']?/i)?.[1]
+                  ? rawEnvelope.match(/["'](?:netherNetId|nethernetId)["']\s*:\s*["']?(\d+)["']?/i)?.[1]
                   : null;
                 const innerNetworkId = rawInnerId ?? envelope?.params?.netherNetId ?? envelope?.params?.nethernetId;
                 if (innerNetworkId == null || String(innerNetworkId) !== String(expectedNetworkId)) continue;
