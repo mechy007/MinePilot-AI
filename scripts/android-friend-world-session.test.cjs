@@ -510,7 +510,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   assert.equal(offer.netherNetId, String(client.connection.nethernet.networkId));
   assert.match(offer.message, /^CONNECTREQUEST /);
   assert.ok(snapshots.some(event => event.step === 'offer_sent'));
-  assert.match(offer.message, /^a=candidate:[^\\r\\n]*127\\.0\\.0\\.1/m);
+  assert.match(offer.message, /^a=candidate:[^\r\n]*127\.0\.0\.1/m);
   assert.equal(client.connection.nethernet.serverNetworkId, hostPlayerId);
   assert.equal(client.options.nethernet.responseTimeoutMs, 25000);
   assert.equal(client.options.nethernet.inactivityTimeoutMs, 12000);
