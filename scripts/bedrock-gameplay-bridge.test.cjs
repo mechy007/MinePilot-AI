@@ -960,8 +960,8 @@ test('Bedrock 1.26.60 skeleton chunks trigger a bounded and deduplicated local s
   assert.equal(request.value.dimension, 0);
   assert.deepEqual(request.value.origin, { x: 2, y: 4, z: -2 });
   assert.deepEqual(request.value.requests, [
-    { x: 0, y: -2, z: 0 }, { x: 0, y: -1, z: 0 },
-    { x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 },
+    { x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 },
+    { x: 0, y: 1, z: 0 }, { x: 0, y: -2, z: 0 },
     { x: 0, y: 2, z: 0 }
   ]);
   assert.equal(bridge.snapshot().subchunkRequestsSent, 1);
@@ -1243,7 +1243,7 @@ test('server returning to SearchingForSpawn restarts the correct respawn handsha
 });
 
 
-test('movement readiness retries exact missing terrain columns without bypassing collision safety', () => {
+test('movement readiness retries exact missing subchunk sections without bypassing collision safety', () => {
   let now = 1000;
   const client = new Client();
   const movement = {
@@ -1263,20 +1263,18 @@ test('movement readiness retries exact missing terrain columns without bypassing
   assert.equal(bridge.snapshot().movement, 'unavailable',
     'unknown terrain must continue to block movement');
   let requests = client.sent.filter(item => item.packet === 'subchunk_request');
-  assert.equal(requests.length, 1, 'request the missing chunk column found by preflight');
+  assert.equal(requests.length, 1, 'request the exact section containing the unknown block');
   assert.deepEqual(requests[0].value.requests, [
-    { x: 2, y: -2, z: -2 }, { x: 2, y: -1, z: -2 },
-    { x: 2, y: 0, z: -2 }, { x: 2, y: 1, z: -2 },
-    { x: 2, y: 2, z: -2 }
+    { x: 2, y: 0, z: -2 }
   ]);
 
   bridge.snapshot();
   assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 1,
-    'repeated status snapshots must respect the per-column cooldown');
+    'repeated status snapshots must respect the per-section retry backoff');
   now += 15001;
   bridge.snapshot();
   assert.equal(client.sent.filter(item => item.packet === 'subchunk_request').length, 2,
-    'a still-missing column can be retried after the cooldown');
+    'a still-missing section can be retried after its bounded backoff');
   bridge.stop();
 });
 

@@ -76,8 +76,16 @@ class BedrockGameplayBridge {
     this.registryResolver = options.registryResolver ?? null;
     this.navigationRoute = null;
     this.subchunkRequestKeys = new Map();
+    this.subchunkPollingModes = new Map();
     this.subchunkRequestsSent = 0;
+    this.subchunksRequested = 0;
     this.subchunkRequestErrors = 0;
+    this.subchunkResponsePackets = 0;
+    this.subchunkResponseEntries = 0;
+    this.subchunkResponseSuccesses = 0;
+    this.subchunkResponseAllAir = 0;
+    this.subchunkResponseFailures = 0;
+    this.subchunkLastResponse = null;
     this.blockNetworkIdsAreHashes = false;
     this.serverCustomBlockPropertiesCount = 0;
     this.autonomy = options.autonomy ?? null;
@@ -171,11 +179,17 @@ class BedrockGameplayBridge {
     this.bind('level_chunk', p => {
       this.chunk(p);
       this.terrain?.levelChunk(p);
-      this.requestLocalSubchunks(p);
+      this.observeSubchunkPollingChunk(p);
     });
-    this.bind('subchunk', p => this.terrain?.subChunk(p));
+    this.bind('subchunk', p => {
+      this.observeSubchunkResponse(p);
+      this.terrain?.subChunk(p);
+    });
     // Support the canonical packet spelling used by alternate SDK adapters.
-    this.bind('sub_chunk', p => this.terrain?.subChunk(p));
+    this.bind('sub_chunk', p => {
+      this.observeSubchunkResponse(p);
+      this.terrain?.subChunk(p);
+    });
     this.bind('move_player', p => this.move(p));
     this.bind('correct_player_move_prediction', p => this.correction(p));
     this.bind('set_entity_motion', p => this.motion(p));
@@ -307,6 +321,16 @@ class BedrockGameplayBridge {
     this.players.clear();
     this.receivedChunks.clear();
     this.subchunkRequestKeys.clear();
+    this.subchunkPollingModes.clear();
+    this.subchunkRequestsSent = 0;
+    this.subchunksRequested = 0;
+    this.subchunkRequestErrors = 0;
+    this.subchunkResponsePackets = 0;
+    this.subchunkResponseEntries = 0;
+    this.subchunkResponseSuccesses = 0;
+    this.subchunkResponseAllAir = 0;
+    this.subchunkResponseFailures = 0;
+    this.subchunkLastResponse = null;
     this.lastWorldAt = this.clock();
     this.spawned = false;
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
@@ -818,21 +842,104 @@ class BedrockGameplayBridge {
     this.lastWorldAt = this.clock();
   }
 
+  isSubchunkPollingChunk(packet) {
+    if (!packet || typeof packet !== 'object') return false;
+    const count = packet.sub_chunk_count;
+    // 1.26.40+ uses negative SubChunkCount values for polling. Accept both
+    // signed and unsigned representations used by protocol adapters.
+    if (Number.isInteger(count) && count < 0) return true;
+    if (Number.isInteger(count) && [0xfffffffe, 0xffffffff].includes(count >>> 0)) return true;
+    // Protocol 1.26.60 exposes the optional request limit as
+    // highest_subchunk_count (older adapters may use sub_chunk_limit).
+    return Number.isInteger(packet.highest_subchunk_count) ||
+      Number.isInteger(packet.sub_chunk_limit) ||
+      Number.isInteger(packet.subchunk_request_limit);
+  }
+
+  subchunkPollingLimit(packet) {
+    const raw = packet?.highest_subchunk_count ??
+      packet?.sub_chunk_limit ?? packet?.subchunk_request_limit;
+    if (!Number.isInteger(raw) || raw === -1) return null;
+    if (raw < 0) return 0;
+    return Math.min(48, raw);
+  }
+
+  observeSubchunkPollingChunk(packet) {
+    if (!packet || !Number.isInteger(packet.x) || !Number.isInteger(packet.z)) return 0;
+    const dimension = validDimension(packet.dimension);
+    if (dimension == null || dimension !== this.dimension) return 0;
+    const key = [dimension, packet.x, packet.z].join(':');
+    if (!this.isSubchunkPollingChunk(packet)) {
+      this.subchunkPollingModes.delete(key);
+      return 0;
+    }
+    this.subchunkPollingModes.delete(key);
+    this.subchunkPollingModes.set(key, {
+      requestLimit: this.subchunkPollingLimit(packet),
+      observedAt: this.clock()
+    });
+    while (this.subchunkPollingModes.size > MAX_CHUNKS)
+      this.subchunkPollingModes.delete(this.subchunkPollingModes.keys().next().value);
+    return this.requestLocalSubchunks(packet);
+  }
+
+  observeSubchunkResponse(packet) {
+    if (!packet || typeof packet !== 'object') return;
+    this.subchunkResponsePackets++;
+    const center = packet.origin ?? packet.center;
+    const entries = packet.entries ?? packet.sub_chunk_data;
+    const dimension = validDimension(packet.dimension);
+    if (!center || dimension == null || !Array.isArray(entries)) return;
+    this.subchunkResponseEntries += entries.length;
+    const now = this.clock();
+
+    for (const entry of entries) {
+      const offset = entry?.sub_chunk_pos_offset ?? entry?.subChunkPosOffset ??
+        entry?.offset ?? entry;
+      const dx = offset?.x ?? offset?.dx;
+      const dy = offset?.y ?? offset?.dy;
+      const dz = offset?.z ?? offset?.dz;
+      if (![dx, dy, dz, center.x, center.y, center.z].every(Number.isInteger)) continue;
+      const chunkX = center.x + dx;
+      const sectionY = center.y + dy;
+      const chunkZ = center.z + dz;
+      const result = entry.result ?? entry.sub_chunk_request_result;
+      const success = result === 'success' || result === 1;
+      const allAir = result === 'success_all_air' || result === 6;
+      if (success) this.subchunkResponseSuccesses++;
+      else if (allAir) this.subchunkResponseAllAir++;
+      else this.subchunkResponseFailures++;
+
+      const key = [dimension, chunkX, sectionY, chunkZ].join(':');
+      if (success || allAir) {
+        this.subchunkRequestKeys.delete(key);
+      } else {
+        const previous = this.subchunkRequestKeys.get(key);
+        if (previous) this.subchunkRequestKeys.set(key, { ...previous, lastAt: now });
+      }
+      this.subchunkLastResponse = {
+        dimension, chunkX, sectionY, chunkZ,
+        result: typeof result === 'string' || Number.isInteger(result) ? result : 'unknown',
+        at: now
+      };
+    }
+  }
+
   requestLocalSubchunks(packet) {
     if (this.closed || typeof this.client.queue !== 'function' || !packet ||
-        !Number.isInteger(packet.x) || !Number.isInteger(packet.z) ||
-        !Number.isInteger(packet.sub_chunk_count) ||
-        ![0xffffffff, -1].includes(packet.sub_chunk_count)) return false;
+        !Number.isInteger(packet.x) || !Number.isInteger(packet.z)) return 0;
     const dimension = validDimension(packet.dimension);
     const position = this.position;
     if (dimension == null || dimension !== this.dimension || !finitePosition(position))
-      return false;
-    // Bedrock 1.26.x skeleton LevelChunks use UINT32_MAX as their subchunk
-    // count. They carry no voxel payload: clients must request subchunks.
-    // Request only five vertical sections of this chunk column around the bot.
-    // Protocol 2225 requires the player's absolute SubChunk position as
-    // the request center. LevelChunk x/z are chunk coordinates, so express
-    // the target chunk column as a bounded relative offset from that center.
+      return 0;
+
+    const chunkKey = [dimension, packet.x, packet.z].join(':');
+    const mode = this.subchunkPollingModes.get(chunkKey);
+    const hasExactTargets = Array.isArray(packet.targetSections);
+    if (!mode && !this.isSubchunkPollingChunk(packet) && !hasExactTargets) return 0;
+
+    // SubChunkRequest offsets are relative to the player's absolute subchunk
+    // position. X/Z in the center are chunk coordinates; Y is a section index.
     const center = {
       x: Math.floor(position.x / 16),
       y: Math.floor(position.y / 16),
@@ -843,23 +950,51 @@ class BedrockGameplayBridge {
     if (![center.x, center.y, center.z, dx, dz].every(Number.isInteger) ||
         Math.abs(center.x) > 1875000 || Math.abs(center.z) > 1875000 ||
         Math.abs(dx) > 127 || Math.abs(dz) > 127 ||
-        center.y < -16 || center.y > 32) return false;
-    const key = [dimension, packet.x, center.y, packet.z].join(':');
+        center.y < -16 || center.y > 32) return 0;
+
+    const sections = hasExactTargets
+      ? [...new Set(packet.targetSections.filter(Number.isInteger))]
+      : [-2, -1, 0, 1, 2].map(offset => center.y + offset);
+    sections.sort((a, b) => Math.abs(a - center.y) - Math.abs(b - center.y) || a - b);
+
+    const rawLimit = this.subchunkPollingLimit(packet);
+    const limit = rawLimit ?? mode?.requestLimit ?? null;
+    if (limit === 0) return 0;
+    const maxRequests = limit == null ? sections.length : Math.min(sections.length, limit);
     const now = this.clock();
-    const previous = this.subchunkRequestKeys.get(key);
-    if (Number.isFinite(previous) && now - previous >= 0 && now - previous < 15000)
-      return false;
-    const requests = [-2, -1, 0, 1, 2].map(y => ({ x: dx, y, z: dz }));
+    const requests = [];
+    const requestKeys = [];
+
+    for (const sectionY of sections) {
+      if (requests.length >= maxRequests) break;
+      if (sectionY < -16 || sectionY > 32) continue;
+      const offsetY = sectionY - center.y;
+      if (!Number.isInteger(offsetY) || Math.abs(offsetY) > 127) continue;
+      const key = [dimension, packet.x, sectionY, packet.z].join(':');
+      const previous = this.subchunkRequestKeys.get(key);
+      if (previous) {
+        const retryDelay = Math.min(10000,
+          500 * (2 ** Math.min(Math.max(0, previous.attempts - 1), 4)));
+        const age = now - previous.lastAt;
+        if (age < 0 || age < retryDelay) continue;
+      }
+      requests.push({ x: dx, y: offsetY, z: dz });
+      requestKeys.push({ key, attempts: (previous?.attempts ?? 0) + 1 });
+    }
+
+    if (requests.length === 0) return 0;
     try {
       this.client.queue('subchunk_request', { dimension, requests, origin: center });
-      this.subchunkRequestKeys.set(key, now);
-      while (this.subchunkRequestKeys.size > 128)
+      for (const item of requestKeys)
+        this.subchunkRequestKeys.set(item.key, { lastAt: now, attempts: item.attempts });
+      while (this.subchunkRequestKeys.size > 512)
         this.subchunkRequestKeys.delete(this.subchunkRequestKeys.keys().next().value);
       this.subchunkRequestsSent++;
-      return true;
+      this.subchunksRequested += requests.length;
+      return requests.length;
     } catch {
       this.subchunkRequestErrors++;
-      return false;
+      return 0;
     }
   }
   move(packet) {
@@ -971,6 +1106,16 @@ class BedrockGameplayBridge {
       loadingCompleted: false, loadingPacketsSent: 0, handshakeErrors: 0 };
     this.receivedChunks.clear();
     this.subchunkRequestKeys.clear();
+    this.subchunkPollingModes.clear();
+    this.subchunkRequestsSent = 0;
+    this.subchunksRequested = 0;
+    this.subchunkRequestErrors = 0;
+    this.subchunkResponsePackets = 0;
+    this.subchunkResponseEntries = 0;
+    this.subchunkResponseSuccesses = 0;
+    this.subchunkResponseAllAir = 0;
+    this.subchunkResponseFailures = 0;
+    this.subchunkLastResponse = null;
     this.players.clear();
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
     else this.movement?.stop();
@@ -1095,7 +1240,16 @@ class BedrockGameplayBridge {
       visiblePlayers: this.players.size,
       loadedChunkHeaders: this.receivedChunks.size,
       subchunkRequestsSent: this.subchunkRequestsSent,
+      subchunksRequested: this.subchunksRequested,
       subchunkRequestErrors: this.subchunkRequestErrors,
+      subchunkPollingChunks: this.subchunkPollingModes.size,
+      pendingSubchunkRequests: this.subchunkRequestKeys.size,
+      subchunkResponsePackets: this.subchunkResponsePackets,
+      subchunkResponseEntries: this.subchunkResponseEntries,
+      subchunkResponseSuccesses: this.subchunkResponseSuccesses,
+      subchunkResponseAllAir: this.subchunkResponseAllAir,
+      subchunkResponseFailures: this.subchunkResponseFailures,
+      subchunkLastResponse: this.subchunkLastResponse ? { ...this.subchunkLastResponse } : null,
       blockNetworkIdsAreHashes: this.blockNetworkIdsAreHashes,
       serverCustomBlockPropertiesCount: this.serverCustomBlockPropertiesCount,
       commandPermission: { enabled: this.commandsEnabled, level: this.permissionLevel },
