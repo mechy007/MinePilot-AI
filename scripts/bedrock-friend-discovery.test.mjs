@@ -27,11 +27,14 @@ for (const protocol of [2225, 2193]) {
       assert.equal(JSON.parse(options.body).owners.people.monikerXuid, botXuid);
       return Response.json({ results: [
         {
+          id: 'visited-handle',
           sessionRef: { name: 'visited-world' },
           ownerXuid: friendXuid,
           customProperties: { ownerId: botXuid, protocol: 2225 }
         },
         {
+          id: 'friend-handle',
+          id: 'other-handle',
           sessionRef: { name: 'friend-world' },
           ownerXuid: friendXuid,
           customProperties: { ownerId: friendXuid, protocol }
