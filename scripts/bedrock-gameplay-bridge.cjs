@@ -208,7 +208,10 @@ class BedrockGameplayBridge {
         throw error;
       } finally {
         try { this.runtimeExtensions?.observePacket?.(event, payload, this); }
-        catch {
+        catch (error) {
+          telemetry.errors++;
+          telemetry.lastError = { event, name: ['TypeError','RangeError','SyntaxError'].includes(error?.name)
+            ? error.name : 'Error', at: this.clock(), source: 'runtime_extension' };
           // Auxiliary integrations must never interrupt the authenticated session.
           this.runtimeExtensions?.recordSystem?.('packet_projection_error', { event });
         }
