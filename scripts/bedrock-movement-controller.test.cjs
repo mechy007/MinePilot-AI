@@ -34,6 +34,13 @@ function blockAt(profile, x, y, z) {
   };
 }
 
+test('movement snapshot exposes the recorded physics initialization error', () => {
+  const controller = new BedrockMovementController({ queue() {} });
+  controller.lastError = 'collision data fixture failed';
+  assert.equal(controller.snapshot().lastError, 'collision data fixture failed');
+  controller.stop();
+});
+
 test('collision registry maps hashed Bedrock states to exact collision boxes', () => {
   const data = fixture();
   assert.equal(data.stateCount, 2);
