@@ -379,6 +379,32 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("spawn_respawn_acks", spawnHandshake.optInt("respawnAcknowledged", 0));
                     result.putInt("spawn_handshake_errors", spawnHandshake.optInt("handshakeErrors", 0));
                 }
+                JSONObject terrainCheck = gameplay.optJSONObject("terrainCheck");
+                if (terrainCheck != null) {
+                    String gate = terrainCheck.optString("reason", "");
+                    if (gate.matches("[a-z_]{1,64}")) result.putString("movement_terrain_gate", gate);
+                    result.putInt("movement_terrain_unknown_cells", Math.max(0, terrainCheck.optInt("unknownCells", 0)));
+                    result.putInt("movement_terrain_requestable_cells", Math.max(0, terrainCheck.optInt("requestableCells", 0)));
+                    result.putInt("movement_terrain_unrequestable_cells", Math.max(0, terrainCheck.optInt("unrequestableCells", 0)));
+                    result.putInt("movement_terrain_sections_requested", Math.max(0, terrainCheck.optInt("subchunksRequested", 0)));
+                }
+                JSONObject terrainSummary = gameplay.optJSONObject("terrain");
+                if (terrainSummary != null) {
+                    result.putInt("movement_decoded_sections", Math.max(0, terrainSummary.optInt("decodedSections", 0)));
+                    result.putInt("movement_decode_errors", Math.max(0, terrainSummary.optInt("decodeErrors", 0)));
+                    result.putInt("movement_registry_entries", Math.max(0, terrainSummary.optInt("registryEntries", 0)));
+                }
+                result.putInt("movement_subchunk_response_packets", Math.max(0, gameplay.optInt("subchunkResponsePackets", 0)));
+                result.putInt("movement_subchunk_response_successes", Math.max(0, gameplay.optInt("subchunkResponseSuccesses", 0)));
+                result.putInt("movement_subchunk_response_failures", Math.max(0, gameplay.optInt("subchunkResponseFailures", 0)));
+                JSONObject manualInput = gameplay.optJSONObject("manualInput");
+                if (manualInput != null) {
+                    result.putBoolean("movement_input_active", manualInput.optBoolean("active", false));
+                    String inputStatus = manualInput.optString("status", "");
+                    String inputReason = manualInput.optString("reason", "");
+                    if (inputStatus.matches("[a-z_]{1,32}")) result.putString("movement_input_state", inputStatus);
+                    if (inputReason.matches("[a-z_]{1,64}")) result.putString("movement_input_reason", inputReason);
+                }
                 JSONObject position = gameplay.optJSONObject("position");
                 if (position != null) {
                     result.putString("position", position.optString("x") + ", "
@@ -676,9 +702,62 @@ public final class WorldSessionProvider extends ContentProvider {
         return result;
     }
 
+    private static void queueManualInput(Path directory, Bundle extras, Bundle result) {
+        if (extras == null) return;
+        String action = extras.getString("action", "");
+        boolean active = "manual_move".equals(action);
+        if (!active && !"manual_stop".equals(action)) return;
+        String requestId = UUID.randomUUID().toString();
+        Path destination = directory.resolve("manual-input-state.json");
+        Path temporary = directory.resolve("manual-input-" + requestId + ".tmp");
+        try {
+            JSONObject state = new JSONObject()
+                    .put("version", "minepilot.manual-input.v1")
+                    .put("requestId", requestId)
+                    .put("active", active);
+            if (active) {
+                if (!extras.getBoolean("confirmed", false)) return;
+                String mode = extras.getString("motion_mode", "");
+                int ticks = extras.getInt("motion_ticks", -1);
+                if (!"vector".equals(mode) && !"forward".equals(mode) && !"backward".equals(mode) &&
+                        !"strafe_left".equals(mode) && !"strafe_right".equals(mode) &&
+                        !"turn_left".equals(mode) && !"turn_right".equals(mode) &&
+                        !"look_up".equals(mode) && !"look_down".equals(mode) &&
+                        !"jump".equals(mode) && !"sprint".equals(mode) && !"sneak".equals(mode)) return;
+                if (ticks < 1 || ticks > 8) return;
+                float motionX = extras.getFloat("motion_x", 0f);
+                float motionY = extras.getFloat("motion_y", 0f);
+                if (!Float.isFinite(motionX) || !Float.isFinite(motionY) ||
+                        Math.abs(motionX) > 1f || Math.abs(motionY) > 1f) return;
+                state.put("mode", mode).put("ticks", ticks)
+                        .put("motionX", motionX).put("motionY", motionY)
+                        .put("jump", extras.getBoolean("jump", false))
+                        .put("sprint", extras.getBoolean("sprint", false))
+                        .put("sneak", extras.getBoolean("sneak", false))
+                        // Refreshed by the UI while held; killed/paused UI cannot leave movement active.
+                        .put("expiresAt", System.currentTimeMillis() + 1400L);
+            }
+            Files.write(temporary, state.toString().getBytes(StandardCharsets.UTF_8),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+            result.putString("request_id", requestId);
+            result.putBoolean("accepted", true);
+            result.putString("queue_stage", active ? "manual_input_saved_locally" : "manual_input_released");
+        } catch (Exception ignored) {
+            // The input file is private to this session and never contains account credentials.
+        } finally {
+            try { Files.deleteIfExists(temporary); } catch (IOException ignored) {}
+        }
+    }
+
     private static void queueGameplay(Path directory, Bundle extras, Bundle result) {
         if (extras == null) return;
         String action = extras.getString("action", "");
+        if ("manual_move".equals(action) || "manual_stop".equals(action)) {
+            queueManualInput(directory, extras, result);
+            return;
+        }
         if (!"status".equals(action) && !"inspect".equals(action) && !"wait".equals(action) &&
                 !"stay".equals(action) && !"set_home".equals(action) &&
                 !"plan_follow".equals(action) && !"plan_return".equals(action) &&

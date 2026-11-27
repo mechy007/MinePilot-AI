@@ -60,6 +60,9 @@ class BedrockGameplayBridge {
     this.client = client;
     this.commandPath = options.commandPath ?? null;
     this.receiptPath = options.receiptPath ?? null;
+    this.manualInputPath = options.manualInputPath ?? null;
+    this.lastManualInputRequestId = null;
+    this.manualInputState = { active: false, status: 'idle', reason: 'no_manual_input', expiresAt: null };
     this.movement = options.movement ?? null;
     this.layerOne = options.layerOne ?? null;
     this.layerTwo = options.layerTwo ?? null;
@@ -1333,6 +1336,7 @@ class BedrockGameplayBridge {
       ...(this.layerEight ? { layerEight: this.layerEight.assess(this.readinessInput()) } : {}),
       ...(this.addonNavigation ? { addonNavigation: this.lastAddonNavigationSnapshot ?? this.addonNavigation.snapshot?.() ?? null } : {}),
       runtimeExtensions: this.runtimeExtensions?.snapshot?.() ?? { enabled: false },
+      manualInput: { ...this.manualInputState },
       ...(this.lastReceipt ? { lastCommand: { ...this.lastReceipt } } : {})
     };
   }
@@ -1896,8 +1900,69 @@ class BedrockGameplayBridge {
       this.learningTickStatus = { state: 'error', reason: 'learning_tick_failed' };
     }
   }
+  pollManualInput() {
+    if (this.closed || !this.manualInputPath || !this.movement) return;
+    let state;
+    try {
+      if (statSync(this.manualInputPath).size > MAX_COMMAND_BYTES) {
+        this.manualInputState = { active: false, status: 'rejected', reason: 'manual_input_too_large', expiresAt: null };
+        return;
+      }
+      state = JSON.parse(readFileSync(this.manualInputPath, 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT')
+        this.manualInputState = { active: false, status: 'rejected', reason: 'manual_input_read_failed', expiresAt: null };
+      return;
+    }
+    if (!state || state.version !== 'minepilot.manual-input.v1' ||
+        typeof state.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(state.requestId)) {
+      this.manualInputState = { active: false, status: 'rejected', reason: 'invalid_manual_input', expiresAt: null };
+      return;
+    }
+    const requestId = state.requestId;
+    if (state.active !== true) {
+      if (requestId !== this.lastManualInputRequestId) {
+        this.movement.releaseManual?.();
+        this.lastManualInputRequestId = requestId;
+        this.manualInputState = { active: false, status: 'idle', reason: 'manual_control_released', expiresAt: null };
+      }
+      return;
+    }
+    const expiresAt = state.expiresAt;
+    if (!Number.isFinite(expiresAt) || expiresAt <= this.clock()) {
+      if (requestId !== this.lastManualInputRequestId || this.manualInputState.active) {
+        this.movement.releaseManual?.();
+        this.lastManualInputRequestId = requestId;
+        this.manualInputState = { active: false, status: 'expired', reason: 'manual_input_expired', expiresAt: null };
+      }
+      return;
+    }
+    const samePendingInput = requestId === this.lastManualInputRequestId &&
+      this.manualInputState.status === 'waiting';
+    if (requestId === this.lastManualInputRequestId && !samePendingInput) return;
+    if (samePendingInput && this.movement.capability?.(this) !== 'ready') return;
+
+    const result = this.execute({
+      version: 'minepilot.gameplay.v1', requestId, action: 'manual_move', confirmed: true,
+      mode: state.mode, ticks: state.ticks,
+      motionX: state.motionX, motionY: state.motionY,
+      jump: state.jump === true, sprint: state.sprint === true, sneak: state.sneak === true
+    });
+    const waiting = result?.status === 'rejected' &&
+      ['movement_unavailable', 'terrain_not_fully_observed', 'physics_data_unavailable'].includes(result.reason);
+    this.lastManualInputRequestId = requestId;
+    this.manualInputState = {
+      active: true,
+      status: waiting ? 'waiting' : (result?.status ?? 'rejected'),
+      reason: typeof result?.reason === 'string' ? result.reason : 'manual_input_result_unavailable',
+      expiresAt
+    };
+  }
+
   poll() {
-    if (this.closed || !this.commandPath || !this.receiptPath) return;
+    if (this.closed) return;
+    this.pollManualInput();
+    if (!this.commandPath || !this.receiptPath) return;
     let data;
     try {
       if (statSync(this.commandPath).size > MAX_COMMAND_BYTES) {
@@ -1956,6 +2021,10 @@ class BedrockGameplayBridge {
   }
   stop() {
     if (this.closed) return;
+    if (this.manualInputPath) {
+      try { unlinkSync(this.manualInputPath); } catch {}
+    }
+    this.movement?.releaseManual?.();
     this.cancelPendingBlockPlacement('session_closed');
     this.cancelPendingCraft('session_closed');
     this.closed = true;

@@ -96,6 +96,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   const gameplay = gameplayOptions ? new BedrockGameplayBridge(client, {
     commandPath: gameplayOptions.commandPath,
     receiptPath: gameplayOptions.receiptPath,
+    manualInputPath: gameplayOptions.manualInputPath,
     movement,
     blockBreaker,
     layerOne: gameplayOptions.layerOneFactory?.() ?? null,
@@ -332,6 +333,7 @@ if (require.main === module) {
       gameplayOptions: {
         commandPath: path.join(__dirname, 'gameplay-command.json'),
         receiptPath: path.join(__dirname, 'gameplay-receipt.json'),
+        manualInputPath: path.join(__dirname, 'manual-input-state.json'),
         layerOneFactory: () => new LayerOneController(),
         layerTwoFactory: () => new LayerTwoPlanner(),
         layerThreeFactory: () => new LayerThreePlanner(),

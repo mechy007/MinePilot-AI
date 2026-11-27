@@ -36,7 +36,7 @@ test('1.26.60 subchunk batches decode center-relative offsets and all-air entrie
     center: { x: 3, y: 4, z: 2 },
     entries: [
       { sub_chunk_pos_offset: { x: 1, y: 1, z: 1 }, result: 1,
-        payload: Buffer.from([9, 1, 5, 1, 1, 0]) },
+        payload: Buffer.from([9, 1, 5, 1, 0]) },
       { sub_chunk_pos_offset: { x: 0, y: 2, z: 0 }, result: 6 }
     ]
   });
@@ -99,10 +99,11 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
   assert.equal(hashed.get(123456789), undefined,
     'unknown add-on hashes never receive an invented block identity');
 
-  // Subchunk palettes carry hashed runtime IDs as unsigned varuint32 values,
-  // although FNV-1a itself is represented as a signed int32 in the hash code.
-  const stoneWireId = (-2144268767) >>> 0;
-  const encodedVarUint = value => {
+  // Non-zero runtime palettes use ZigZag VarInts for the palette length
+  // and signed FNV-1a block-state hashes. Storage cell order is Bedrock XZY.
+  const stoneWireId = -2144268767;
+  const airWireId = -604749536;
+  const encodeVarUint = value => {
     const bytes = [];
     let remaining = value >>> 0;
     while (remaining >= 0x80) {
@@ -112,17 +113,35 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
     bytes.push(remaining);
     return bytes;
   };
-  const { parseStorage } = require('./bedrock-terrain-cache.cjs');
-  const storage = Buffer.from([1, 1, ...encodedVarUint(stoneWireId)]);
+  const encodeZigZag = value =>
+    encodeVarUint(((value << 1) ^ (value >> 31)) >>> 0);
+  const { parseStorage, localIndex } = require('./bedrock-terrain-cache.cjs');
+
+  const packed = Buffer.alloc(512); // 4096 cells at one bit per cell
+  for (const [x, y, z] of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) {
+    const index = localIndex(x, y, z);
+    const wordOffset = Math.floor(index / 32) * 4;
+    const bitOffset = index % 32;
+    packed.writeUInt32LE((packed.readUInt32LE(wordOffset) | (1 << bitOffset)) >>> 0,
+      wordOffset);
+  }
+  const storage = Buffer.concat([
+    Buffer.from([3]), // one bit per cell, network runtime palette
+    packed,
+    ...[2, stoneWireId, airWireId].map(value => Buffer.from(encodeZigZag(value)))
+  ]);
   const decodedStorage = parseStorage(storage, { offset: 0 });
-  assert.equal(decodedStorage[0], stoneWireId);
+  assert.equal(decodedStorage[localIndex(0, 0, 0)], stoneWireId >>> 0);
+  assert.equal(decodedStorage[localIndex(1, 0, 0)], airWireId >>> 0);
+  assert.equal(decodedStorage[localIndex(0, 1, 0)], airWireId >>> 0);
+  assert.equal(decodedStorage[localIndex(0, 0, 1)], airWireId >>> 0);
 
   const decodedTerrain = new BedrockTerrainCache();
   decodedTerrain.reset(0);
   assert.equal(decodedTerrain.setRegistry(hashed), true);
-  const sectionPayload = Buffer.from([
-    9, 1, 4, // version 9, one storage layer, section Y = 4
-    ...storage
+  const sectionPayload = Buffer.concat([
+    Buffer.from([9, 1, 4]), // version 9, one storage layer, section Y = 4
+    storage
   ]);
   assert.equal(decodedTerrain.subChunk({
     dimension: 0,
@@ -130,8 +149,34 @@ test('hashed Bedrock 1.26.60+ worlds resolve captured vanilla block-state hashes
     entries: [{ dx: 0, dy: 0, dz: 0, result: 'success', payload: sectionPayload }]
   }), 1);
   assert.equal(decodedTerrain.blockName(0, 0, 64, 0), 'minecraft:stone');
+  assert.equal(decodedTerrain.blockName(0, 1, 64, 0), 'minecraft:air');
+  assert.equal(decodedTerrain.blockName(0, 0, 65, 0), 'minecraft:air');
+  assert.equal(decodedTerrain.blockName(0, 0, 64, 1), 'minecraft:air');
   assert.equal(decodedTerrain.kind(0, 0, 64, 0), 'solid');
   assert.equal(decodedTerrain.tile(0, 0, 65, 0), 'blocked');
+
+  // A zero-bit runtime palette is one encoded runtime ID, not a
+  // one-entry palette-length + entry sequence.
+  const uniformRuntimeId = 42;
+  const zeroBitStorage = Buffer.from([1, ...encodeVarUint(uniformRuntimeId << 1)]);
+  const decodedUniform = parseStorage(zeroBitStorage, { offset: 0 });
+  assert.equal(decodedUniform.length, 4096);
+  assert.ok(decodedUniform.every(id => id === uniformRuntimeId));
+  const uniformTerrain = new BedrockTerrainCache();
+  uniformTerrain.reset(0);
+  uniformTerrain.setRegistry(new Map([
+    [uniformRuntimeId, { name: 'minecraft:stone', boundingBox: 'block', fullCube: true }]
+  ]));
+  assert.equal(uniformTerrain.subChunk({
+    dimension: 0,
+    center: { x: 0, y: 4, z: 0 },
+    entries: [{
+      sub_chunk_pos_offset: { x: 0, y: 0, z: 0 },
+      result: 'success',
+      payload: Buffer.concat([Buffer.from([9, 1, 4]), zeroBitStorage])
+    }]
+  }), 1);
+  assert.equal(uniformTerrain.blockName(0, 15, 79, 15), 'minecraft:stone');
 
   const stairsTerrain = new BedrockTerrainCache();
   stairsTerrain.reset(0);
@@ -232,7 +277,7 @@ test('terrain recovery requests the exact missing vertical section', () => {
   client.emit('subchunk', {
     dimension: 0,
     origin: { x: 2, y: 4, z: -2 },
-    entries: [{ dx: 3, dy: 4, dz: 1, result: 'success', payload: Buffer.from([9, 1, 8, 1, 1, 0]) }]
+    entries: [{ dx: 3, dy: 4, dz: 1, result: 'success', payload: Buffer.from([9, 1, 8, 1, 0]) }]
   });
   assert.equal(bridge.subchunkResponsePackets, 1);
   assert.equal(bridge.subchunkResponseEntries, 1);

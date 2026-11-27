@@ -26,36 +26,51 @@ function readUint(buf, state) {
   }
   throw new Error('varuint_too_long');
 }
+function readZigZag(buf, state) {
+  const value = readUint(buf, state);
+  return (value >>> 1) ^ -(value & 1);
+}
 function parseStorage(buf, state) {
   if (state.offset >= buf.length) throw new Error('truncated_storage');
   const header = buf[state.offset++];
   const bits = header >>> 1, runtime = (header & 1) === 1;
   if (!runtime || ![0,1,2,3,4,5,6,8,16].includes(bits))
     throw new Error('unsupported_network_palette');
+
+  // Bedrock's zero-bit runtime palette stores one VarInt whose low bit is
+  // the palette marker; it does not contain a word array or palette length.
+  if (bits === 0) {
+    const runtimeId = (readUint(buf, state) | 0) >> 1;
+    const blocks = new Uint32Array(CELLS);
+    blocks.fill(runtimeId >>> 0);
+    return blocks;
+  }
+
   const indices = new Uint16Array(CELLS);
-  if (bits) {
-    const perWord = Math.floor(32/bits);
-    const words = Math.ceil(CELLS/perWord);
-    if (state.offset + 4*words > buf.length) throw new Error('truncated_bit_array');
-    const mask = (1<<bits)-1;
-    for (let word=0;word<words;word++) {
-      const packed=buf.readUInt32LE(state.offset);state.offset+=4;
-      for(let b=0;b<perWord;b++) {
-        const ix=word*perWord+b;
-        if(ix<CELLS)indices[ix]=(packed >>> (bits*b))&mask;
-      }
+  const perWord = Math.floor(32 / bits);
+  const words = Math.ceil(CELLS / perWord);
+  if (state.offset + 4 * words > buf.length) throw new Error('truncated_bit_array');
+  const mask = (1 << bits) - 1;
+  for (let word = 0; word < words; word++) {
+    const packed = buf.readUInt32LE(state.offset);
+    state.offset += 4;
+    for (let bit = 0; bit < perWord; bit++) {
+      const index = word * perWord + bit;
+      if (index < CELLS) indices[index] = (packed >>> (bits * bit)) & mask;
     }
   }
-  const paletteLength=readUint(buf,state);
-  if (!paletteLength || paletteLength>MAX_PALETTE ||
-      paletteLength > (bits ? 2**bits : 1))
+
+  // Multi-entry network palettes encode the length and each signed runtime
+  // ID as ZigZag VarInts. Normalize hashes to uint32 for registry lookups.
+  const paletteLength = readZigZag(buf, state);
+  if (paletteLength < 1 || paletteLength > MAX_PALETTE || paletteLength > 2 ** bits)
     throw new Error('invalid_palette_size');
-  const palette=new Uint32Array(paletteLength);
-  for (let i=0;i<paletteLength;i++) palette[i]=readUint(buf,state);
-  const blocks=new Uint32Array(CELLS);
-  for (let i=0;i<CELLS;i++) {
-    if(indices[i]>=paletteLength) throw new Error('unmapped_block_index');
-    blocks[i]=palette[indices[i]];
+  const palette = new Uint32Array(paletteLength);
+  for (let i = 0; i < paletteLength; i++) palette[i] = readZigZag(buf, state) >>> 0;
+  const blocks = new Uint32Array(CELLS);
+  for (let i = 0; i < CELLS; i++) {
+    if (indices[i] >= paletteLength) throw new Error('unmapped_block_index');
+    blocks[i] = palette[indices[i]];
   }
   return blocks;
 }
@@ -83,7 +98,8 @@ function parseSubchunk(buf, offset=0, impliedY=-4) {
 function isInt(v) { return Number.isInteger(v) && Math.abs(v)<1875000; }
 function validDim(v) { return Number.isInteger(v) && v>=0 && v<=2; }
 function xyzKey(dim,cx,cz,sy) {return [dim,cx,cz,sy].join(':');}
-function localIndex(x,y,z) { return (x&15) | ((z&15)<<4) | ((y&15)<<8); }
+// Bedrock paletted storage is XZY: Y is the fastest-changing coordinate.
+function localIndex(x,y,z) { return ((x&15)<<8) | ((z&15)<<4) | (y&15); }
 class BedrockTerrainCache {
   constructor() {
     this.sections=new Map();
