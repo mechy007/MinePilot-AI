@@ -218,6 +218,7 @@ test('captures the Bedrock disconnect code without forwarding the server message
 });
 
 test('hands the verified account to the friend-world runtime with exact owner selection', async () => {
+  const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
   const snapshots = [];
   const client = new Client();
   let auth;
@@ -282,6 +283,7 @@ test('hands the verified account to the friend-world runtime with exact owner se
 
 for (const cancel of [false, true]) {
   test(cancel ? 'cancel stops a pending retry' : 'a peer timeout gets exactly one fresh join after cleanup', async () => {
+    const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
     const controller = new AbortController();
     const snapshots = [];
     const clients = [];
@@ -358,7 +360,7 @@ test('friend-world join sends the MPSD handle membership request for the exact o
   context.mock.method(XboxClient.prototype, 'getProfile', async () => ({ xuid: botXuid, gamertag: 'FixtureBot' }));
   const activity = context.mock.method(XboxClient.prototype, 'getActivityHandles', async () => [
     { id: 'wrong-handle', sessionRef: { name: 'wrong' }, ownerXuid, customProperties: { ownerId: botXuid } },
-    { id: 'expected-handle', sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225 } }
+    { id: 'expected-handle', sessionRef: { name: 'expected' }, customProperties: { ownerId: ownerXuid, protocol: 2225, SupportedConnections: [{ ConnectionType: 3, NetherNetId: '123' }] } }
   ]);
   const subscription = new EventEmitter();
   subscription.initialData = { ConnectionId: 'fixture-rta-connection' };
@@ -498,8 +500,13 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
   assert.equal(signedNonce, botNonce);
   assert.ok(snapshots.some(event => event.stage === 'world_nonce'));
   assert.ok(!JSON.stringify(snapshots).includes(botNonce));
-  assert.equal(sent[0].params.toPlayerId, hostPlayerId);
-  const offer = parseJson(sent[0].params.message).params;
+  assert.ok(sent.every(frame => frame.params.toPlayerId === hostPlayerId));
+  const offerFrame = sent.find(frame => {
+    const inner = frame.params?.message && parseJson(frame.params.message);
+    return inner?.params?.message?.startsWith('CONNECTREQUEST ');
+  });
+  assert.ok(offerFrame, JSON.stringify(sent));
+  const offer = parseJson(offerFrame.params.message).params;
   assert.equal(offer.netherNetId, String(client.connection.nethernet.networkId));
   assert.match(offer.message, /^CONNECTREQUEST /);
   assert.ok(snapshots.some(event => event.step === 'offer_sent'));
