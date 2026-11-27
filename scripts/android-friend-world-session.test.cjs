@@ -425,7 +425,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
       protocol: 2225,
       SupportedConnections: [
         { ConnectionType: 3, NetherNetId: '123' },
-        { ConnectionType: 7, NetherNetId: hostNetworkId, PmsgId: hostPlayerId }
+        { ConnectionType: 7, NetherNetId: hostNetworkId, PmsgId: hostPlayerId.toUpperCase() }
       ]
     }
   }]);
