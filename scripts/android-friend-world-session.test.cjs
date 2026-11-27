@@ -469,8 +469,8 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
         }) }
       }));
       respond('4a62d29e-2f5e-4f2c-87ec-42001f84ff01', hostNetworkId, 38);
-      respond(hostPlayerId, '124', 39);
       respond(hostPlayerId.toUpperCase(), hostNetworkId, 37);
+      respond(hostPlayerId, '124', 39);
     } };
     this.emit('credentials', []);
   });
