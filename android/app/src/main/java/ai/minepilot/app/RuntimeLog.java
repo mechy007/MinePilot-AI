@@ -203,7 +203,7 @@ final class RuntimeLog {
 
     static boolean hasFailure(JSONObject event) {
         String phase = event.optString("phase");
-        if (java.util.Set.of("failed", "runtime_failed", "account_failed", "disconnected",
+        if (java.util.Arrays.asList("failed", "runtime_failed", "account_failed", "disconnected",
                 "runtime_interrupted").contains(phase)) return true;
         if (event.optInt("httpStatus") >= 400 || event.optInt("nethernetCode") > 0 ||
                 event.optInt("bedrockCode", -1) >= 0 || event.has("error")) return true;
@@ -213,7 +213,7 @@ final class RuntimeLog {
         if (packets != null && packets.optInt("errors") > 0) return true;
         JSONObject commands = gameplay.optJSONObject("commandTelemetry");
         JSONObject lastCommand = commands == null ? null : commands.optJSONObject("last");
-        if (lastCommand != null && java.util.Set.of("rejected", "failed", "blocked")
+        if (lastCommand != null && java.util.Arrays.asList("rejected", "failed", "blocked")
                 .contains(lastCommand.optString("status"))) return true;
         JSONObject movement = gameplay.optJSONObject("movementSystem");
         return movement != null && movement.optJSONObject("lastError") != null;
