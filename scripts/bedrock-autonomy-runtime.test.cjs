@@ -1,10 +1,19 @@
 'use strict';
+
+const { existsSync } = require('node:fs');
+const { join } = require('node:path');
+function requireBundleModule(name) {
+  const candidates = [join(__dirname, '..', name), join(__dirname, name)];
+  const target = candidates.find(existsSync);
+  if (!target) throw new Error(`Runtime bundle module is missing: ${name}`);
+  return require(target);
+}
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {BedrockTerrainCache,parseSubchunk}=require('../bedrock-terrain-cache.cjs');
-const {createVanillaRuntimeRegistry,clearRuntimeRegistryCache}=require('../bedrock-runtime-registry.cjs');
-const {planLocalRoute}=require('../bedrock-local-path.cjs');
-const {VerifiedAutonomyRunner}=require('../bedrock-autonomy-runner.cjs');
+const {BedrockTerrainCache,parseSubchunk}=requireBundleModule('bedrock-terrain-cache.cjs');
+const {createVanillaRuntimeRegistry,clearRuntimeRegistryCache}=requireBundleModule('bedrock-runtime-registry.cjs');
+const {planLocalRoute}=requireBundleModule('bedrock-local-path.cjs');
+const {VerifiedAutonomyRunner}=requireBundleModule('bedrock-autonomy-runner.cjs');
 
 function vint(n){
   const out=[];do{let v=n&127;n=Math.floor(n/128);out.push(n?v|128:v);}while(n);
