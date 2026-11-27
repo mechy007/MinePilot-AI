@@ -498,7 +498,7 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
             if (closed) return;
             closed = true;
             this.connection = null;
-            this.emit('disconnect', this.connectionId, reason);
+            client.close(reason);
           }
         };
         const offerSdp = [
