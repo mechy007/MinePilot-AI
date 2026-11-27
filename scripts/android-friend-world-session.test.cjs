@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
 const { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner } = require('./android-friend-world-session.cjs');
+const { joinFriendWorld } = require('./android-friend-world-join.cjs');
 const { runtimeLogger } = require('./android-xbox-auth-probe.cjs');
 
 const { existsSync } = require('node:fs');
@@ -489,6 +490,13 @@ test('friend-world JSON-RPC offer targets the matching Xbox PmsgId and filters u
     publish: snapshot => snapshots.push(snapshot),
     signal: AbortSignal.timeout(5000),
     authDependencies: { Authflow, XboxClient, XboxRTASocket, Titles },
+    joinFriendWorldImpl: async args => {
+      try { return await joinFriendWorld(args); }
+      catch (error) {
+        snapshots.push({ joinSetupError: error?.message, joinSetupStack: error?.stack });
+        throw error;
+      }
+    },
     createClient: options => {
       assert.equal(options.nethernet.networkId, hostNetworkId);
       assert.equal(options.nethernet._peerPlayerId, hostPlayerId);
