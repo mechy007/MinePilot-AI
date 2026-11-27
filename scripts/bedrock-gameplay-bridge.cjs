@@ -146,8 +146,19 @@ class BedrockGameplayBridge {
     this.listeners = [];
   }
   bind(event, callback) {
-    this.client.on(event, callback);
-    this.listeners.push([event, callback]);
+    // Existing handler remains authoritative; extensions only see safe projections.
+    const wrapped = payload => {
+      try { callback(payload); }
+      finally {
+        try { this.runtimeExtensions?.observePacket?.(event, payload, this); }
+        catch {
+          // Auxiliary integrations must never interrupt the authenticated session.
+          this.runtimeExtensions?.recordSystem?.('packet_projection_error', { event });
+        }
+      }
+    };
+    this.client.on(event, wrapped);
+    this.listeners.push([event, wrapped]);
   }
   start() {
     if (this.closed || this.watch || this.listeners.length) throw new Error('Bridge already used');
