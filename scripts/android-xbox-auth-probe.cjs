@@ -67,6 +67,11 @@ function runtimeLogger(file) {
     }
     if (snapshot.vitals && typeof snapshot.vitals === 'object')
       event.vitals = safeValue(snapshot.vitals);
+    if (Array.isArray(snapshot.exchangeFailures))
+      event.exchangeFailures = safeValue(snapshot.exchangeFailures);
+    if (typeof snapshot.signallingProtocol === 'string' &&
+        ['jsonrpc', 'legacy'].includes(snapshot.signallingProtocol))
+      event.signallingProtocol = snapshot.signallingProtocol;
     if (snapshot.gameplay && typeof snapshot.gameplay === 'object')
       event.gameplay = safeValue(snapshot.gameplay);
     // Preserve a concise, non-sensitive error classification, never raw SDK messages/bodies.
