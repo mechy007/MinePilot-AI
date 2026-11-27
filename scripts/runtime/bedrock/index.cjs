@@ -58,6 +58,7 @@ function createRuntimeExtensions(options={}) {
   envelope,outcomes,obtain,safety,tasks,curriculum,recorder,inventory,capabilities,stuckRecovery,perception,taskExecution,
   detectCompatibility,
   events,world,plugins,registryAdapter,protocol,navigationGoals,navigationCosts,
+  observeMovementSample:(sample)=>stuckRecovery.observe(sample),
   planObtain:(bridge,item,count)=>obtain.preview(bridge,item,count),
   planGoap:(initial,goal,actions,limits)=>planGoap(initial,goal,actions,limits),
   searchGridAStar,searchVoxelAStar,planTerrainRoute,observePacket,
