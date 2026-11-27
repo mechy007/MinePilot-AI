@@ -11,7 +11,8 @@ function vint(n){
   return Buffer.from(out);
 }
 function uniform(sectionY,id){
-  return Buffer.concat([Buffer.from([9,1,(sectionY+256)%256,1,1]),vint(id)]);
+  // Zero-bit runtime palette: the network VarInt stores the runtime ID << 1.
+  return Buffer.concat([Buffer.from([9,1,(sectionY+256)%256,1]),vint(id << 1)]);
 }
 const air=18894,stone=3317;
 function levelPacket(payload=uniform(4,air)){
