@@ -182,8 +182,8 @@ test('autonomy requires movement capability, verified route and safety hold',()=
   world.gameplayWorld=()=>({safetyHold:true});
   assert.equal(a.enable(world,{confirmed:true}).reason,'survival_safety_override');
   world.gameplayWorld=()=>({safetyHold:false});
-  world.layerTwo.preview=()=>({goal:'follow',status:'waiting_for_target'});
-  assert.equal(a.enable(world,{confirmed:true}).reason,'route_not_ready');
+  world.layerTwo.preview=()=>({goal:'follow',status:'awaiting_world',reason:'world_not_ready'});
+  assert.equal(a.enable(world,{confirmed:true}).reason,'world_not_ready');
   assert.equal(a.snapshot().active,false);
 });
 
