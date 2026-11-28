@@ -214,3 +214,54 @@ test('joins the activity handle, retains RTA membership, updates reconnect IDs a
   assert.ok(calls.some(call => call.method === 'UPDATE_SESSION' &&
     call.body.members.me === null));
 });
+
+test('reconciles the latest RTA ConnectionId when reconnect happens during nonce wait', async () => {
+  const rta = new FakeRta();
+  const calls = [];
+  const xbox = {
+    async getActivityHandles() { return [handle()]; },
+    async request() { return { properties: { custom: { nonces: {} } } }; },
+    async getSession() {
+      rta.subscription.initialData = { ConnectionId: 'rta-connection-after-reconnect' };
+      return { properties: { custom: { nonces: { [BOT]: 'late-nonce' } } } };
+    },
+    async setActivity() {},
+    async updateSession(name, body) { calls.push(body); }
+  };
+  const prepared = await joinFriendWorld({
+    xbox, profile: { xuid: BOT }, ownerXuid: OWNER,
+    XboxRTASocket: class { constructor() { return rta; } },
+    pickOwnerWorld(handles) { return handles[0]; },
+    signal: new AbortController().signal
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(calls.some(body =>
+    body.members.me?.properties?.system?.connection === 'rta-connection-after-reconnect'));
+  await prepared.session.close();
+});
+
+test('handles an RTA error as a recoverable session failure and cleans up membership', async () => {
+  const rta = new FakeRta();
+  const calls = [];
+  const xbox = {
+    async getActivityHandles() { return [handle()]; },
+    async request() { return { properties: { custom: { nonces: { [BOT]: 'nonce' } } } }; },
+    async setActivity() {},
+    async updateSession(name, body) { calls.push(body); }
+  };
+  const snapshots = [];
+  const prepared = await joinFriendWorld({
+    xbox, profile: { xuid: BOT }, ownerXuid: OWNER,
+    XboxRTASocket: class { constructor() { return rta; } },
+    pickOwnerWorld(handles) { return handles[0]; },
+    publish: snapshot => snapshots.push(snapshot),
+    signal: new AbortController().signal
+  });
+  rta.emit('error', new Error('simulated RTA reconnect failure'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.ok(snapshots.some(snapshot =>
+    snapshot.phase === 'failed' && snapshot.stage === 'world_transport'));
+  assert.equal(rta.closed, 1);
+  assert.ok(calls.some(body => body.members.me === null));
+  await prepared.session.close();
+});
