@@ -197,3 +197,61 @@ test('packaged minecraft-data 1.26.60 supplies real vanilla air and stone runtim
   assert.equal(registry.get(3317)?.boundingBox,'block');
   clearRuntimeRegistryCache();
 });
+
+
+test('continuous Follow starts in range, holds position, waits for stale targets, and resumes when target moves',()=>{
+  let now=1000,beat,plan={goal:'follow',status:'at_target',distance:2.4};
+  const point={x:.5,y:65.62,z:.5};
+  const movement={
+    busy:false,calls:0,stops:0,capability:()=> 'ready',
+    snapshot(){return {active:this.busy,predictedPosition:{...point}};},
+    runVerifiedStep(){this.calls++;this.busy=true;return {status:'accepted'};},
+    stop(){this.stops++;this.busy=false;}
+  };
+  const world={
+    movement,terrain:terrain(),dimension:0,position:{...point},closed:false,spawned:true,
+    movementAuthority:1,lastServerPositionAt:1000,
+    layerTwo:{preview:()=>plan},
+    gameplayWorld:()=>({safetyHold:false}),
+    routePlanner:()=>({status:'route_found',waypoint:{x:1.5,y:65.62,z:.5}})
+  };
+  const runner=new VerifiedAutonomyRunner({
+    clock:()=>now,setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}
+  });
+  assert.equal(runner.enable(world,{confirmed:true}).status,'accepted',
+    'follow should start even when the target is already within the comfort radius');
+  assert.equal(runner.snapshot().mode,'continuous_follow');
+  beat();
+  assert.equal(runner.snapshot().active,true);
+  assert.equal(runner.snapshot().phase,'holding_follow_distance');
+  assert.equal(movement.calls,0);
+  plan={goal:'follow',status:'waiting_for_target',reason:'player_position_stale'};
+  now+=250;beat();
+  assert.equal(runner.snapshot().active,true,'temporary target observation loss should not terminate follow');
+  assert.equal(runner.snapshot().phase,'waiting_for_target');
+  plan={goal:'follow',status:'route_unverified',nextPoint:{x:1.5,y:65.62,z:.5}};
+  now+=250;beat();
+  assert.equal(movement.calls,1,'fresh target movement should resume route execution');
+  assert.equal(runner.snapshot().active,true);
+  runner.stop('test_cleanup');
+});
+
+test('continuous Follow is not terminated by the finite-task time or step budget',()=>{
+  let now=1000,beat;
+  const point={x:.5,y:65.62,z:.5};
+  const movement={capability:()=> 'ready',snapshot:()=>({active:false,predictedPosition:{...point}}),
+    runVerifiedStep:()=>({status:'rejected',reason:'fixture_route_not_executed'}),stop(){}};
+  const world={movement,terrain:terrain(),dimension:0,position:{...point},closed:false,spawned:true,
+    movementAuthority:1,lastServerPositionAt:1000,
+    layerTwo:{preview:()=>({goal:'follow',status:'at_target',distance:2})},
+    gameplayWorld:()=>({safetyHold:false}),routePlanner:()=>null};
+  const runner=new VerifiedAutonomyRunner({clock:()=>now,
+    setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}});
+  assert.equal(runner.enable(world,{confirmed:true}).status,'accepted');
+  runner.stepCount=100;
+  now+=31000;
+  beat();
+  assert.equal(runner.snapshot().active,true);
+  assert.equal(runner.snapshot().phase,'holding_follow_distance');
+  runner.stop('test_cleanup');
+});
