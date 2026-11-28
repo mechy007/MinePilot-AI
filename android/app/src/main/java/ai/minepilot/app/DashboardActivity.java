@@ -669,7 +669,7 @@ public final class DashboardActivity extends Activity {
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
         body.addView(stopMovement, panelLayout(8));
-        autoFollow = actionButton("Start bounded autonomous Follow/Return", false,
+        autoFollow = actionButton("Start autonomous Follow/Return", false,
                 this::showAutonomyConfirmation);
         autoFollow.setVisibility(View.GONE);
         body.addView(autoFollow, panelLayout(8));
@@ -1484,10 +1484,10 @@ public final class DashboardActivity extends Activity {
 
     private void showAutonomyConfirmation() {
         new android.app.AlertDialog.Builder(this)
-                .setTitle("Experimental autonomous Follow/Return")
-                .setMessage("Only use in a safe private world. The bot attempts up to 20 short walking segments over 30 seconds, on verified terrain only, and stops if server movement is not confirmed. Start by selecting a Follow or Return goal. Unknown terrain, health danger and missing authority block movement.")
+                .setTitle("Autonomous Follow/Return")
+                .setMessage("Use only in a safe private world. Follow mode continuously tracks the selected player, keeps about 3 blocks of distance, waits safely if the player is temporarily not visible, and resumes when fresh position data returns. Return-home remains a bounded task. Both use verified terrain and stop on safety, session or dimension failures. Manual movement cancels Follow and takes control.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Start bounded Follow", (dialog, which) ->
+                .setPositiveButton("Start autonomous goal", (dialog, which) ->
                         requestGameplay("autonomy_follow", true))
                 .show();
     }
