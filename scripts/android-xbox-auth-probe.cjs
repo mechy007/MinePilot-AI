@@ -58,6 +58,9 @@ function runtimeLogger(file) {
     if (typeof snapshot.stage === 'string' && stages.has(snapshot.stage)) event.stage = snapshot.stage;
     if (typeof snapshot.reason === 'string' && reasons.has(snapshot.reason)) event.reason = snapshot.reason;
     if (typeof snapshot.step === 'string' && steps.has(snapshot.step)) event.step = snapshot.step;
+    // Xbox XErr values are validated decimal strings, not numeric diagnostics.
+    if (typeof snapshot.xboxCode === 'string' && /^214\\d{7}$/.test(snapshot.xboxCode))
+      event.xboxCode = snapshot.xboxCode;
     for (const key of ['httpStatus', 'nethernetCode', 'bedrockCode', 'chunks', 'seconds', 'retried']) {
       const value = snapshot[key];
       if (typeof value === 'boolean' || (Number.isInteger(value) && value >= 0 && value <= 1000000000))
