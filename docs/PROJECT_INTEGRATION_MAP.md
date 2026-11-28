@@ -43,6 +43,7 @@ The control loop also retries movement-presence startup when required session me
 | Crafting | The recipe catalogue observes Bedrock `crafting_data` and item registry packets; crafting remains gated by exact recipe and inventory evidence. |
 | Life and intelligence | Server vitals, entities, position, and dimension feed life-senses and intelligence; safety signals can stop active goals. |
 | Navigation and autonomy | Local A* and verified movement are used only with observed terrain. Plans and metadata do not automatically become executable actions. |
+| Autonomous player follow | `follow_player` selects a server-observed player and delegates to `VerifiedAutonomyRunner`; follow remains active while the target is within 3 blocks or temporarily stale, replans when fresh target observations move, and stops on safety/session/dimension failure. Explicit manual input preempts and cancels follow. |
 | Runtime extensions | Packet observation, world knowledge, decision recording, capability assessment, stuck detection, and read-only plugin registry are attached to the bridge. |
 | Android diagnostics | Queue state, queued frame count, last input flags, capability evidence, and stuck assessments are surfaced to the Manual controls screen. |
 
