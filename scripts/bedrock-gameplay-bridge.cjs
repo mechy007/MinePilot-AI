@@ -1508,8 +1508,8 @@ class BedrockGameplayBridge {
   }
   execute(raw) {
     const startedAt = this.clock();
-    const action = typeof raw?.action === 'string' && /^[a-z_]{1,48}$/.test(raw.action)
-      ? raw.action : 'invalid';
+    const requestedAction = typeof raw?.action === 'string' ? raw.action : '';
+    const action = COMMAND_ACTIONS.has(requestedAction) ? requestedAction : 'invalid';
     const telemetry = this.commandTelemetry;
     telemetry.received++;
     telemetry.byAction[action] = Math.min(1000000000, (telemetry.byAction[action] ?? 0) + 1);
