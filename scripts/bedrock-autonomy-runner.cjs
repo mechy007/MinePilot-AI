@@ -34,11 +34,16 @@ class VerifiedAutonomyRunner {
     this.awaiting=null;
     this.verifiedSteps=0;
     this.predictionSteps=0;
+    this.followMode=false;
   }
   route(world) {
     const plan=world.layerTwo?.preview(world.gameplayWorld());
     if (!plan || !['follow','return'].includes(plan.goal))
       return {status:'rejected',reason:'no_selected_follow_or_return'};
+    if (plan.goal === 'follow' && plan.status === 'at_target')
+      return {status:'holding',reason:'target_within_follow_distance'};
+    if (plan.goal === 'follow' && plan.status === 'waiting_for_target')
+      return {status:'waiting',reason:plan.reason??'player_position_stale'};
     if(plan.status==='at_target')
       return {status:'complete',reason:'target_reached'};
     if(plan.status!=='route_unverified'||!plan.nextPoint)
@@ -71,6 +76,7 @@ class VerifiedAutonomyRunner {
     if(path.status!=='ready')return {status:'rejected',reason:path.reason};
     this.world=world;this.active=true;this.phase='ready';
     this.stepCount=0;this.verifiedSteps=0;this.predictionSteps=0;
+    this.followMode=world.layerTwo?.preview(world.gameplayWorld())?.goal==='follow';
     this.startedAt=this.clock();
     this.initialDimension=world.dimension;
     this.awaiting=null;
@@ -81,8 +87,8 @@ class VerifiedAutonomyRunner {
   pulse() {
     if(!this.active)return;
     const w=this.world;
-    if (!w || this.clock()-this.startedAt>MAX_RUN_MS ||
-       this.stepCount>=MAX_STEPS) {
+    if (!w || (!this.followMode && (this.clock()-this.startedAt>MAX_RUN_MS ||
+       this.stepCount>=MAX_STEPS))) {
       this.stop('autonomy_step_or_time_limit');return;
     }
     if(w.dimension!==this.initialDimension) {
@@ -128,6 +134,16 @@ class VerifiedAutonomyRunner {
       return;
     }
     const route=this.route(w);
+    if (route.status === 'holding' || route.status === 'waiting') {
+      // Follow is a persistent escort: hold position inside the comfort radius
+      // and wait safely while the target is temporarily out of observation.
+      // A fresh target packet automatically resumes route planning on a later pulse.
+      if (movement?.snapshot()?.active) movement.stop('follow_hold_position');
+      this.awaiting=null;
+      this.phase=route.status==='holding'?'holding_follow_distance':'waiting_for_target';
+      this.lastReason=route.reason;
+      return;
+    }
     if(route.status==='complete') {this.stop('target_reached');return;}
     if(route.status!=='ready'){this.stop(route.reason);return;}
     if(movement?.snapshot()?.active)return;
@@ -152,10 +168,11 @@ class VerifiedAutonomyRunner {
       world.movement.stop('autonomy_cancelled');
   }
   snapshot(){
-    return {active:this.active,phase:this.phase,attemptedSteps:this.stepCount,
+    return {active:this.active,mode:this.followMode?'continuous_follow':'bounded_task',
+      phase:this.phase,attemptedSteps:this.stepCount,
       serverVerifiedSteps:this.verifiedSteps,predictionSteps:this.predictionSteps,
       stopReason:this.lastReason,
-      maxSteps:MAX_STEPS,executed:this.stepCount>0,
+      maxSteps:this.followMode?null:MAX_STEPS,executed:this.stepCount>0,
       autonomousMining:false,autonomousCombat:false};
   }
 }
