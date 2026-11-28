@@ -977,12 +977,18 @@ public final class DashboardActivity extends Activity {
         extras.putBoolean("sprint", manualSprint);
         extras.putBoolean("sneak", manualSneak);
         extras.putInt("motion_ticks", 8);
+        // Capture immutable request values before enqueueing; the UI may change before execution.
+        final float sentMotionX = manualJoystickX;
+        final float sentMotionY = manualJoystickY;
+        final boolean sentJump = manualJump;
+        final boolean sentSprint = manualSprint;
+        final boolean sentSneak = manualSneak;
         worldReader.execute(() -> {
             org.json.JSONObject sent = new org.json.JSONObject();
             try {
-                sent.put("mode", effectiveMode).put("motionX", manualJoystickX)
-                        .put("motionY", manualJoystickY).put("jump", manualJump)
-                        .put("sprint", manualSprint).put("sneak", manualSneak).put("ticks", 8);
+                sent.put("mode", effectiveMode).put("motionX", sentMotionX)
+                        .put("motionY", sentMotionY).put("jump", sentJump)
+                        .put("sprint", sentSprint).put("sneak", sentSneak).put("ticks", 8);
             } catch (org.json.JSONException ignored) {}
             RuntimeLog.record(this, "manual_input_sent", sent);
             Bundle receipt = worldRequest("gameplay", session, extras);
