@@ -66,6 +66,7 @@ function readSessionNonce(session, xuid) {
 }
 
 async function waitForWorldNonce({ xbox, sessionName, xuid, session, subscription, rta, signal, timeoutMs = NONCE_TIMEOUT_MS }) {
+  if (signal?.aborted) throw signal.reason ?? new Error('Friend-world join cancelled');
   const initial = readSessionNonce(session, xuid);
   if (initial) return initial;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 60_000) {
