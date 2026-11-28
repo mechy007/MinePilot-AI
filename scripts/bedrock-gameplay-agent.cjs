@@ -304,8 +304,8 @@ class BedrockGameplayAgent {
         : {status:'paused',reason:route?.reason??'goto_route_not_verified'};
     }
     if(this.goal==='explore') {
-      const waypoint=this.localTarget(world);
-      return waypoint?{status:'ready',waypoint,reason:'known_walkable_exploration'}:
+      const choice=this.localTarget(world);
+      return choice?{status:'ready',waypoint:choice.waypoint,jump:choice.jump,reason:'known_walkable_exploration'}:
         {status:'paused',reason:'no_safe_exploration_route'};
     }
     if(this.goal==='follow'||this.goal==='return_home') {
