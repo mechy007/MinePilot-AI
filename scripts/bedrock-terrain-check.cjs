@@ -40,8 +40,13 @@ class BedrockTerrainCheck {
     const dimension = input.dimension;
     const movement = input.movementSnapshot;
     const capability = input.movementCapability ?? 'unavailable';
-    const unknownCells = Array.isArray(movement?.unknownCells)
-      ? movement.unknownCells.slice(0, this.maxCells) : [];
+    // BedrockMovementController exposes voxel diagnostics under `terrain`.
+    // Keep the legacy top-level shape as a compatibility fallback for callers
+    // and fixtures that already provide it.
+    const movementUnknownCells = Array.isArray(movement?.terrain?.unknownCells)
+      ? movement.terrain.unknownCells : movement?.unknownCells;
+    const unknownCells = Array.isArray(movementUnknownCells)
+      ? movementUnknownCells.slice(0, this.maxCells) : [];
     const requestable = unknownCells.filter(cell =>
       cell && cell.reason === 'block_not_observed' &&
       Number.isFinite(cell.x) && Number.isFinite(cell.y) &&

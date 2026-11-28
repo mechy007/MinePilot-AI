@@ -4,41 +4,99 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { generateKeyPairSync } = require('node:crypto');
 
+const MINECRAFT_TITLE = {
+  titleId: '896928775',
+  scid: '4fc10100-5f7a-4470-899b-280835760c07',
+  templateName: 'MinecraftLobby'
+};
+
 function runtimeLogger(file) {
-  const phases = ['device_code', 'microsoft_approved', 'bedrock_credentials', 'verified', 'account_sent',
-    'friends_loaded', 'discovery', 'connection', 'retrying', 'spawned', 'failed', 'disconnected', 'stopped'];
-  const stages = ['microsoft_token', 'xbox_token', 'xbox_profile', 'account_save', 'bedrock_credentials',
-    'friends', 'owner', 'discovery', 'connection', 'xbox_membership', 'world_transport',
-    'world_nonce', 'nethernet_signalling', 'nethernet_peer', 'bedrock_login', 'bedrock_spawn', 'runtime'];
-  const reasons = ['no_transport', 'transport', 'network', 'timeout', 'host_disconnect', 'nethernet_closed',
-    'nonce_unavailable'];
-  const steps = ['offer_sent', 'answer_received', 'peer_connected'];
+  const phases = new Set(['join_start', 'sign_in_start', 'friends_start', 'runtime_ready', 'runtime_failed',
+    'runtime_interrupted', 'device_code', 'microsoft_approved', 'bedrock_credentials', 'verified',
+    'account_sent', 'account_saved', 'account_failed', 'friends_loaded', 'discovery', 'connection',
+    'retrying', 'spawned', 'failed', 'disconnected', 'stopped']);
+  const stages = new Set(['microsoft_token', 'xbox_token', 'xbox_profile', 'account_save',
+    'bedrock_credentials', 'friends', 'owner', 'discovery', 'connection', 'xbox_membership',
+    'world_transport', 'world_nonce', 'nethernet_signalling', 'nethernet_peer',
+    'bedrock_login', 'bedrock_spawn', 'runtime']);
+  const reasons = new Set(['no_transport', 'transport', 'network', 'timeout', 'host_disconnect',
+    'nethernet_closed', 'nonce_unavailable']);
+  const steps = new Set(['offer_sent', 'answer_received', 'peer_connected']);
+  const sensitiveKey = /token|secret|password|authorization|cookie|private.?key|refresh.?key|nonce|xuid|gamertag|username|player.?name|peer.?id|network.?id|email|device.?code|user.?code|^name$|display.?name|^message$|raw.?body|response.?body|request.?body|headers|^url$|^uri$|^stack$/i;
+  const safeValue = (value, depth = 0) => {
+    if (value == null || typeof value === 'boolean') return value;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string') return value.slice(0, 240);
+    if (depth >= 6) return '[depth-limited]';
+    if (Array.isArray(value)) return value.slice(0, 32).map(item => safeValue(item, depth + 1));
+    if (typeof value !== 'object') return undefined;
+    const output = {};
+    for (const [key, item] of Object.entries(value).slice(0, 100)) {
+      if (sensitiveKey.test(key)) continue;
+      const safe = safeValue(item, depth + 1);
+      if (safe !== undefined) output[key.slice(0, 80)] = safe;
+    }
+    return output;
+  };
   let previous;
-  return snapshot => {
-    if (!file || !phases.includes(snapshot.phase)) return;
-    const event = { phase: snapshot.phase };
-    if (stages.includes(snapshot.stage)) event.stage = snapshot.stage;
-    if (reasons.includes(snapshot.reason)) event.reason = snapshot.reason;
-    if (steps.includes(snapshot.step)) event.step = snapshot.step;
-    if (Number.isInteger(snapshot.httpStatus) && snapshot.httpStatus >= 400 && snapshot.httpStatus <= 599) {
-      event.httpStatus = snapshot.httpStatus;
-    }
-    if (typeof snapshot.xboxCode === 'string' && /^214\d{7}$/.test(snapshot.xboxCode)) {
-      event.xboxCode = snapshot.xboxCode;
-    }
-    if (Number.isInteger(snapshot.nethernetCode) && snapshot.nethernetCode > 0 && snapshot.nethernetCode <= 255) {
-      event.nethernetCode = snapshot.nethernetCode;
-    }
-    if (Number.isInteger(snapshot.bedrockCode) && snapshot.bedrockCode >= 0 && snapshot.bedrockCode <= 255) {
-      event.bedrockCode = snapshot.bedrockCode;
-    }
-    const key = JSON.stringify(event);
-    if (key === previous) return;
+  let sequence = 0;
+  const rotate = () => {
     try {
-      fs.appendFileSync(file, JSON.stringify({ ...event, at: Date.now() }) + '\n', { mode: 0o600 });
+      if (fs.existsSync(file) && fs.statSync(file).size >= 4 * 1024 * 1024) {
+        const old = file.endsWith('.jsonl') ? file.slice(0, -6) + '.previous.jsonl' : file + '.previous';
+        try { fs.unlinkSync(old); } catch {}
+        fs.renameSync(file, old);
+      }
+    } catch { /* Diagnostics must never interrupt the live session. */ }
+  };
+  return snapshot => {
+    if (!file || !snapshot || !phases.has(snapshot.phase)) return;
+    const event = {
+      schema: 'minepilot.session-diagnostic.v1',
+      phase: snapshot.phase
+    };
+    if (typeof snapshot.stage === 'string' && stages.has(snapshot.stage)) event.stage = snapshot.stage;
+    if (typeof snapshot.reason === 'string' && reasons.has(snapshot.reason)) event.reason = snapshot.reason;
+    if (typeof snapshot.step === 'string' && steps.has(snapshot.step)) event.step = snapshot.step;
+    // Xbox XErr values are validated decimal strings, not numeric diagnostics.
+    if (typeof snapshot.xboxCode === 'string' && /^214\d{7}$/.test(snapshot.xboxCode))
+      event.xboxCode = snapshot.xboxCode;
+    for (const key of ['httpStatus', 'nethernetCode', 'bedrockCode', 'chunks', 'seconds', 'retried']) {
+      const value = snapshot[key];
+      if (typeof value === 'boolean' || (Number.isInteger(value) && value >= 0 && value <= 1000000000))
+        event[key] = value;
+    }
+    if (snapshot.vitals && typeof snapshot.vitals === 'object')
+      event.vitals = safeValue(snapshot.vitals);
+    if (Array.isArray(snapshot.exchangeFailures))
+      event.exchangeFailures = safeValue(snapshot.exchangeFailures);
+    if (typeof snapshot.signallingProtocol === 'string' &&
+        ['jsonrpc', 'legacy'].includes(snapshot.signallingProtocol))
+      event.signallingProtocol = snapshot.signallingProtocol;
+    if (snapshot.gameplay && typeof snapshot.gameplay === 'object')
+      event.gameplay = safeValue(snapshot.gameplay);
+    // Preserve a concise, non-sensitive error classification, never raw SDK messages/bodies.
+    if (snapshot.error && typeof snapshot.error === 'object') {
+      event.error = {
+        name: ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'AbortError'].includes(snapshot.error.name)
+          ? snapshot.error.name : 'Error'
+      };
+    }
+    // A changing heartbeat clock is not a new diagnostic event. Keep its
+    // elapsed time in the first record, but deduplicate otherwise identical state.
+    const comparable = { ...event };
+    delete comparable.seconds;
+    const key = JSON.stringify(comparable);
+    if (key === previous) return;
+    event.sequence = ++sequence;
+    event.at = Date.now();
+    try {
+      rotate();
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+      fs.appendFileSync(file, JSON.stringify(event) + String.fromCharCode(10), { mode: 0o600 });
       previous = key;
     } catch {
-      // The primary status and connection must continue if log storage fails.
+      // Logging is best-effort; never interrupt authentication or gameplay.
     }
   };
 }
@@ -124,7 +182,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
     // Wait for interactive sign-in before the Xbox profile request starts its deadline.
     await auth.getXboxToken('http://xboxlive.com');
     stage = 'xbox_profile';
-    const xbox = new XboxClient(auth);
+    const xbox = new XboxClient(auth, MINECRAFT_TITLE);
     const profile = await xbox.getProfile('me');
     if (typeof profile.xuid !== 'string' || !/^\d{1,20}$/.test(profile.xuid) || typeof profile.gamertag !== 'string' || !profile.gamertag) {
       throw new Error('Xbox profile identity missing');
@@ -142,7 +200,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
       await saveAccount({ refreshToken: savedRefreshToken, gamertag: profile.gamertag, xuid: profile.xuid });
     }
 
-    return { auth, profile };
+    return { auth, profile, xbox };
   } catch (error) {
     const result = { phase: 'failed', stage };
     if (stage === 'xbox_token') {
@@ -168,7 +226,7 @@ async function connectXboxAccount({ Authflow, Titles, XboxClient, refreshToken }
 }
 
 async function verifyXbox(dependencies, publish, saveAccount = null) {
-  const { auth, profile } = await connectXboxAccount(dependencies, publish, saveAccount);
+  const { auth, profile, xbox } = await connectXboxAccount(dependencies, publish, saveAccount);
   try {
     publish({ phase: 'bedrock_credentials' });
     const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'secp384r1' });
@@ -180,7 +238,7 @@ async function verifyXbox(dependencies, publish, saveAccount = null) {
     const identity = JSON.parse(Buffer.from(chain[1].split('.')[1], 'base64url').toString('utf8'));
     if (identity.extraData?.XUID !== profile.xuid) throw new Error('Bedrock and Xbox identities differ');
     publish({ phase: 'verified', gamertag: profile.gamertag, xuid: profile.xuid });
-    return { auth, profile };
+    return { auth, profile, xbox };
   } catch {
     publish({ phase: 'failed', stage: 'bedrock_credentials' });
     throw new Error('Xbox authentication probe failed');

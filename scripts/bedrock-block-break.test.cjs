@@ -1,11 +1,20 @@
 'use strict';
 
+const { existsSync } = require('node:fs');
+const { join } = require('node:path');
+function requireBundleModule(name) {
+  const candidates = [join(__dirname, '..', name), join(__dirname, name)];
+  const target = candidates.find(existsSync);
+  if (!target) throw new Error(`Runtime bundle module is missing: ${name}`);
+  return require(target);
+}
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { BedrockBlockBreakExecutor } = require('../bedrock-block-break.cjs');
-const { BedrockTerrainCache } = require('../bedrock-terrain-cache.cjs');
-const { buildBedrockCollisionData } = require('../bedrock-collision-data.cjs');
-const { BedrockMovementController } = require('../bedrock-movement-controller.cjs');
+const { BedrockBlockBreakExecutor } = requireBundleModule('bedrock-block-break.cjs');
+const { BedrockTerrainCache } = requireBundleModule('bedrock-terrain-cache.cjs');
+const { buildBedrockCollisionData } = requireBundleModule('bedrock-collision-data.cjs');
+const { BedrockMovementController } = requireBundleModule('bedrock-movement-controller.cjs');
 
 function collisionFixture() {
   const blocks = [

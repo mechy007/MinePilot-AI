@@ -107,6 +107,7 @@ The Android runtime is the live execution path. The TypeScript engine provides t
 
 - [Development roadmap](docs/ROADMAP.md) — phases and acceptance criteria.
 - [Architecture rebuild](docs/ARCHITECTURE_REBUILD.md) — subsystem boundaries and design decisions.
+- [Project integration map](docs/PROJECT_INTEGRATION_MAP.md) — the single Android Bedrock session, movement/terrain pipeline, subsystem ownership and validation boundaries.
 - [Bedrock ecosystem integration map](docs/PLATFORM-SOURCE-INTEGRATION.md) — source-by-source code mapping, licensing, connected adapters and compatibility limits.
 - [Unified gameplay engine](docs/UNIFIED_GAMEPLAY_ENGINE.md) — gameplay, safety and action contracts.
 - [Function contracts](docs/FUNCTION_CONTRACTS.md) — runtime interfaces and behavior.

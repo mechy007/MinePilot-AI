@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 
 export interface WorldSessionCandidate {
+  id?: string;
   sessionRef: { name: string };
   ownerXuid?: string;
   customProperties?: { ownerId?: string; protocol?: string | number; [key: string]: unknown };
@@ -27,8 +28,15 @@ export type BedrockClientFactory = (options: {
 /** Selects by exact owner XUID, never by mutable gamertag or list order. */
 export function pickOwnerWorld(sessions: readonly WorldSessionCandidate[], ownerXuid: string): WorldSessionCandidate {
   if (!/^\d+$/.test(ownerXuid)) throw new Error('Invalid owner XUID');
-  const matches = sessions.filter(session => session.customProperties?.ownerId === ownerXuid &&
-    typeof session.sessionRef?.name === 'string' && session.sessionRef.name.trim().length > 0);
+  const matches = sessions.filter(session => {
+    const advertisedOwner = session.ownerXuid;
+    const customOwner = session.customProperties?.ownerId;
+    const ownerMatches = (advertisedOwner === undefined || advertisedOwner === ownerXuid) &&
+      (customOwner === undefined || customOwner === ownerXuid) &&
+      (advertisedOwner === ownerXuid || customOwner === ownerXuid);
+    return ownerMatches && typeof session.id === 'string' && session.id.trim().length > 0 &&
+      typeof session.sessionRef?.name === 'string' && session.sessionRef.name.trim().length > 0;
+  });
   if (matches.length === 0) throw new Error('Owner world not found or XUID not exposed');
   // The SDK queries and joins within its fixed Minecraft service configuration and lobby template.
   if (new Set(matches.map(session => session.sessionRef.name)).size !== 1) {
@@ -45,9 +53,9 @@ export function pickOwnerWorld(sessions: readonly WorldSessionCandidate[], owner
 }
 
 /**
- * Uses bedrock-protocol's actual authenticated Xbox world discovery + NetherNet
- * join path. Requires an installed, compatible bedrock-protocol at runtime.
- * Not yet validated on Android or against Minecraft 1.26.66.1.
+ * Legacy Node-side adapter retained for isolated SDK experiments. Android's production
+ * path uses the explicit MPSD handle/RTA/nonce join flow in android-friend-world-join.cjs.
+ * This adapter is not proof of friend-world interoperability.
  */
 export class PrismarineWorldClient {
   private client: BedrockClientLike | null = null;

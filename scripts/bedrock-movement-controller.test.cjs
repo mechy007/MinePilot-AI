@@ -34,6 +34,13 @@ function blockAt(profile, x, y, z) {
   };
 }
 
+test('movement snapshot exposes the recorded physics initialization error', () => {
+  const controller = new BedrockMovementController({ queue() {} });
+  controller.lastError = 'collision data fixture failed';
+  assert.equal(controller.snapshot().lastError, 'collision data fixture failed');
+  controller.stop();
+});
+
 test('collision registry maps hashed Bedrock states to exact collision boxes', () => {
   const data = fixture();
   assert.equal(data.stateCount, 2);
@@ -130,6 +137,16 @@ test('analog diagonal movement combines jump and sprint flags and supports sneak
   const sneaking = controller.tick(102n);
   assert.ok(sneaking.input_data.includes('sneaking'));
   controller.stop('session_closed');
+});
+
+test('verified step-up sends a short jump pulse while forward movement continues',()=>{
+ const {controller,world}=movementWorld();let now=1000;controller.clock=()=>now;
+ assert.equal(controller.startPresence(world),true);
+ assert.equal(controller.runVerifiedStep(world,{x:1.5,y:2.62,z:0.5},8,{jump:true,jumpPulseMs:100}).status,'accepted');
+ const jumping=controller.tick(101n);assert.ok(jumping.input_data.includes('up'));assert.ok(jumping.input_data.includes('jumping'));
+ now+=120;const continuing=controller.tick(102n);assert.ok(continuing.input_data.includes('up'));
+ assert.equal(continuing.input_data.includes('jumping'),false);assert.equal(controller.snapshot().jumpPulseActive,false);
+ controller.stop('test_cleanup');
 });
 
 test('movement controller applies horizontal and vertical camera look controls', () => {
@@ -246,5 +263,27 @@ test('movement readiness refreshes stale unknown terrain after the missing block
   const resumed = controller.tick(102n);
   assert.ok(resumed.input_data.includes('up'));
   assert.ok(resumed.position.z > world.position.z);
+  controller.stop('session_closed');
+});
+
+
+test('manual input is emitted by the live tick queue and release emits a neutral frame', () => {
+  const { controller, world, client } = movementWorld();
+  assert.equal(controller.startPresence(world), true);
+  assert.equal(controller.runManualHold(world, { mode: 'forward', ticks: 8 }).status, 'accepted');
+
+  const anchor = world.serverTickObservedAt;
+  assert.equal(controller.inputQueue.pump(anchor + 50), 1);
+  const moving = client.packets.at(-1);
+  assert.equal(moving.name, 'player_auth_input');
+  assert.ok(moving.packet.input_data.includes('up'));
+  assert.ok(Math.hypot(moving.packet.move_vector.x, moving.packet.move_vector.z) > 0.01);
+
+  controller.releaseManual();
+  assert.equal(controller.inputQueue.pump(anchor + 100), 1);
+  const stopped = client.packets.at(-1);
+  assert.equal(stopped.name, 'player_auth_input');
+  assert.deepEqual(stopped.packet.move_vector, { x: 0, z: 0 });
+  assert.equal(stopped.packet.input_data.includes('up'), false);
   controller.stop('session_closed');
 });

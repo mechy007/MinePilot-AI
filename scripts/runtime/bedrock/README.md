@@ -35,6 +35,7 @@ MinePilot targets Bedrock 1.26.66.1, but the known codec baseline remains Bedroc
 ## Recovery, execution and perception
 
 - recovery/engine.cjs: capability assessment, safe strategy selection and bounded retry accounting.
+- `observeBridge()` is called by the live Bedrock control loop. It derives capability readiness from the current movement controller, decoded terrain, server-observed inventory and recipe freshness; it also feeds server-position progress into stuck detection. These are assessments only, not permission to bypass the existing action gates.
 - navigation/stuck-recovery.cjs: detects active movement without server-observed progress; returns a recovery recommendation only.
 - compatibility/adapter-selector.cjs: selects only exact verified game-version/protocol pairs; unknown versions fail closed.
 - world/perception.cjs: freshness-aware queries over observed block updates and entities.

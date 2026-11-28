@@ -14,7 +14,7 @@
  * There is no implicit enable: users confirm each session in the Android UI.
  * The loop has strict budgets and can be cancelled synchronously.
  */
-const {tileIsSafe}=require('./bedrock-local-path.cjs');
+// Route safety is enforced by the shared verified voxel planner.
 const INTERVAL_MS=250;
 const MAX_RUN_MS=120000;
 const MAX_STEPS=40;
@@ -195,36 +195,28 @@ class BedrockGameplayAgent {
       this.recentCells.delete(this.recentCells.keys().next().value);
   }
   localTarget(world,threat=null) {
-    const position=world.position,dim=world.dimension;
-    // The y convention matches the existing local A* implementation.
-    const y=Math.floor(position.y-1.62+0.01);
-    const px=Math.floor(position.x),pz=Math.floor(position.z);
-    const targets=[];
-    for(let radius=1;radius<=3;radius++) {
-      for(const [dx,dz] of CARDINAL) {
-        const x=px+dx*radius,z=pz+dz*radius;
-        if(!tileIsSafe(world.terrain,dim,x,y,z))continue;
-        const target={x:x+0.5,y:position.y,z:z+0.5};
-        const plan=world.routePlanner(world.terrain,dim,position,target,{
-          radius:Math.max(3,radius+1)
-        });
-        if(plan?.status!=='route_found'||!finite(plan.waypoint)||
-           plan.path?.length<2)continue;
-        if(threat){
-          const distNow=Math.hypot(position.x-threat.position.x,
-            position.z-threat.position.z);
-          const distAfter=Math.hypot(target.x-threat.position.x,
-            target.z-threat.position.z);
+    const position=world.position,dim=world.dimension,y=Math.floor(position.y-1.62+0.01);
+    const px=Math.floor(position.x),pz=Math.floor(position.z),targets=[];
+    for(const heightOffset of [0,1,-1]) {
+      for(let radius=1;radius<=3;radius++)for(const [dx,dz] of CARDINAL) {
+        const x=px+dx*radius,z=pz+dz*radius,target={x:x+0.5,y:y+heightOffset+1.62,z:z+0.5};
+        const plan=world.routePlanner(world.terrain,dim,position,target,{radius:Math.max(3,radius+1),verticalRadius:4});
+        if(plan?.status!=='route_found'||!finite(plan.waypoint)||plan.path?.length<2)continue;
+        if(threat) {
+          const distNow=Math.hypot(position.x-threat.position.x,position.z-threat.position.z);
+          const distAfter=Math.hypot(target.x-threat.position.x,target.z-threat.position.z);
           if(distAfter-distNow<0.7)continue;
-          targets.push({target,plan,score:distAfter*10-radius});
-        }else{
+          targets.push({plan,score:distAfter*10-radius-Math.abs(heightOffset)*1.5});
+        } else {
           const visits=this.recentCells.get([x,z].join(','))??0;
-          targets.push({target,plan,score:radius*3-visits*25});
+          targets.push({plan,score:radius*3-visits*25-Math.abs(heightOffset)*2});
         }
       }
+      if(targets.length)break;
     }
-    targets.sort((a,b)=>b.score-a.score);
-    return targets[0]?.plan?.waypoint??null;
+    targets.sort((a,b)=>b.score-a.score);const selected=targets[0];
+    return selected?{waypoint:selected.plan.waypoint,jump:selected.plan.jump===true,
+      mode:selected.plan.waypointMode??'walk'}:null;
   }
   ignoreDrop(name) {
     this.ignoredDrops.delete(name);
@@ -291,8 +283,8 @@ class BedrockGameplayAgent {
       world.layerFour?.planFood?.();
       return {status:'paused',reason:'food_needed_no_verified_item_use'};
     }
-    const waypoint=this.localTarget(world);
-    return waypoint?{status:'ready',waypoint,reason:'survival_explore_safe_ground'}:
+    const choice=this.localTarget(world);
+    return choice?{status:'ready',waypoint:choice.waypoint,jump:choice.jump,reason:'survival_explore_safe_ground'}:
       {status:'paused',reason:'survival_no_verified_path'};
   }
 
@@ -312,8 +304,8 @@ class BedrockGameplayAgent {
         : {status:'paused',reason:route?.reason??'goto_route_not_verified'};
     }
     if(this.goal==='explore') {
-      const waypoint=this.localTarget(world);
-      return waypoint?{status:'ready',waypoint,reason:'known_walkable_exploration'}:
+      const choice=this.localTarget(world);
+      return choice?{status:'ready',waypoint:choice.waypoint,jump:choice.jump,reason:'known_walkable_exploration'}:
         {status:'paused',reason:'no_safe_exploration_route'};
     }
     if(this.goal==='follow'||this.goal==='return_home') {
@@ -497,7 +489,7 @@ class BedrockGameplayAgent {
     if(now<this.nextActionAt)return;
     let target=null,planReason='';
     if(enemy) {
-      target=this.localTarget(world,enemy);
+      const retreat=this.localTarget(world,enemy);target=retreat?.waypoint??null;
       if(!target) {this.pause('no_verified_retreat_from_hostile');return;}
       planReason='verified_retreat_from_hostile';
     }else if(critical) {
@@ -526,7 +518,7 @@ class BedrockGameplayAgent {
       this.pause('waypoint_no_longer_verified');return;
     }
     const from=copy(world.position);
-    const result=movement.runVerifiedStep?.(world,path.waypoint,8);
+    const result=movement.runVerifiedStep?.(world,path.waypoint,8,{jump:path.jump===true});
     if(result?.status!=='accepted') {
       this.noteFailure(result?.reason??'movement_input_rejected');return;
     }

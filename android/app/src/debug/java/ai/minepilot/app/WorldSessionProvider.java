@@ -405,6 +405,79 @@ public final class WorldSessionProvider extends ContentProvider {
                     if (inputStatus.matches("[a-z_]{1,32}")) result.putString("movement_input_state", inputStatus);
                     if (inputReason.matches("[a-z_]{1,64}")) result.putString("movement_input_reason", inputReason);
                 }
+                JSONObject movementPresence = gameplay.optJSONObject("movementPresence");
+                if (movementPresence != null) {
+                    String presenceState = movementPresence.optString("state", "");
+                    String presenceReason = movementPresence.optString("reason", "");
+                    if (presenceState.matches("[a-z_]{1,24}"))
+                        result.putString("movement_presence_state", presenceState);
+                    if (presenceReason.matches("[a-z_]{1,64}"))
+                        result.putString("movement_presence_reason", presenceReason);
+                    int attempts = movementPresence.optInt("attempts", 0);
+                    if (attempts >= 0 && attempts <= 100000)
+                        result.putInt("movement_presence_attempts", attempts);
+                }
+                JSONObject runtimeExtensions = gameplay.optJSONObject("runtimeExtensions");
+                if (runtimeExtensions != null) {
+                    JSONObject capabilityAssessment = runtimeExtensions.optJSONObject("capabilityAssessment");
+                    if (capabilityAssessment != null) {
+                        String state = capabilityAssessment.optString("status", "");
+                        if (state.matches("[a-z_]{1,24}"))
+                            result.putString("runtime_capability_state", state);
+                        org.json.JSONArray missing = capabilityAssessment.optJSONArray("missing");
+                        if (missing != null) {
+                            java.util.ArrayList<String> values = new java.util.ArrayList<>();
+                            for (int i = 0; i < Math.min(6, missing.length()); i++) {
+                                String value = missing.optString(i, "");
+                                if (value.matches("[a-zA-Z][a-zA-Z0-9_]{0,31}")) values.add(value);
+                            }
+                            result.putStringArray("runtime_capability_missing", values.toArray(new String[0]));
+                        }
+                    }
+                    JSONObject worldAwareness = runtimeExtensions.optJSONObject("worldAwareness");
+                    if (worldAwareness != null) {
+                        String awarenessState = worldAwareness.optString("status", "");
+                        if (awarenessState.matches("[a-z_]{1,24}"))
+                            result.putString("world_awareness_state", awarenessState);
+                        JSONObject freshness = worldAwareness.optJSONObject("freshness");
+                        if (freshness != null) {
+                            result.putBoolean("world_awareness_fresh", freshness.optBoolean("fresh", false));
+                            long ageMs = freshness.optLong("ageMs", -1);
+                            if (ageMs >= 0 && ageMs <= 600000)
+                                result.putLong("world_awareness_age_ms", ageMs);
+                        }
+                        JSONObject counts = worldAwareness.optJSONObject("counts");
+                        if (counts != null) {
+                            for (String key : new String[]{"players", "hostiles", "passive", "neutral", "drops", "unknown"}) {
+                                result.putInt("world_nearby_" + key,
+                                        Math.max(0, Math.min(32, counts.optInt(key, 0))));
+                            }
+                        }
+                        JSONObject terrain = worldAwareness.optJSONObject("terrain");
+                        if (terrain != null) {
+                            for (String key : new String[]{"walkable", "blocked", "hazard", "unknown"}) {
+                                result.putInt("world_terrain_" + key,
+                                        Math.max(0, Math.min(289, terrain.optInt(key, 0))));
+                            }
+                            String terrainState = terrain.optString("status", "");
+                            if (terrainState.matches("[a-z_]{1,24}"))
+                                result.putString("world_terrain_state", terrainState);
+                        }
+                    }
+                    JSONObject stuckRecovery = runtimeExtensions.optJSONObject("stuckRecovery");
+                    JSONObject stuckAssessment = stuckRecovery == null ? null :
+                            stuckRecovery.optJSONObject("lastAssessment");
+                    if (stuckAssessment != null) {
+                        result.putBoolean("movement_stuck_suspected",
+                                stuckAssessment.optBoolean("stuck", false));
+                        String stuckReason = stuckAssessment.optString("reason", "");
+                        if (stuckReason.matches("[a-z_]{1,64}"))
+                            result.putString("movement_stuck_reason", stuckReason);
+                        double progress = stuckAssessment.optDouble("progress", Double.NaN);
+                        if (Double.isFinite(progress) && progress >= 0 && progress <= 1000)
+                            result.putFloat("movement_stuck_progress", (float) progress);
+                    }
+                }
                 JSONObject position = gameplay.optJSONObject("position");
                 if (position != null) {
                     result.putString("position", position.optString("x") + ", "
@@ -419,6 +492,21 @@ public final class WorldSessionProvider extends ContentProvider {
                     result.putInt("movement_frames", Math.max(0, movementSystem.optInt("framesSent", 0)));
                     result.putInt("movement_corrections", Math.max(0, movementSystem.optInt("corrections", 0)));
                     result.putBoolean("movement_unconfirmed", movementSystem.optBoolean("unconfirmedMovement", false));
+                    JSONObject lastInput = movementSystem.optJSONObject("lastInput");
+                    if (lastInput != null) {
+                        String tick = lastInput.optString("tick", "");
+                        if (tick.matches("[0-9]{1,24}"))
+                            result.putString("movement_last_input_tick", tick);
+                        org.json.JSONArray inputFlags = lastInput.optJSONArray("input");
+                        if (inputFlags != null) {
+                            java.util.ArrayList<String> flags = new java.util.ArrayList<>();
+                            for (int i = 0; i < Math.min(10, inputFlags.length()); i++) {
+                                String flag = inputFlags.optString(i, "");
+                                if (flag.matches("[a-z_]{1,64}")) flags.add(flag);
+                            }
+                            result.putString("movement_last_input_flags", String.join(", ", flags));
+                        }
+                    }
                     JSONObject terrain = movementSystem.optJSONObject("terrain");
                     result.putBoolean("movement_terrain_ready", terrain != null && !terrain.optBoolean("unknown", true));
                     if (terrain != null) {

@@ -669,7 +669,7 @@ public final class DashboardActivity extends Activity {
         stopMovement = actionButton("Stop movement", false, () -> requestGameplay("stop_movement", false));
         stopMovement.setVisibility(View.GONE);
         body.addView(stopMovement, panelLayout(8));
-        autoFollow = actionButton("Start bounded autonomous Follow/Return", false,
+        autoFollow = actionButton("Start autonomous Follow/Return", false,
                 this::showAutonomyConfirmation);
         autoFollow.setVisibility(View.GONE);
         body.addView(autoFollow, panelLayout(8));
@@ -827,6 +827,48 @@ public final class DashboardActivity extends Activity {
                 message += "\nLocal input: " + (inputState.isEmpty() ? "waiting" : inputState.replace('_', ' '));
                 if (!inputReason.isEmpty()) message += " · " + inputReason.replace('_', ' ');
             }
+            String movementPresence = current.getString("movement_presence_state", "");
+            if (!movementPresence.isEmpty()) {
+                message += "\nMovement input queue: " + movementPresence.replace('_', ' ');
+                if ("waiting".equals(movementPresence)) {
+                    String presenceReason = current.getString("movement_presence_reason", "");
+                    if (!presenceReason.isEmpty())
+                        message += " · " + presenceReason.replace('_', ' ');
+                    message += " (retrying)";
+                }
+            }
+            String runtimeCapability = current.getString("runtime_capability_state", "");
+            if (!runtimeCapability.isEmpty())
+                message += "\nSystem capability assessment: " + runtimeCapability.replace('_', ' ');
+            String[] missingCapabilities = current.getStringArray("runtime_capability_missing");
+            if (missingCapabilities != null && missingCapabilities.length > 0)
+                message += "\nNot ready for task execution: " + String.join(", ", missingCapabilities).replace('_', ' ');
+            int queuedFrames = current.getInt("movement_frames", 0);
+            if (queuedFrames > 0) {
+                String inputFlags = current.getString("movement_last_input_flags", "");
+                message += "\nInput frames queued: " + queuedFrames;
+                if (!inputFlags.isEmpty()) message += " · last flags: " + inputFlags.replace('_', ' ');
+            }
+            if (current.getBoolean("movement_stuck_suspected", false)) {
+                String stuckReason = current.getString("movement_stuck_reason", "movement_input_without_server_progress");
+                message += "\nPossible stuck state: " + stuckReason.replace('_', ' ') +
+                        " · stop/reorient/repath suggested; no automatic movement issued.";
+            }
+            String awarenessState = current.getString("world_awareness_state", "");
+            if (!awarenessState.isEmpty()) {
+                message += "\nWorld awareness: " + awarenessState.replace('_', ' ') +
+                        (current.getBoolean("world_awareness_fresh", false) ? " · fresh" : " · stale");
+                long observationAgeMs = current.getLong("world_awareness_age_ms", -1);
+                if (observationAgeMs >= 0)
+                    message += " (" + (observationAgeMs / 1000) + "s ago)";
+                message += "\nNearby: " + current.getInt("world_nearby_players", 0) + " players · " +
+                        current.getInt("world_nearby_hostiles", 0) + " hostile · " +
+                        current.getInt("world_nearby_passive", 0) + " passive · " +
+                        current.getInt("world_nearby_drops", 0) + " drops";
+                message += "\nLocal terrain: " + current.getInt("world_terrain_walkable", 0) +
+                        " walkable · " + current.getInt("world_terrain_hazard", 0) + " hazards · " +
+                        current.getInt("world_terrain_unknown", 0) + " unknown cells";
+            }
             String lastStatus = current.getString("last_command_status", "");
             String lastReason = current.getString("last_command_reason", "");
             if ("rejected".equals(lastStatus) && !lastReason.isEmpty() && connectedAndAlive) {
@@ -950,8 +992,30 @@ public final class DashboardActivity extends Activity {
         extras.putBoolean("sprint", manualSprint);
         extras.putBoolean("sneak", manualSneak);
         extras.putInt("motion_ticks", 8);
+        // Capture immutable request values before enqueueing; the UI may change before execution.
+        final float sentMotionX = manualJoystickX;
+        final float sentMotionY = manualJoystickY;
+        final boolean sentJump = manualJump;
+        final boolean sentSprint = manualSprint;
+        final boolean sentSneak = manualSneak;
         worldReader.execute(() -> {
+            org.json.JSONObject sent = new org.json.JSONObject();
+            try {
+                sent.put("mode", effectiveMode).put("motionX", sentMotionX)
+                        .put("motionY", sentMotionY).put("jump", sentJump)
+                        .put("sprint", sentSprint).put("sneak", sentSneak).put("ticks", 8);
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, "manual_input_sent", sent);
             Bundle receipt = worldRequest("gameplay", session, extras);
+            org.json.JSONObject outcome = new org.json.JSONObject();
+            try {
+                outcome.put("mode", effectiveMode)
+                        .put("status", receipt != null && receipt.getBoolean("accepted") ? "accepted" : "rejected")
+                        .put("reason", receipt == null ? "no_receipt_from_world_session_provider"
+                                : receipt.getString("reason", "unspecified"));
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, receipt != null && receipt.getBoolean("accepted")
+                    ? "manual_input_accepted" : "manual_input_rejected", outcome);
             if (receipt == null || !receipt.getBoolean("accepted")) {
                 runOnUiThread(() -> {
                     if (generation == manualControlGeneration && !activeManualMode.isEmpty() &&
@@ -973,7 +1037,16 @@ public final class DashboardActivity extends Activity {
         if (session.isEmpty()) return;
         Bundle extras = new Bundle();
         extras.putString("action", "manual_stop");
-        worldReader.execute(() -> worldRequest("gameplay", session, extras));
+        worldReader.execute(() -> {
+            Bundle receipt = worldRequest("gameplay", session, extras);
+            org.json.JSONObject details = new org.json.JSONObject();
+            try {
+                details.put("status", receipt != null && receipt.getBoolean("accepted") ? "accepted" : "rejected")
+                        .put("reason", receipt == null ? "no_receipt_from_world_session_provider"
+                                : receipt.getString("reason", "manual_control_released"));
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, "manual_input_released", details);
+        });
     }
 
     private void stopManualControl() {
@@ -1426,10 +1499,10 @@ public final class DashboardActivity extends Activity {
 
     private void showAutonomyConfirmation() {
         new android.app.AlertDialog.Builder(this)
-                .setTitle("Experimental autonomous Follow/Return")
-                .setMessage("Only use in a safe private world. The bot attempts up to 20 short walking segments over 30 seconds, on verified terrain only, and stops if server movement is not confirmed. Start by selecting a Follow or Return goal. Unknown terrain, health danger and missing authority block movement.")
+                .setTitle("Autonomous Follow/Return")
+                .setMessage("Use only in a safe private world. Follow mode continuously tracks the selected player, keeps about 3 blocks of distance, waits safely if the player is temporarily not visible, and resumes when fresh position data returns. Return-home remains a bounded task. Both use verified terrain and stop on safety, session or dimension failures. Manual movement cancels Follow and takes control.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Start bounded Follow", (dialog, which) ->
+                .setPositiveButton("Start autonomous goal", (dialog, which) ->
                         requestGameplay("autonomy_follow", true))
                 .show();
     }
@@ -1588,10 +1661,27 @@ public final class DashboardActivity extends Activity {
         if (taskId != null) extras.putString("task_id", taskId);
         int generation = worldViewGeneration;
         worldReader.execute(() -> {
+            org.json.JSONObject sent = new org.json.JSONObject();
+            try {
+                sent.put("action", action).put("confirmed", confirmed)
+                        .put("hasPlayerTarget", playerName != null)
+                        .put("item", itemName == null ? "" : itemName)
+                        .put("itemCount", itemCount).put("hasTaskId", taskId != null);
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, "app_command_sent", sent);
             Bundle receipt = worldRequest("gameplay", session, extras);
+            org.json.JSONObject outcome = new org.json.JSONObject();
+            boolean accepted = receipt != null && receipt.getBoolean("accepted");
+            try {
+                outcome.put("action", action)
+                        .put("status", accepted ? "accepted" : "rejected")
+                        .put("reason", receipt == null ? "no_receipt_from_world_session_provider"
+                                : receipt.getString("reason", "unspecified"));
+            } catch (org.json.JSONException ignored) {}
+            RuntimeLog.record(this, accepted ? "app_command_accepted" : "app_command_rejected", outcome);
             runOnUiThread(() -> {
                 if (generation != worldViewGeneration || !dashboardVisible) return;
-                showStatus(receipt != null && receipt.getBoolean("accepted")
+                showStatus(accepted
                         ? "Gameplay command queued. Check the server response below."
                         : "Gameplay request could not be queued for this session.");
             });
@@ -1649,10 +1739,7 @@ public final class DashboardActivity extends Activity {
         var events = RuntimeLog.recent(this);
         String latest = events.isEmpty() ? "Ready" : RuntimeLog.describe(events.getLast());
         latestRuntimeStatus.setText("Latest status · " + latest);
-        if (failuresOnly) events.removeIf(event -> switch (event.optString("phase")) {
-            case "failed", "runtime_failed", "account_failed", "disconnected", "runtime_interrupted" -> false;
-            default -> true;
-        });
+        if (failuresOnly) events.removeIf(event -> !RuntimeLog.hasFailure(event));
         String history = events.isEmpty() && failuresOnly ? "No failures in recent events." : formatRuntimeEvents(events);
         if (!android.text.TextUtils.equals(runtimeEvents.getText(), history)) runtimeEvents.setText(history);
     }

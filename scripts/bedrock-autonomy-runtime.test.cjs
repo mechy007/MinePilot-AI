@@ -1,10 +1,19 @@
 'use strict';
+
+const { existsSync } = require('node:fs');
+const { join } = require('node:path');
+function requireBundleModule(name) {
+  const candidates = [join(__dirname, '..', name), join(__dirname, name)];
+  const target = candidates.find(existsSync);
+  if (!target) throw new Error(`Runtime bundle module is missing: ${name}`);
+  return require(target);
+}
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {BedrockTerrainCache,parseSubchunk}=require('../bedrock-terrain-cache.cjs');
-const {createVanillaRuntimeRegistry,clearRuntimeRegistryCache}=require('../bedrock-runtime-registry.cjs');
-const {planLocalRoute}=require('../bedrock-local-path.cjs');
-const {VerifiedAutonomyRunner}=require('../bedrock-autonomy-runner.cjs');
+const {BedrockTerrainCache,parseSubchunk}=requireBundleModule('bedrock-terrain-cache.cjs');
+const {createVanillaRuntimeRegistry,clearRuntimeRegistryCache}=requireBundleModule('bedrock-runtime-registry.cjs');
+const {planLocalRoute}=requireBundleModule('bedrock-local-path.cjs');
+const {VerifiedAutonomyRunner}=requireBundleModule('bedrock-autonomy-runner.cjs');
 
 function vint(n){
   const out=[];do{let v=n&127;n=Math.floor(n/128);out.push(n?v|128:v);}while(n);
@@ -173,8 +182,8 @@ test('autonomy requires movement capability, verified route and safety hold',()=
   world.gameplayWorld=()=>({safetyHold:true});
   assert.equal(a.enable(world,{confirmed:true}).reason,'survival_safety_override');
   world.gameplayWorld=()=>({safetyHold:false});
-  world.layerTwo.preview=()=>({goal:'follow',status:'waiting_for_target'});
-  assert.equal(a.enable(world,{confirmed:true}).reason,'route_not_ready');
+  world.layerTwo.preview=()=>({goal:'follow',status:'awaiting_world',reason:'world_not_ready'});
+  assert.equal(a.enable(world,{confirmed:true}).reason,'world_not_ready');
   assert.equal(a.snapshot().active,false);
 });
 
@@ -187,4 +196,74 @@ test('packaged minecraft-data 1.26.60 supplies real vanilla air and stone runtim
   assert.equal(registry.get(3317)?.name,'minecraft:stone');
   assert.equal(registry.get(3317)?.boundingBox,'block');
   clearRuntimeRegistryCache();
+});
+
+
+test('continuous Follow starts in range, holds position, waits for stale targets, and resumes when target moves',()=>{
+  let now=1000,beat,plan={goal:'follow',status:'at_target',distance:2.4};
+  const point={x:.5,y:65.62,z:.5};
+  const movement={
+    busy:false,calls:0,stops:0,capability:()=> 'ready',
+    snapshot(){return {active:this.busy,predictedPosition:{...point}};},
+    runVerifiedStep(){this.calls++;this.busy=true;return {status:'accepted'};},
+    stop(){this.stops++;this.busy=false;}
+  };
+  const world={
+    movement,terrain:terrain(),dimension:0,position:{...point},closed:false,spawned:true,
+    movementAuthority:1,lastServerPositionAt:1000,
+    layerTwo:{preview:()=>plan},
+    gameplayWorld:()=>({safetyHold:false}),
+    routePlanner:()=>({status:'route_found',waypoint:{x:1.5,y:65.62,z:.5}})
+  };
+  const runner=new VerifiedAutonomyRunner({
+    clock:()=>now,setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}
+  });
+  assert.equal(runner.enable(world,{confirmed:true}).status,'accepted',
+    'follow should start even when the target is already within the comfort radius');
+  assert.equal(runner.snapshot().mode,'continuous_follow');
+  beat();
+  assert.equal(runner.snapshot().active,true);
+  assert.equal(runner.snapshot().phase,'holding_follow_distance');
+  assert.equal(movement.calls,0);
+  plan={goal:'follow',status:'waiting_for_target',reason:'player_position_stale'};
+  now+=250;beat();
+  assert.equal(runner.snapshot().active,true,'temporary target observation loss should not terminate follow');
+  assert.equal(runner.snapshot().phase,'waiting_for_target');
+  plan={goal:'follow',status:'route_unverified',nextPoint:{x:1.5,y:65.62,z:.5}};
+  now+=250;beat();
+  assert.equal(movement.calls,1,'fresh target movement should resume route execution');
+  assert.equal(runner.snapshot().active,true);
+  runner.stop('test_cleanup');
+});
+
+test('continuous Follow forwards verified step-up intent to movement controller',()=>{
+ let beat,received=null;const point={x:0.5,y:65.62,z:0.5};
+ const movement={capability:()=> 'ready',snapshot:()=>({active:false,predictedPosition:{...point}}),
+  runVerifiedStep(_w,_target,_ticks,options){received=options;return {status:'accepted'};},stop(){}};
+ const world={movement,terrain:terrain(),dimension:0,position:{...point},closed:false,spawned:true,movementAuthority:1,lastServerPositionAt:1000,
+  layerTwo:{preview:()=>({goal:'follow',status:'route_unverified',nextPoint:{x:2.5,y:66.62,z:0.5}})},
+  gameplayWorld:()=>({safetyHold:false}),routePlanner:()=>({status:'route_found',waypoint:{x:1.5,y:66.62,z:0.5},jump:true})};
+ const runner=new VerifiedAutonomyRunner({clock:()=>1000,setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}});
+ assert.equal(runner.enable(world,{confirmed:true}).status,'accepted');beat();
+ assert.deepEqual(received,{jump:true});runner.stop('test_cleanup');
+});
+
+test('continuous Follow is not terminated by the finite-task time or step budget',()=>{
+  let now=1000,beat;
+  const point={x:.5,y:65.62,z:.5};
+  const movement={capability:()=> 'ready',snapshot:()=>({active:false,predictedPosition:{...point}}),
+    runVerifiedStep:()=>({status:'rejected',reason:'fixture_route_not_executed'}),stop(){}};
+  const world={movement,terrain:terrain(),dimension:0,position:{...point},closed:false,spawned:true,
+    movementAuthority:1,lastServerPositionAt:1000,
+    layerTwo:{preview:()=>({goal:'follow',status:'at_target',distance:2})},
+    gameplayWorld:()=>({safetyHold:false}),routePlanner:()=>null};
+  const runner=new VerifiedAutonomyRunner({clock:()=>now,
+    setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}});
+  assert.equal(runner.enable(world,{confirmed:true}).status,'accepted');
+  runner.stepCount=100;
+  now+=31000;
+  beat();
+  assert.equal(runner.snapshot().active,true);
+  assert.equal(runner.snapshot().phase,'holding_follow_distance');
+  runner.stop('test_cleanup');
 });

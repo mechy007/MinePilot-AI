@@ -7,7 +7,6 @@ const { isIP } = require('node:net');
 const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
 const { accountWriter, runtimeLogger, verifyXbox } = require('./android-xbox-auth-probe.cjs');
-const { BotAwareness } = require('./bot-awareness.mjs');
 const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { BedrockMovementController } = require('./bedrock-movement-controller.cjs');
 const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
@@ -18,10 +17,29 @@ const { BedrockBlockBreakExecutor } = require('./bedrock-block-break.cjs');
 const { BedrockLifeSenses } = require('./bedrock-life-senses.cjs');
 const { MinePilotIntelligence } = require('./bedrock-intelligence-core.cjs');
 const { BedrockGameplayAgent } = require('./bedrock-gameplay-agent.cjs');
+const { joinFriendWorld } = require('./android-friend-world-join.cjs');
 
 const ATTEMPT_TIMEOUT_MS = 90_000;
 const JOIN_BUDGET_MS = 120_000;
 const RETRY_DELAY_MS = 1_000;
+
+async function importRuntimeModule(stagedRelative, builtRelative) {
+  const stagedPath = path.resolve(__dirname, stagedRelative);
+  const builtPath = path.resolve(__dirname, '..', 'dist', 'src', builtRelative);
+  const target = existsSync(stagedPath) ? stagedPath : builtPath;
+  if (!existsSync(target)) throw new Error(`Runtime module is not staged or built: ${stagedRelative}`);
+  return import(require('node:url').pathToFileURL(target).href);
+}
+
+function requireRuntimeModule(stagedRelative, builtRelative) {
+  const stagedPath = path.resolve(__dirname, stagedRelative);
+  const builtPath = path.resolve(__dirname, '..', 'dist', 'src', builtRelative);
+  const target = existsSync(stagedPath) ? stagedPath : builtPath;
+  if (!existsSync(target)) throw new Error(`Runtime module is not staged or built: ${stagedRelative}`);
+  return require(target);
+}
+
+const { BotAwareness } = requireRuntimeModule('bot-awareness.mjs', 'core/bot-awareness.js');
 
 function androidNetworkInterfaces(readInterfaces, readAddresses) {
   return () => {
@@ -48,7 +66,7 @@ function validateOwner(ownerXuid, botXuid) {
 }
 
 function safeJoinFailure(error) {
-  const status = error?.status ?? error?.response?.status;
+  const status = error?.status ?? error?.statusCode ?? error?.response?.status;
   if (Number.isInteger(status) && status >= 400 && status <= 599) return { httpStatus: status };
   const message = typeof error?.message === 'string' ? error.message : '';
   if (message === 'Xbox world login nonce unavailable') return { reason: 'nonce_unavailable' };
@@ -68,12 +86,159 @@ function safeJoinFailure(error) {
   return {};
 }
 
+function installNonceUserChain(client, nonce) {
+  if (typeof nonce !== 'string' || !nonce || typeof client?.createClientUserChain !== 'function') return;
+  const jwt = require('jsonwebtoken');
+  const original = client.createClientUserChain;
+  client.createClientUserChain = function (privateKey) {
+    const result = original.call(this, privateKey);
+    const payload = jwt.decode(this.clientUserChain);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Bedrock client identity payload is unavailable');
+    }
+    payload.Nonce = nonce;
+    this.clientUserChain = jwt.sign(payload, privateKey, {
+      algorithm: 'ES384',
+      header: { x5u: this.clientX509, typ: undefined },
+      noTimestamp: true
+    });
+    return result;
+  };
+}
+
+function installNethernetTelemetry(client, peerId, signallingProtocol, expectedNetworkId) {
+  if (!client.nethernet || typeof client.nethernet !== 'object') client.nethernet = {};
+  const connection = client.connection;
+  if (signallingProtocol === 'jsonrpc' && typeof peerId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(peerId) &&
+      connection?.nethernet && typeof connection.nethernet === 'object') {
+    // JSON-RPC routes to the host's Xbox PmsgId, not its numeric NetherNet ID.
+    // bedrock-protocol passes the latter into node-nethernet's serverNetworkId;
+    // replace it before the authenticated session starts peer negotiation.
+    connection.nethernet.serverNetworkId = peerId.toLowerCase();
+  }
+  if (connection && typeof connection === 'object') {
+    const instrumentClose = callback => {
+      if (typeof callback !== 'function' || callback.__minepilotCloseWrapped) return callback;
+      const wrapped = function (reason, ...args) {
+        const value = typeof reason === 'string' ? reason : reason?.message;
+        const match = typeof value === 'string' && /connecterror:(\d+)/i.exec(value);
+        if (match) {
+          client.emit('minepilot_join_failure', {
+            reason: 'nethernet_closed', nethernetCode: Number(match[1])
+          });
+        }
+        return callback.call(this, reason, ...args);
+      };
+      Object.defineProperty(wrapped, '__minepilotCloseWrapped', { value: true });
+      return wrapped;
+    };
+    try {
+      let closeCallback = instrumentClose(connection.onCloseConnection);
+      Object.defineProperty(connection, 'onCloseConnection', {
+        configurable: true,
+        enumerable: true,
+        get() { return closeCallback; },
+        set(value) { closeCallback = instrumentClose(value); }
+      });
+    } catch {
+      try { connection.onCloseConnection = instrumentClose(connection.onCloseConnection); } catch {}
+    }
+  }
+  let signalling = client.nethernet.signalling;
+  Object.defineProperty(client.nethernet, 'signalling', {
+    configurable: true,
+    enumerable: true,
+    get() { return signalling; },
+    set(value) {
+      signalling = value;
+      if (!value || typeof value.on !== 'function') return;
+      client.emit('minepilot_join_step', 'nethernet_signalling');
+      const { SignalType } = require('nethernet');
+      if (signallingProtocol === 'jsonrpc' && typeof peerId === 'string' && typeof value.onMessage === 'function') {
+        const originalOnMessage = value.onMessage;
+        value.onMessage = function (message) {
+          let normalized = message;
+          let senderIds = [];
+          try {
+            const raw = typeof message === 'string' ? message : message?.toString?.();
+            const packet = raw ? JSON.parse(raw) : null;
+            if (packet?.method === 'Signaling_ReceiveMessage_v1_0') {
+              const isArray = Array.isArray(packet.params);
+              const items = isArray ? packet.params : [packet.params];
+              const accepted = [];
+              senderIds = [];
+              for (const item of items) {
+                const from = item?.From ?? item?.from ?? item?.fromPlayerId;
+                if (typeof from !== 'string' || from.toLowerCase() !== peerId.toLowerCase()) continue;
+                const rawEnvelope = item?.Message ?? item?.message;
+                let envelope;
+                try { envelope = typeof rawEnvelope === 'string' ? JSON.parse(rawEnvelope) : rawEnvelope; }
+                catch { continue; }
+                const rawInnerId = typeof rawEnvelope === 'string'
+                  ? rawEnvelope.match(/["'](?:netherNetId|nethernetId)["']\s*:\s*["']?(\d+)["']?/i)?.[1]
+                  : null;
+                const innerNetworkId = rawInnerId ?? envelope?.params?.netherNetId ?? envelope?.params?.nethernetId;
+                if (innerNetworkId == null || String(innerNetworkId) !== String(expectedNetworkId)) continue;
+                const normalizedItem = { ...item };
+                const normalizedFrom = from.toLowerCase();
+                normalizedItem.From = normalizedFrom;
+                normalizedItem.from = normalizedFrom;
+                normalizedItem.fromPlayerId = normalizedFrom;
+                accepted.push(normalizedItem);
+                senderIds.push(normalizedFrom);
+              }
+              if (accepted.length === 0) return;
+              packet.params = isArray ? accepted : accepted[0];
+              const encoded = JSON.stringify(packet);
+              normalized = typeof message === 'string' ? encoded : Buffer.from(encoded);
+            }
+          } catch {}
+          if (senderIds.length === 0) return originalOnMessage.call(this, normalized);
+          // SDK releases disagree on whether signal.networkId comes from the
+          // inner numeric NetherNet ID or the outer Xbox PmsgId. Validate both
+          // identities above, then use the outer PmsgId for node-nethernet's
+          // consistent expected-peer comparison.
+          const originalEmit = this.emit;
+          let senderIndex = 0;
+          this.emit = function (event, ...args) {
+            if (event === 'signal' && args[0] && typeof args[0] === 'object') {
+              while (senderIndex < senderIds.length && !senderIds[senderIndex]) senderIndex++;
+              const sender = senderIds[senderIndex++];
+              if (sender) args[0].networkId = sender;
+            }
+            return originalEmit.call(this, event, ...args);
+          };
+          try { return originalOnMessage.call(this, normalized); }
+          finally { this.emit = originalEmit; }
+        };
+      }
+      if (typeof value.write === 'function') {
+        const originalWrite = value.write;
+        value.write = function (signal) {
+          if (signal?.type === SignalType.ConnectRequest) {
+            client.emit('minepilot_join_trace', 'offer_sent');
+          }
+          return originalWrite.call(this, signal);
+        };
+      }
+      value.once('credentials', () => client.emit('minepilot_join_step', 'nethernet_peer'));
+      value.on('signal', signal => {
+        if (signal?.type === SignalType.ConnectResponse) {
+          client.emit('minepilot_join_trace', 'answer_received');
+        }
+      });
+    }
+  });
+  if (signalling) client.nethernet.signalling = signalling;
+}
+
 function shouldRetry(result) {
   if (result?.phase !== 'failed') return false;
   const transient = ['timeout', 'network'].includes(result.reason) ||
     [408, 425, 429, 500, 502, 503, 504].includes(result.httpStatus);
   if (result.stage === 'xbox_membership') return transient;
-  return ['nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
+  return ['discovery', 'world_transport', 'nethernet_signalling', 'nethernet_peer'].includes(result.stage) &&
     (transient || (result.reason === 'nethernet_closed' && [9, 14].includes(result.nethernetCode)));
 }
 
@@ -124,6 +289,19 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   let timeout;
   let heartbeat;
   let connectionStage;
+  let disconnectDetails = {};
+  const originalClose = client.close;
+  if (typeof originalClose === 'function') {
+    client.close = function (reason, ...args) {
+      const match = typeof reason === 'string' && /^connecterror:(\d+)$/.exec(reason);
+      if (match) {
+        connectionStage = 'nethernet_peer';
+        disconnectDetails = { reason: 'nethernet_closed', nethernetCode: Number(match[1]) };
+        publish({ phase: 'connection', stage: connectionStage });
+      }
+      return originalClose.call(this, reason, ...args);
+    };
+  }
   const result = await new Promise(resolve => {
     function finish(reason, details = {}) {
       if (finished) return;
@@ -140,6 +318,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       client.removeListener('level_chunk', onChunk);
       client.removeListener('minepilot_join_step', onStep);
       client.removeListener('minepilot_join_trace', onTrace);
+      client.removeListener('minepilot_join_failure', onFailure);
       client.removeListener('loggingIn', onLogin);
       client.removeListener('join', onJoin);
       client.removeListener('kick', onKick);
@@ -151,7 +330,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       }
     }
     const stop = () => finish('stopped');
-    const closed = () => finish(joinedAt === undefined ? 'failed' : 'disconnected');
+    const closed = () => finish(joinedAt === undefined ? 'failed' : 'disconnected', disconnectDetails);
     const report = () => {
       if (joinedAt !== undefined) {
         const vitals = awareness.snapshot();
@@ -186,6 +365,11 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
       }
     };
     const onTrace = step => publish({ phase: 'connection', stage: 'nethernet_peer', step });
+    const onFailure = details => {
+      disconnectDetails = details && typeof details === 'object' ? details : {};
+      connectionStage = 'nethernet_peer';
+      publish({ phase: 'connection', stage: connectionStage });
+    };
     const onLogin = () => {
       connectionStage = 'bedrock_login';
       publish({ phase: 'connection', stage: connectionStage });
@@ -199,6 +383,7 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
     });
     client.on('minepilot_join_step', onStep);
     client.on('minepilot_join_trace', onTrace);
+    client.on('minepilot_join_failure', onFailure);
     client.once('loggingIn', onLogin);
     client.once('join', onJoin);
     client.once('kick', onKick);
@@ -218,17 +403,19 @@ async function observeSession(client, publish, signal, getStage, timeoutMs = ATT
   return result;
 }
 
-async function run({ ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld, saveAccount, gameplayOptions }) {
+async function run({
+  ownerXuid, publish, signal, authDependencies, createClient, pickOwnerWorld,
+  saveAccount, gameplayOptions, joinFriendWorldImpl = joinFriendWorld
+}) {
   let stage = 'owner';
   let retried = false;
   try {
     if (!ownerXuid || ownerXuid.length > 32) throw new Error();
     stage = 'auth';
-    const { auth, profile } = await verifyXbox(authDependencies, publish, saveAccount);
+    const { auth, profile, xbox } = await verifyXbox(authDependencies, publish, saveAccount);
     signal.throwIfAborted();
     stage = 'owner';
     if (!/^\d+$/.test(ownerXuid)) {
-      const xbox = new authDependencies.XboxClient(auth);
       const friend = await xbox.getProfile({ gamertag: ownerXuid });
       ownerXuid = friend.xuid;
       signal.throwIfAborted();
@@ -239,27 +426,51 @@ async function run({ ownerXuid, publish, signal, authDependencies, createClient,
       signal.throwIfAborted();
       stage = 'discovery';
       publish({ phase: 'discovery', gamertag: profile.gamertag, ...(retried ? { retried } : {}) });
-      const client = createClient({
-        username: profile.gamertag,
-        offline: false,
-        version: '1.26.60',
-        authTitle: authDependencies.Titles.MinecraftAndroid,
-        deviceType: 'Android',
-        authflow: auth,
-        // Give the mobile path room for signalling and ICE before the spawn deadline.
-        connectTimeout: 45000,
-        nethernet: { webrtcBackend: 'werift', responseTimeoutMs: 25000, inactivityTimeoutMs: 12000 },
-        conLog: null,
-        world: {
-          pickSession(sessions) {
-            const selected = pickOwnerWorld(sessions, ownerXuid);
-            stage = 'connection';
-            publish({ phase: 'connection' });
-            return selected;
-          }
-        }
-      });
-      client.viewDistance = 4;
+      let prepared;
+      try {
+        prepared = await joinFriendWorldImpl({
+          xbox, profile, ownerXuid,
+          XboxRTASocket: authDependencies.XboxRTASocket,
+          pickOwnerWorld, publish, signal,
+          onStage(next) { stage = next; }
+        });
+      } catch (error) {
+        return { phase: 'failed', stage, ...safeJoinFailure(error) };
+      }
+
+      let client;
+      try {
+        client = createClient({
+          username: profile.gamertag,
+          offline: false,
+          version: '1.26.60',
+          authTitle: authDependencies.Titles.MinecraftAndroid,
+          deviceType: 'Android',
+          authflow: auth,
+          transport: 'nethernet',
+          skipPing: true,
+          connectTimeout: 45000,
+          nethernet: {
+            networkId: prepared.networkId,
+            _peerPlayerId: prepared.signallingProtocol === 'jsonrpc' ? prepared.peerId.toLowerCase() : undefined,
+            webrtcBackend: 'werift',
+            signalling: 'services',
+            _signallingProtocol: prepared.signallingProtocol,
+            responseTimeoutMs: 25000,
+            inactivityTimeoutMs: 12000
+          },
+          conLog: null
+        });
+        client.nethernet ??= {};
+        client.nethernet.sessionAbort = prepared.sessionAbort;
+        client.nethernet.session = prepared.session;
+        installNonceUserChain(client, prepared.nonce);
+        installNethernetTelemetry(client, prepared.peerId, prepared.signallingProtocol, prepared.networkId);
+        client.viewDistance = 4;
+      } catch (error) {
+        await prepared.session.close().catch(() => {});
+        return { phase: 'failed', stage, ...safeJoinFailure(error) };
+      }
       return observeSession(client, publish, signal, () => stage, timeoutMs, gameplayOptions);
     }
     let result = await attempt(ATTEMPT_TIMEOUT_MS);
@@ -308,25 +519,25 @@ if (require.main === module) {
         () => JSON.parse(readFileSync(addressFile, 'utf8')));
     }
     const { Authflow, Titles } = require('prismarine-auth');
-    const { XboxClient } = require('prismarine-xbox-services');
+    const { XboxClient, XboxRTASocket } = require('prismarine-xbox-services');
     const { createClient } = require('bedrock-protocol');
-    const { pickOwnerWorld } = await import('./prismarine-world-client.mjs');
-    const { LayerOneController } = await import('./gameplay/layer-one.js');
-    const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-    const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
-    const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
-    const { LayerFivePlanner } = await import('./gameplay/layer-five.js');
-    const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
-    const { LayerSevenAdvisor } = await import('./gameplay/layer-seven.js');
-    const { LayerEightReadiness } = await import('./gameplay/layer-eight.js');
-    const { BedrockMotionArbiter } = await import('./gameplay/addon-navigation.js');
+    const { pickOwnerWorld } = await importRuntimeModule('prismarine-world-client.mjs', 'connection/prismarine-world-client.js');
+    const { LayerOneController } = await importRuntimeModule('gameplay/layer-one.js', 'gameplay/layer-one.js');
+    const { LayerTwoPlanner } = await importRuntimeModule('gameplay/layer-two.js', 'gameplay/layer-two.js');
+    const { LayerThreePlanner } = await importRuntimeModule('gameplay/layer-three.js', 'gameplay/layer-three.js');
+    const { LayerFourSupervisor } = await importRuntimeModule('gameplay/layer-four.js', 'gameplay/layer-four.js');
+    const { LayerFivePlanner } = await importRuntimeModule('gameplay/layer-five.js', 'gameplay/layer-five.js');
+    const { LayerSixWorkflow } = await importRuntimeModule('gameplay/layer-six.js', 'gameplay/layer-six.js');
+    const { LayerSevenAdvisor } = await importRuntimeModule('gameplay/layer-seven.js', 'gameplay/layer-seven.js');
+    const { LayerEightReadiness } = await importRuntimeModule('gameplay/layer-eight.js', 'gameplay/layer-eight.js');
+    const { BedrockMotionArbiter } = await importRuntimeModule('gameplay/addon-navigation.js', 'gameplay/addon-navigation.js');
     const refreshToken = Number.isInteger(config.fd) ? readFileSync(config.fd, 'utf8') : undefined;
     const saveAccount = accountWriter(config.saveFd);
     await run({
       ownerXuid: readFileSync(path.join(__dirname, 'owner-xuid'), 'utf8'),
       publish,
       signal: controller.signal,
-      authDependencies: { Authflow, Titles, XboxClient, refreshToken },
+      authDependencies: { Authflow, Titles, XboxClient, XboxRTASocket, refreshToken },
       saveAccount,
       createClient,
       pickOwnerWorld,
@@ -349,4 +560,4 @@ if (require.main === module) {
     .finally(() => clearInterval(stop));
 }
 
-module.exports = { androidNetworkInterfaces, observeSession, run, shouldRetry, validateOwner };
+module.exports = { androidNetworkInterfaces, installNethernetTelemetry, installNonceUserChain, observeSession, run, shouldRetry, validateOwner };

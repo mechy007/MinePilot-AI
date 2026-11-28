@@ -11,6 +11,7 @@ const {OutcomeVerifier}=require('./actions/outcomes.cjs');
 const inventory=require('./inventory/containers.cjs');
 const {searchGridAStar}=require('./navigation/astar.cjs');
 const {searchVoxelAStar}=require('./navigation/voxel.cjs');
+const {planLocalRoute}=require('../../bedrock-local-path.cjs');
 const navigationGoals=require('./navigation/goals.cjs');
 const navigationCosts=require('./navigation/costs.cjs');
 const {planGoap}=require('./planning/goap.cjs');
@@ -35,6 +36,37 @@ function createRuntimeExtensions(options={}) {
  const capabilities=new CapabilityRecoveryEngine({clock}),stuckRecovery=new StuckRecovery({clock}),perception=createWorldPerception(world,{clock});
  const taskExecution=new TaskExecutionCoordinator({runner:tasks,capabilities,adapter:options.taskAdapter});
  const plugins=new ReadOnlyPluginRegistry(options.pluginLimits);
+ let lastCapabilityAssessment=null,lastStuckAssessment=null,lastCorrectionCount=0;
+ let lastWorldAwareness=null,lastWorldAwarenessAt=0;
+ function observeBridge(bridge) {
+  if(closed||!bridge)return null;
+  const movement=bridge.movement?.snapshot?.()??{};
+  const movementCapability=bridge.movement?.capability?.(bridge)??'unavailable';
+  const terrain=bridge.terrain?.snapshot?.()??{};
+  const inventory=bridge.inventoryLedger?.playerInventory?.({maxAgeMs:10000})??{};
+  const recipes=bridge.recipeCatalog?.snapshot?.(1)??{};
+  lastCapabilityAssessment=capabilities.assess({
+   sessionOpen:bridge.closed!==true,spawned:bridge.spawned===true,
+   movementCapability,
+   terrainReady:movementCapability==='ready'&&terrain.decodedSections>0&&terrain.collisionClassificationReady===true,
+   inventoryFresh:inventory.known===true&&inventory.fresh===true&&inventory.fullSnapshotFresh===true&&
+    inventory.registryKnown===true&&inventory.unresolvedItemCount===0,
+   recipeCatalogFresh:recipes.observedAt!==null&&Number.isFinite(recipes.ageMs)&&recipes.ageMs<=30000
+  });
+  const now=clock();
+  if(!lastWorldAwareness||now-lastWorldAwarenessAt>=500){
+   lastWorldAwareness=perception.snapshot({position:bridge.position,dimension:bridge.dimension,terrain:bridge.terrain,radius:4});
+   lastWorldAwarenessAt=now;
+  }
+  const correctionCount=Number.isInteger(movement.corrections)?movement.corrections:0;
+  const serverCorrected=correctionCount>lastCorrectionCount;
+  lastCorrectionCount=correctionCount;
+  lastStuckAssessment=stuckRecovery.observe({
+   at:clock(),position:bridge.position??movement.predictedPosition,
+   inputActive:movement.active===true,serverCorrected,teleport:false
+  });
+  return {capabilities:lastCapabilityAssessment,stuckRecovery:lastStuckAssessment,worldAwareness:lastWorldAwareness};
+ }
  let closed=false;plugins.start();
  function observePacket(name,packet,bridge) {
   if(closed)return null;
@@ -51,14 +83,21 @@ function createRuntimeExtensions(options={}) {
   const snapshot=terrain.snapshot();
   if(snapshot?.collisionClassificationReady!==true)
     return {status:'unverified',reason:'collision_registry_not_verified',path:[],cost:null,expanded:0,executable:false};
-  return searchVoxelAStar({...args,dimension,
-    isStandable:(x,y,z)=>terrain.tile(dimension,x,y,z)==='walkable'});
+  const target=args.target??args.goal?.position??args.goal;
+  const route=planLocalRoute(terrain,dimension,args.start,target,{
+   radius:args.radius,verticalRadius:args.verticalRadius,maxExpanded:args.maxExpanded,maxPathLength:args.maxPath
+  });
+  return route.status==='route_found'
+   ?{status:'preview',reason:route.reason,path:route.path,cost:route.cost,expanded:route.expanded,
+     executable:false,waypoint:route.waypoint,jump:route.jump,waypointMode:route.waypointMode}
+   :{status:'unverified',reason:route.reason,path:[],cost:null,expanded:route.expanded,executable:false};
  }
  return {
   envelope,outcomes,obtain,safety,tasks,curriculum,recorder,inventory,capabilities,stuckRecovery,perception,taskExecution,
   detectCompatibility,
   events,world,plugins,registryAdapter,protocol,navigationGoals,navigationCosts,
   observeMovementSample:(sample)=>stuckRecovery.observe(sample),
+  observeBridge,
   planObtain:(bridge,item,count)=>obtain.preview(bridge,item,count),
   planGoap:(initial,goal,actions,limits)=>planGoap(initial,goal,actions,limits),
   searchGridAStar,searchVoxelAStar,planTerrainRoute,observePacket,
@@ -68,7 +107,11 @@ function createRuntimeExtensions(options={}) {
   snapshot:()=>({
    version:VERSION,targetGameVersion:TARGET_GAME_VERSION,targetVersionVerified:false,
    codecBaseline:{...CODEC_BASELINE},compatibility:compatibilitySnapshot(),
-   taskRunner:tasks.snapshot(),capabilities:capabilities.snapshot(),stuckRecovery:stuckRecovery.snapshot(),
+   taskRunner:tasks.snapshot(),capabilities:capabilities.snapshot(),
+   capabilityAssessment:lastCapabilityAssessment??capabilities.assess({}),
+   stuckRecovery:{...stuckRecovery.snapshot(),lastAssessment:lastStuckAssessment},
+   worldAwareness:lastWorldAwareness,
+   taskExecution:{configured:!!options.taskAdapter,runner:tasks.snapshot()},
    compatibilityDetection:detectCompatibility({gameVersion:options.gameVersion,protocol:options.protocol}),outcomes:outcomes.snapshot().slice(-16),curriculum:curriculum.snapshot(),
    diagnostics:{retainedEvents:recorder.events.length,recent:recorder.snapshot(12)},
    safety:{policy:'observation_only',emitsPackets:false},
@@ -80,7 +123,8 @@ function createRuntimeExtensions(options={}) {
   }),
   close:(reason='session_closed')=>{
    if(closed)return;closed=true;tasks.cancel(reason);stuckRecovery.reset();capabilities.reset();outcomes.clear();
-   plugins.close(reason);events.close();world.close();recorder.recordSystem('session_closed',{reason});
+   plugins.close(reason);events.close();world.close();lastCapabilityAssessment=null;lastStuckAssessment=null;
+   lastWorldAwareness=null;lastWorldAwarenessAt=0;recorder.recordSystem('session_closed',{reason});
   }
  };
 }

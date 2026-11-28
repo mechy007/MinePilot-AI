@@ -1,7 +1,8 @@
 # Modular Gameplay Integration
 
-**Implementation branch:** feature/minepilot-modular-gameplay-restructure  
-**Base:** main at 2c544877627f948a9dd3fec5969b4a793cb629c4  
+**Implementation status:** merged into `main` by PR [#131](https://github.com/mechy007/MinePilot-AI/pull/131)  
+**Current integration review branch:** `refactor/project-wide-integration-pass`  
+**Current main baseline:** `64746859824f69faab99826052b93c96ce756dea`  
 **Target device:** Android ARM64  
 **Requested Bedrock target:** 1.26.66.1 (unverified)  
 **Known codec baseline:** Bedrock 1.26.60 / protocol 2225

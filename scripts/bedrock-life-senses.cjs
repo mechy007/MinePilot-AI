@@ -16,7 +16,7 @@ function safePosition(value) {
   return {x:value.x,y:value.y,z:value.z};
 }
 function entityId(packet) {
-  const value=packet?.runtime_entity_id??packet?.runtime_id??packet?.entity_id_self;
+  const value=packet?.runtime_entity_id??packet?.runtime_id??packet?.entity_id_self??packet?.actor_runtime_id??packet?.entity_id;
   if (typeof value !== 'bigint' && typeof value !== 'string' && typeof value !== 'number')return null;
   const id=String(value);
   return /^\d{1,20}$/.test(id)?id:null;
@@ -76,12 +76,16 @@ class BedrockLifeSenses {
     return true;
   }
   moveEntity(packet) {
-    const id=entityId(packet);
-    const position=safePosition(packet?.position);
-    const entity=id?this.entities.get(id):null;
-    if (!entity || !position)return;
-    entity.position=position;
-    entity.seenAt=this.clock();
+    const id=entityId(packet),entity=id?this.entities.get(id):null;
+    if(!entity)return false;
+    const next={...entity.position};let supplied=false;
+    if(packet?.position&&safePosition(packet.position)){Object.assign(next,safePosition(packet.position));supplied=true;}
+    else{
+     const axes=[['x',['new_position_x','newPositionX','position_x','x']],['y',['new_position_y','newPositionY','position_y','y']],['z',['new_position_z','newPositionZ','position_z','z']]];
+     for(const [axis,keys] of axes)for(const key of keys)if(Number.isFinite(packet?.[key])){next[axis]=packet[key];supplied=true;break;}
+    }
+    const position=supplied?safePosition(next):null;
+    if(!position)return false;entity.position=position;entity.seenAt=this.clock();return true;
   }
   removeEntity(packet) {
     const id=String(packet?.entity_id_self??packet?.entity_id??packet?.runtime_entity_id??packet?.runtime_id??'');

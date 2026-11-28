@@ -12,8 +12,8 @@ import org.json.JSONObject;
 
 /** Recent, app-owned diagnostic events shared with the friend-world process. */
 final class RuntimeLog {
-    private static final int MAX_EVENTS = 60;
-    private static final int ROTATE_AT_BYTES = 32 * 1024;
+    private static final int MAX_EVENTS = 300;
+    private static final int ROTATE_AT_BYTES = 4 * 1024 * 1024;
 
     static Path file(Context context) {
         return context.getNoBackupFilesDir().toPath().resolve("runtime-events.jsonl");
@@ -33,8 +33,13 @@ final class RuntimeLog {
     }
 
     static void record(Context context, String phase) {
+        record(context, phase, null);
+    }
+
+    static void record(Context context, String phase, JSONObject details) {
         try {
             JSONObject event = new JSONObject().put("at", System.currentTimeMillis()).put("phase", phase);
+            if (details != null) event.put("details", details);
             Files.write(file(context), (event + "\n").getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException | JSONException ignored) {
@@ -100,6 +105,13 @@ final class RuntimeLog {
             case "runtime_ready" -> "Android runtime ready";
             case "runtime_failed" -> "Android runtime failed";
             case "runtime_interrupted" -> "Android runtime interrupted";
+            case "manual_input_sent" -> "Android manual input dispatched";
+            case "manual_input_accepted" -> "IPC queued manual input";
+            case "manual_input_rejected" -> "IPC rejected manual input";
+            case "manual_input_released" -> "Android manual input released";
+            case "app_command_sent" -> "Android gameplay command dispatched";
+            case "app_command_accepted" -> "IPC queued gameplay command";
+            case "app_command_rejected" -> "IPC rejected gameplay command";
             case "device_code" -> "Waiting for Microsoft approval";
             case "microsoft_approved" -> "Microsoft approval received";
             case "bedrock_credentials" -> "Verifying Minecraft credentials";
@@ -128,6 +140,20 @@ final class RuntimeLog {
             default -> "";
         };
         if (!reason.isEmpty()) message += " · " + reason;
+        JSONObject details = event.optJSONObject("details");
+        if (details != null) {
+            String mode = details.optString("mode", "");
+            if (!mode.isEmpty()) message += "\nInput mode: " + mode;
+            if (details.has("motionX") || details.has("motionY"))
+                message += "\nAnalog vector: x=" + details.optDouble("motionX") +
+                        " y=" + details.optDouble("motionY");
+            if (details.has("jump")) message += "\nActions: jump=" + details.optBoolean("jump") +
+                    " sprint=" + details.optBoolean("sprint") +
+                    " sneak=" + details.optBoolean("sneak");
+            String commandStatus = details.optString("status", "");
+            if (!commandStatus.isEmpty()) message += "\nCommand result: " + commandStatus +
+                    (details.optString("reason").isEmpty() ? "" : " · " + details.optString("reason"));
+        }
         int http = event.optInt("httpStatus");
         if (http >= 400 && http <= 599) message += " · HTTP " + http;
         int nethernet = event.optInt("nethernetCode");
@@ -136,7 +162,118 @@ final class RuntimeLog {
         if (!bedrock.isEmpty()) message += " · " + bedrock;
         String xbox = event.optString("xboxCode");
         if (xbox.matches("214[0-9]{7}")) message += " · Xbox " + xbox;
+        String signalling = event.optString("signallingProtocol", "");
+        if (!signalling.isEmpty()) message += "\nSignalling protocol: " + signalling;
+        org.json.JSONArray exchangeFailures = event.optJSONArray("exchangeFailures");
+        if (exchangeFailures != null) {
+            for (int i = 0; i < Math.min(8, exchangeFailures.length()); i++) {
+                String failure = exchangeFailures.optString(i, "");
+                if (!failure.isEmpty()) message += "\nAuthentication exchange issue: " + failure;
+            }
+        }
+
+        JSONObject gameplay = event.optJSONObject("gameplay");
+        if (gameplay != null) {
+            JSONObject packets = gameplay.optJSONObject("packetTelemetry");
+            if (packets != null) {
+                message += "\nBedrock packets received: " + packets.optLong("received") +
+                        " · sent: " + packets.optLong("sent") +
+                        " · inbound handler errors: " + packets.optLong("errors") +
+                        " · outbound send errors: " + packets.optLong("sentErrors");
+                JSONObject byType = packets.optJSONObject("byType");
+                if (byType != null && byType.length() > 0) {
+                    java.util.ArrayList<String> counts = new java.util.ArrayList<>();
+                    var keys = byType.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        counts.add(key + "=" + byType.optLong(key));
+                    }
+                    java.util.Collections.sort(counts);
+                    message += "\nInbound packet types: " + String.join(", ", counts);
+                }
+                JSONObject sentByType = packets.optJSONObject("sentByType");
+                if (sentByType != null && sentByType.length() > 0) {
+                    java.util.ArrayList<String> counts = new java.util.ArrayList<>();
+                    var keys = sentByType.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        counts.add(key + "=" + sentByType.optLong(key));
+                    }
+                    java.util.Collections.sort(counts);
+                    message += "\nOutbound packet types: " + String.join(", ", counts);
+                }
+                String lastType = packets.optString("lastType", "");
+                if (!lastType.isEmpty()) message += "\nLast inbound packet: " + lastType +
+                        " · " + packets.optJSONObject("lastSummary");
+                String lastSentType = packets.optString("lastSentType", "");
+                if (!lastSentType.isEmpty()) message += "\nLast outbound packet: " + lastSentType +
+                        " · " + packets.optJSONObject("lastSentSummary");
+                JSONObject packetError = packets.optJSONObject("lastError");
+                if (packetError != null) message += "\nLast packet-handler error: " +
+                        packetError.optString("event") + " · " + packetError.optString("name");
+            }
+            JSONObject commands = gameplay.optJSONObject("commandTelemetry");
+            if (commands != null) {
+                message += "\nApp commands received by runtime: " + commands.optLong("received");
+                JSONObject byAction = commands.optJSONObject("byAction");
+                if (byAction != null && byAction.length() > 0) {
+                    java.util.ArrayList<String> counts = new java.util.ArrayList<>();
+                    var keys = byAction.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        counts.add(key + "=" + byAction.optLong(key));
+                    }
+                    java.util.Collections.sort(counts);
+                    message += "\nCommand actions: " + String.join(", ", counts);
+                }
+                JSONObject last = commands.optJSONObject("last");
+                if (last != null) message += "\nLast command: " + last.optString("action") +
+                        " → " + last.optString("status") +
+                        (last.optString("reason").isEmpty() ? "" : " · " + last.optString("reason")) +
+                        " · " + last.optLong("durationMs") + " ms";
+            }
+            JSONObject movement = gameplay.optJSONObject("movementSystem");
+            if (movement != null) {
+                message += "\nMovement engine: " + movement.optString("state", "unknown") +
+                        " · capability " + movement.optString("capability", "unknown") +
+                        " · frames sent " + movement.optLong("framesSent") +
+                        " · corrections " + movement.optLong("corrections") +
+                        " · non-neutral frames " + movement.optLong("nonNeutralFrames");
+                JSONObject lastResult = movement.optJSONObject("lastMovementResult");
+                if (lastResult != null) message += "\nMovement result: " +
+                        lastResult.optString("status") + " · " + lastResult.optString("reason");
+                JSONObject lastInput = movement.optJSONObject("lastInput");
+                if (lastInput != null) message += "\nLast movement input: " + lastInput;
+                JSONObject lastError = movement.optJSONObject("lastError");
+                if (lastError != null) message += "\nMovement error: " + lastError;
+            }
+            message += "\nFull sanitized session telemetry:\n" + gameplay.toString();
+        }
         return message;
+    }
+
+    static boolean hasFailure(JSONObject event) {
+        String phase = event.optString("phase");
+        if (java.util.Arrays.asList("failed", "runtime_failed", "account_failed", "disconnected",
+                "runtime_interrupted", "manual_input_rejected", "app_command_rejected").contains(phase)) return true;
+        if (event.optInt("httpStatus") >= 400 || event.optInt("nethernetCode") > 0 ||
+                event.optInt("bedrockCode", -1) >= 0 || event.has("error")) return true;
+        JSONObject details = event.optJSONObject("details");
+        if (details != null && java.util.Arrays.asList("rejected", "failed", "blocked")
+                .contains(details.optString("status"))) return true;
+        JSONObject gameplay = event.optJSONObject("gameplay");
+        if (gameplay == null) return false;
+        JSONObject packets = gameplay.optJSONObject("packetTelemetry");
+        if (packets != null && (packets.optInt("errors") > 0 || packets.optInt("sentErrors") > 0)) return true;
+        JSONObject commands = gameplay.optJSONObject("commandTelemetry");
+        JSONObject lastCommand = commands == null ? null : commands.optJSONObject("last");
+        if (lastCommand != null && java.util.Arrays.asList("rejected", "failed", "blocked")
+                .contains(lastCommand.optString("status"))) return true;
+        JSONObject movement = gameplay.optJSONObject("movementSystem");
+        if (movement == null || !movement.has("lastError") ||
+                movement.isNull("lastError")) return false;
+        String movementError = movement.optString("lastError", "");
+        return !movementError.isEmpty() && !"null".equals(movementError);
     }
 
     static String bedrockDisconnect(int code) {

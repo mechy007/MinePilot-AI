@@ -9,6 +9,17 @@ const { BedrockGameplayBridge } = require('./bedrock-gameplay-bridge.cjs');
 const { learningEngineFor, odysseyCapabilityStates } = require('./bedrock-skill-manifest.cjs');
 const { BedrockTerrainCache } = require('./bedrock-terrain-cache.cjs');
 
+async function importGameplay(moduleName) {
+  const stagedPaths = [
+    join(__dirname, 'gameplay', `${moduleName}.js`),
+    join(__dirname, '..', 'gameplay', `${moduleName}.js`)
+  ];
+  const builtPath = join(__dirname, '..', 'dist', 'src', 'gameplay', `${moduleName}.js`);
+  const target = stagedPaths.find(existsSync) ?? builtPath;
+  if (!existsSync(target)) throw new Error(`Gameplay module is not staged or built: ${moduleName}`);
+  return import(require('node:url').pathToFileURL(target).href);
+}
+
 class Client extends EventEmitter {
   sent = [];
   queue(packet, value) { this.sent.push({ packet, value }); }
@@ -183,8 +194,8 @@ test('Android gameplay inbox carries joystick commands through controller execut
 });
 
 test('Layer 2 equipment, target removal and health override are observational', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerOneController } = await importGameplay('layer-one');
+  const { LayerTwoPlanner } = await importGameplay('layer-two');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, {
     layerOne: new LayerOneController(), layerTwo: new LayerTwoPlanner()
@@ -220,7 +231,7 @@ test('Layer 2 equipment, target removal and health override are observational', 
 });
 
 test('nested Bedrock PlayerRecords add/remove resolves names only for visible entities', async () => {
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerTwoPlanner } = await importGameplay('layer-two');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
   initialized(client, bridge);
@@ -243,7 +254,7 @@ test('nested Bedrock PlayerRecords add/remove resolves names only for visible en
 });
 
 test('player names arriving after AddPlayer rehydrate the Follow target cache', async () => {
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
+  const { LayerTwoPlanner } = await importGameplay('layer-two');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { layerTwo: new LayerTwoPlanner() }).start();
   initialized(client, bridge);
@@ -266,7 +277,7 @@ test('player names arriving after AddPlayer rehydrate the Follow target cache', 
 });
 
 test('Layer 3 block updates do not imply mining, and dimension resets resource targets', async () => {
-  const { LayerThreePlanner } = await import('./gameplay/layer-three.js');
+  const { LayerThreePlanner } = await importGameplay('layer-three');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, { layerThree: new LayerThreePlanner() }).start();
   client.emit('start_game', {
@@ -296,9 +307,9 @@ test('Layer 3 block updates do not imply mining, and dimension resets resource t
 });
 
 test('Layer 7 optional advisor sees same-client survival and workflow state but never executes actions', async () => {
-  const { LayerOneController } = await import('./gameplay/layer-one.js');
-  const { LayerFourSupervisor } = await import('./gameplay/layer-four.js');
-  const { LayerSevenAdvisor } = await import('./gameplay/layer-seven.js');
+  const { LayerOneController } = await importGameplay('layer-one');
+  const { LayerFourSupervisor } = await importGameplay('layer-four');
+  const { LayerSevenAdvisor } = await importGameplay('layer-seven');
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, {
     layerOne: new LayerOneController(), layerFour: new LayerFourSupervisor(),
@@ -328,8 +339,8 @@ test('Layer 7 optional advisor sees same-client survival and workflow state but 
 
 
 test('Layer 8 enforces fresh world observations and never claims beta or autonomous gameplay', async () => {
-  const { LayerEightReadiness } = await import('./gameplay/layer-eight.js');
-  const { LayerSixWorkflow } = await import('./gameplay/layer-six.js');
+  const { LayerEightReadiness } = await importGameplay('layer-eight');
+  const { LayerSixWorkflow } = await importGameplay('layer-six');
   let now = 1000;
   const client = new Client();
   const bridge = new BedrockGameplayBridge(client, {
@@ -609,8 +620,8 @@ test('pinned Bedrock 1.26.60 serializer accepts spawn completion and respawn ack
 
 
 test('addon-derived follow priority is wired to same Xbox world without automatic movement', async()=>{
-  const { LayerTwoPlanner } = await import('./gameplay/layer-two.js');
-  const { BedrockMotionArbiter } = await import('./gameplay/addon-navigation.js');
+  const { LayerTwoPlanner } = await importGameplay('layer-two');
+  const { BedrockMotionArbiter } = await importGameplay('addon-navigation');
   const client=new Client();
   const bridge=new BedrockGameplayBridge(client,{
     layerTwo:new LayerTwoPlanner(),
@@ -1434,4 +1445,113 @@ test('manual input mailbox persists held intent until terrain is ready and clear
     bridge.stop();
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+
+test('movement presence retries after spawn when terrain was not ready on the first attempt', () => {
+  let now = 1000;
+  let ready = false;
+  let active = false;
+  let attempts = 0;
+  const movement = {
+    capability: () => active ? 'ready' : 'unavailable',
+    snapshot: () => ({ presenceActive: active }),
+    startPresence: () => {
+      attempts++;
+      if (!ready) return false;
+      active = true;
+      return true;
+    },
+    stop: () => {},
+    stopPresence: () => {},
+    resetSession: () => {}
+  };
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    movement, clock: () => now, terrainCheck: { check: () => ({ state: 'waiting' }) }
+  });
+  bridge.movementAuthority = 1;
+  bridge.onSpawn();
+  assert.equal(attempts, 1);
+  assert.equal(bridge.snapshot().movementPresence.state, 'waiting');
+
+  ready = true;
+  now += 500;
+  bridge.tickControlPlane();
+  assert.equal(attempts, 2);
+  assert.equal(bridge.snapshot().movementPresence.state, 'active');
+  bridge.stop();
+});
+
+
+test('session diagnostics retain bounded packet and command summaries without raw identities', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    movement: { capability() { return 'unavailable'; }, stop() {}, stopPresence() {},
+      snapshot() { return { state: 'idle' }; } }
+  }).start();
+  client.emit('start_game', { ...start, player_position: { x: 8.5, y: 64, z: 10.5 },
+    xuid: 'must-not-be-retained', gamertag: 'must-not-be-retained' });
+  client.emit('spawn');
+  client.emit('level_chunk', { x: 2, z: -3, dimension: 0, ownerXuid: 'private' });
+  const result = bridge.execute({ version: 'minepilot.gameplay.v1',
+    requestId: 'diagnostic-status', action: 'status' });
+  assert.equal(result.status, 'ok');
+  const snapshot = bridge.snapshot();
+  assert.equal(snapshot.packetTelemetry.received >= 3, true);
+  assert.equal(snapshot.packetTelemetry.byType.start_game, 1);
+  assert.equal(snapshot.packetTelemetry.byType.spawn, 1);
+  assert.equal(snapshot.packetTelemetry.byType.level_chunk, 1);
+  assert.equal(snapshot.packetTelemetry.lastType, 'level_chunk');
+  assert.deepEqual(snapshot.packetTelemetry.lastSummary, { x: 2, z: -3, dimension: 0 });
+  assert.equal(JSON.stringify(snapshot).includes('must-not-be-retained'), false);
+  assert.equal(JSON.stringify(snapshot).includes('private'), false);
+  assert.equal(snapshot.commandTelemetry.received, 1);
+  assert.equal(snapshot.commandTelemetry.last.action, 'status');
+  assert.equal(snapshot.commandTelemetry.last.status, 'ok');
+  bridge.stop();
+});
+
+
+test('outbound Bedrock packets are counted and the original queue is restored on stop', () => {
+  const client = new Client();
+  const originalQueue = client.queue;
+  const bridge = new BedrockGameplayBridge(client).start();
+  client.queue('player_auth_input', {
+    position: { x: 1, y: 64, z: 2 },
+    move_vector: { x: 0, z: 1 },
+    input_data: ['up', 'sprint'],
+    input_mode: 'touch'
+  });
+  const telemetry = bridge.snapshot().packetTelemetry;
+  assert.equal(telemetry.sentByType.player_auth_input, 1);
+  assert.equal(telemetry.lastSentType, 'player_auth_input');
+  assert.equal(telemetry.events.some(event =>
+    event.direction === 'out' && event.type === 'player_auth_input'), true);
+  assert.deepEqual(telemetry.lastSentSummary.position, { x: 1, y: 64, z: 2 });
+  bridge.stop();
+  assert.equal(client.queue, originalQueue);
+});
+
+
+test('gameplay command exceptions are retained in diagnostic history before propagating', () => {
+  const client = new Client();
+  const bridge = new BedrockGameplayBridge(client, {
+    movement: { capability() { return 'ready'; },
+      runManualHold() { throw new TypeError('synthetic movement failure'); },
+      releaseManual() {}, stop() {}, stopPresence() {}, snapshot() { return {}; } }
+  }).start();
+  client.emit('start_game', start);
+  client.emit('spawn');
+  assert.throws(() => bridge.execute({
+    version: 'minepilot.gameplay.v1', requestId: 'manual-throws',
+    action: 'manual_move', confirmed: true, mode: 'vector',
+    ticks: 8, motionX: 0.2, motionY: 0.8
+  }), /synthetic movement failure/);
+  const last = bridge.snapshot().commandTelemetry.last;
+  assert.equal(last.action, 'manual_move');
+  assert.equal(last.status, 'failed');
+  assert.equal(last.reason, 'command_exception');
+  assert.equal(last.errorName, 'TypeError');
+  bridge.stop();
 });

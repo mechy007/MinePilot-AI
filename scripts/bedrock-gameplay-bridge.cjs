@@ -64,6 +64,8 @@ class BedrockGameplayBridge {
     this.lastManualInputRequestId = null;
     this.manualInputState = { active: false, status: 'idle', reason: 'no_manual_input', expiresAt: null };
     this.movement = options.movement ?? null;
+    this.movementPresence = { state: 'idle', reason: 'not_started', attempts: 0, lastAttemptAt: null };
+    this.lastMovementStartAttemptAt = -Infinity;
     this.layerOne = options.layerOne ?? null;
     this.layerTwo = options.layerTwo ?? null;
     this.layerThree = options.layerThree ?? null;
@@ -154,15 +156,87 @@ class BedrockGameplayBridge {
     this.controlTickStatus = { state: 'not_started', reason: 'control_tick_not_started' };
     this.lastIntelligenceDecision = null;
     this.lastAddonNavigationSnapshot = null;
+    this.commandTelemetry = { received: 0, byAction: {}, last: null, events: [] };
+    this.packetTelemetry = { received: 0, errors: 0, byType: {}, lastType: null,
+      lastAt: null, lastSummary: null, lastError: null, events: [], sent: 0,
+      sentByType: {}, lastSentType: null, lastSentSummary: null, sentErrors: 0 };
+    this.originalQueue = null;
+    this.queueTelemetryWrapper = null;
     this.listeners = [];
   }
   bind(event, callback) {
-    // Existing handler remains authoritative; extensions only see safe projections.
+    // Keep bounded packet telemetry for post-session diagnosis. Never retain raw
+    // packet bodies, authentication material, account identifiers or player names.
     const wrapped = payload => {
-      try { callback(payload); }
-      finally {
+      const telemetry = this.packetTelemetry;
+      telemetry.received++;
+      telemetry.byType[event] = Math.min(1000000000, (telemetry.byType[event] ?? 0) + 1);
+      telemetry.lastType = event;
+      telemetry.lastAt = this.clock();
+      const summary = {};
+      if (payload && typeof payload === 'object') {
+        for (const key of ['state', 'mode', 'dimension', 'x', 'y', 'z', 'time',
+          'current_tick', 'tick', 'sub_chunk_count', 'highest_subchunk_count', 'sub_chunk_limit',
+          'runtime_entity_id', 'entity_runtime_id', 'runtime_id', 'player_unique_id',
+          'player_position', 'position', 'rotation', 'velocity', 'delta', 'yaw', 'pitch',
+          'movement_authority', 'on_ground', 'teleport', 'window_id', 'container_id',
+          'slot', 'selected_slot', 'select_slot', 'count', 'network_id', 'block_id',
+          'block_position', 'action_type', 'movement_type', 'flags', 'health', 'food',
+          'saturation', 'difficulty', 'enable_commands', 'permission_level', 'reason']) {
+          const value = payload[key];
+          if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ||
+              (typeof value === 'string' && value.length <= 96) ||
+              (value && typeof value === 'object' && !Array.isArray(value) &&
+                ['x','y','z'].every(axis => Number.isFinite(value[axis])))) {
+            summary[key] = value && typeof value === 'object'
+              ? { x: value.x, y: value.y, z: value.z } : value;
+          }
+        }
+        if (payload.item && typeof payload.item === 'object') {
+          const item = {};
+          for (const key of ['network_id', 'id', 'count', 'aux', 'metadata']) {
+            const value = payload.item[key];
+            if (typeof value === 'number' && Number.isFinite(value)) item[key] = value;
+          }
+          if (Object.keys(item).length) summary.item = item;
+        }
+        if (Array.isArray(payload.entries)) summary.entryCount = payload.entries.length;
+        if (Array.isArray(payload.records)) summary.recordCount = payload.records.length;
+        if (Array.isArray(payload.attributes)) {
+          summary.attributeCount = payload.attributes.length;
+          summary.attributes = payload.attributes.slice(0, 32).flatMap(attribute => {
+            if (!attribute || typeof attribute !== 'object') return [];
+            const item = {};
+            if (typeof attribute.name === 'string' && /^[a-zA-Z0-9_.:-]{1,80}$/.test(attribute.name))
+              item.attribute = attribute.name;
+            for (const key of ['current', 'min', 'max', 'value']) {
+              if (typeof attribute[key] === 'number' && Number.isFinite(attribute[key]))
+                item[key] = attribute[key];
+            }
+            return Object.keys(item).length ? [item] : [];
+          });
+        }
+      }
+      telemetry.lastSummary = summary;
+      telemetry.events.push({ at: telemetry.lastAt, direction: 'in', type: event, summary });
+      if (telemetry.events.length > 64) telemetry.events.shift();
+      try {
+        callback(payload);
+      } catch (error) {
+        telemetry.errors++;
+        telemetry.lastError = {
+          event,
+          name: ['TypeError','RangeError','SyntaxError','AbortError'].includes(error?.name)
+            ? error.name : 'Error',
+          at: this.clock()
+        };
+        throw error;
+      } finally {
         try { this.runtimeExtensions?.observePacket?.(event, payload, this); }
-        catch {
+        catch (error) {
+          telemetry.errors++;
+          telemetry.lastError = { event, name: ['TypeError','RangeError','SyntaxError'].includes(error?.name)
+            ? error.name : 'Error', at: this.clock(), source: 'runtime_extension' };
           // Auxiliary integrations must never interrupt the authenticated session.
           this.runtimeExtensions?.recordSystem?.('packet_projection_error', { event });
         }
@@ -173,6 +247,43 @@ class BedrockGameplayBridge {
   }
   start() {
     if (this.closed || this.watch || this.listeners.length) throw new Error('Bridge already used');
+    if (typeof this.client.queue === 'function') {
+      const original = this.client.queue;
+      const telemetry = this.packetTelemetry;
+      this.originalQueue = original;
+      this.queueTelemetryWrapper = function (...args) {
+        const type = typeof args[0] === 'string' ? args[0] : 'unknown';
+        telemetry.sent++;
+        telemetry.sentByType[type] = Math.min(1000000000, (telemetry.sentByType[type] ?? 0) + 1);
+        telemetry.lastSentType = type;
+        const packet = args[1];
+        const summary = {};
+        if (packet && typeof packet === 'object') {
+          for (const key of ['position', 'delta', 'move_vector', 'raw_move_vector',
+            'analogue_move_vector', 'input_data', 'input_mode', 'play_mode',
+            'interaction_model', 'yaw', 'pitch', 'head_yaw', 'tick', 'runtime_entity_id']) {
+            const value = packet[key];
+            if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ||
+                (typeof value === 'string' && value.length <= 64) ||
+                (Array.isArray(value) && value.length <= 64) ||
+                (value && typeof value === 'object' && !Array.isArray(value) &&
+                  ['x','y','z'].every(axis => Number.isFinite(value[axis])))) {
+              summary[key] = value;
+            }
+          }
+        }
+        telemetry.lastSentSummary = summary;
+        telemetry.events.push({ at: this.clock ? this.clock() : Date.now(),
+          direction: 'out', type, summary });
+        if (telemetry.events.length > 64) telemetry.events.shift();
+        try { return original.apply(this, args); }
+        catch (error) {
+          telemetry.sentErrors++;
+          throw error;
+        }
+      };
+      this.client.queue = this.queueTelemetryWrapper;
+    }
     this.bind('start_game', p => this.startGame(p));
     this.bind('spawn', () => this.onSpawn());
     this.bind('respawn', p => this.onRespawn(p));
@@ -336,6 +447,8 @@ class BedrockGameplayBridge {
     this.subchunkLastResponse = null;
     this.lastWorldAt = this.clock();
     this.spawned = false;
+    this.movementPresence = { state: 'idle', reason: 'world_reset', attempts: 0, lastAttemptAt: null };
+    this.lastMovementStartAttemptAt = -Infinity;
     if (typeof this.movement?.resetSession === 'function') this.movement.resetSession();
     else this.movement?.stop();
     this.layerOne?.reset();
@@ -526,7 +639,7 @@ class BedrockGameplayBridge {
     recovery.resumeTask = null;
     recovery.error = null;
     this.spawned = true;
-    this.movement?.startPresence?.(this);
+    this.ensureMovementPresence(true);
     this.restoreRespawnTask(resumeTask);
     return true;
   }
@@ -558,6 +671,7 @@ class BedrockGameplayBridge {
       this.lastRespawnState = null;
       this.gameplayAgent?.stop('player_died');
       this.spawned = false;
+      this.movementPresence = { ...this.movementPresence, state: 'waiting', reason: 'player_died' };
       this.autonomy?.stop('player_died');
       this.blockBreaker?.abort('player_died');
       this.movement?.stopPresence?.('player_died');
@@ -633,7 +747,7 @@ class BedrockGameplayBridge {
       // movement stream before the SDK emits its companion spawn event.
       if (this.spawnTrace.loadingCompleted &&
           this.movement?.snapshot?.()?.presenceActive !== true)
-        this.movement?.startPresence?.(this);
+        this.ensureMovementPresence(true);
       return;
     }
     try {
@@ -642,7 +756,7 @@ class BedrockGameplayBridge {
       this.client.queue('serverbound_loading_screen', { type: 2 });
       this.spawnTrace.loadingPacketsSent++;
       this.spawnTrace.loadingCompleted = true;
-      this.movement?.startPresence?.(this);
+      this.ensureMovementPresence(true);
     } catch { this.spawnTrace.handshakeErrors++; }
   }
   authorityChange(packet) {
@@ -656,8 +770,12 @@ class BedrockGameplayBridge {
       this.movement?.stop?.('movement_authority_changed', { silent: true });
       this.movementAuthority = next;
       this.movementAuthoritySource = 'explicit_authority_update';
-      if (this.spawned && [1,2].includes(next)) this.movement?.startPresence?.(this);
-      else this.movement?.stopPresence?.('authority_changed');
+      if (this.spawned && [1,2].includes(next)) this.ensureMovementPresence(true);
+      else {
+        this.movement?.stopPresence?.('authority_changed');
+        this.movementPresence = { ...this.movementPresence, state: 'waiting',
+          reason: next === 0 ? 'client_authoritative_movement_not_supported' : 'authority_changed' };
+      }
     }
   }
   attributes(packet) {
@@ -1121,6 +1239,8 @@ class BedrockGameplayBridge {
     this.movementAuthority = null;
     this.movementAuthoritySource = 'unknown';
     this.spawned = false;
+    this.movementPresence = { state: 'idle', reason: 'dimension_changed', attempts: 0, lastAttemptAt: null };
+    this.lastMovementStartAttemptAt = -Infinity;
     this.respawnRecovery.state = 'alive';
     this.respawnRecovery.attempts = 0;
     this.respawnRecovery.lastActionAt = 0;
@@ -1219,12 +1339,47 @@ class BedrockGameplayBridge {
     this.lastIntelligenceDecision = result;
     return result;
   }
+  ensureMovementPresence(force = false) {
+    if (this.closed || !this.spawned || !this.movement ||
+        typeof this.movement.startPresence !== 'function') return false;
+    const before = this.movement.snapshot?.() ?? {};
+    if (before.presenceActive === true) {
+      this.movementPresence = { ...this.movementPresence, state: 'active',
+        reason: 'movement_queue_running' };
+      return true;
+    }
+    if (![1, 2].includes(this.movementAuthority)) {
+      this.movementPresence = { ...this.movementPresence, state: 'waiting',
+        reason: 'movement_authority_unavailable' };
+      return false;
+    }
+    const now = this.clock();
+    if (!force && now - this.lastMovementStartAttemptAt < 500) return false;
+    this.lastMovementStartAttemptAt = now;
+    const attempts = this.movementPresence.attempts + 1;
+    let started = false;
+    try { started = this.movement.startPresence(this) === true; } catch {}
+    const after = this.movement.snapshot?.() ?? {};
+    this.movementPresence = {
+      state: started || after.presenceActive === true ? 'active' : 'waiting',
+      reason: started || after.presenceActive === true ? 'movement_queue_running' :
+        (typeof after.lastError === 'string' ? after.lastError : 'terrain_or_physics_not_ready'),
+      attempts, lastAttemptAt: now
+    };
+    return this.movementPresence.state === 'active';
+  }
+
   tickControlPlane() {
     if (this.closed) return;
     try {
       // The gameplay agent owns its own cadence while active; otherwise keep
       // safety observations fresh from the bridge's 100 ms control loop.
       this.checkTerrainReadiness();
+      this.ensureMovementPresence(false);
+      // Feed the same authenticated session into recovery and stuck detection.
+      // Extension failures are isolated and must never interrupt Bedrock control.
+      try { this.runtimeExtensions?.observeBridge?.(this); }
+      catch { this.runtimeExtensions?.recordSystem?.('bridge_observation_error', { source: 'control_plane' }); }
       if (!this.gameplayAgent?.snapshot?.()?.active) this.intelligenceTick();
       if (this.addonNavigation) this.updateAddonNavigation();
       this.controlTickStatus = { state: 'healthy', reason: 'control_tick_ok' };
@@ -1257,6 +1412,16 @@ class BedrockGameplayBridge {
     const movementSystem = this.movement?.snapshot?.() ?? null;
     const terrainCheck = this.checkTerrainReadiness();
     return {
+      commandTelemetry: { ...this.commandTelemetry, byAction: { ...this.commandTelemetry.byAction },
+        events: this.commandTelemetry.events.map(event => ({ ...event })),
+        last: this.commandTelemetry.last ? { ...this.commandTelemetry.last } : null },
+      packetTelemetry: { ...this.packetTelemetry, byType: { ...this.packetTelemetry.byType },
+        sentByType: { ...this.packetTelemetry.sentByType },
+        events: this.packetTelemetry.events.map(event => ({ ...event,
+          summary: event.summary ? { ...event.summary } : undefined })),
+        lastSummary: this.packetTelemetry.lastSummary ? { ...this.packetTelemetry.lastSummary } : null,
+        lastSentSummary: this.packetTelemetry.lastSentSummary ? { ...this.packetTelemetry.lastSentSummary } : null,
+        lastError: this.packetTelemetry.lastError ? { ...this.packetTelemetry.lastError } : null },
       state: this.closed ? 'closed' : this.spawned && this.self && this.position && this.receivedChunks.size
         ? 'observing' : 'awaiting_world',
       position: this.position ? { ...this.position } : null,
@@ -1324,6 +1489,7 @@ class BedrockGameplayBridge {
       spawnHandshake: { ...this.spawnTrace, lastRespawnState: this.lastRespawnState },
       respawnRecovery: { ...this.respawnRecovery,
         resumeTask: this.respawnRecovery.resumeTask ? { ...this.respawnRecovery.resumeTask } : null },
+      movementPresence: { ...this.movementPresence },
       movement: movementCapability,
       ...(movementSystem ? { movementSystem } : {}),
       ...(this.layerOne ? { layerOne: this.layerOne.snapshot() } : {}),
@@ -1341,6 +1507,38 @@ class BedrockGameplayBridge {
     };
   }
   execute(raw) {
+    const startedAt = this.clock();
+    const requestedAction = typeof raw?.action === 'string' ? raw.action : '';
+    const action = COMMAND_ACTIONS.has(requestedAction) ? requestedAction : 'invalid';
+    const telemetry = this.commandTelemetry;
+    telemetry.received++;
+    telemetry.byAction[action] = Math.min(1000000000, (telemetry.byAction[action] ?? 0) + 1);
+    let result;
+    try {
+      result = this.executeCommand(raw);
+    } catch (error) {
+      telemetry.last = {
+        action, status: 'failed', reason: 'command_exception',
+        errorName: ['TypeError','RangeError','SyntaxError','AbortError'].includes(error?.name)
+          ? error.name : 'Error',
+        durationMs: Math.max(0, this.clock() - startedAt), at: this.clock()
+      };
+      telemetry.events.push({ ...telemetry.last });
+      if (telemetry.events.length > 64) telemetry.events.shift();
+      throw error;
+    }
+    telemetry.last = {
+      action,
+      status: typeof result?.status === 'string' ? result.status : 'unknown',
+      reason: typeof result?.reason === 'string' ? result.reason.slice(0, 96) : null,
+      durationMs: Math.max(0, this.clock() - startedAt),
+      at: this.clock()
+    };
+    telemetry.events.push({ ...telemetry.last });
+    if (telemetry.events.length > 64) telemetry.events.shift();
+    return result;
+  }
+  executeCommand(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
       raw.version !== 'minepilot.gameplay.v1' ||
       typeof raw.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(raw.requestId) ||
@@ -1643,8 +1841,12 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: 'critical_health' };
       if (this.layerFour?.critical)
         return { status: 'rejected', reason: 'survival_hold' };
-      if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
-        return { status: 'rejected', reason: 'autonomous_controller_busy' };
+      if (this.gameplayAgent?.snapshot?.()?.active)
+        return { status: 'rejected', reason: 'gameplay_agent_busy' };
+      // Explicit manual input outranks autonomous Follow. Cancel its loop and
+      // release any active pulse before the manual controller takes ownership.
+      if (this.autonomy?.snapshot?.()?.active)
+        this.autonomy.stop('manual_control_preempted');
       if (!this.movement || typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
       const envelope = this.runtimeExtensions?.envelope?.evaluate?.('manual_move', {
@@ -2021,6 +2223,10 @@ class BedrockGameplayBridge {
   }
   stop() {
     if (this.closed) return;
+    if (this.queueTelemetryWrapper && this.client.queue === this.queueTelemetryWrapper &&
+        typeof this.originalQueue === 'function') this.client.queue = this.originalQueue;
+    this.queueTelemetryWrapper = null;
+    this.originalQueue = null;
     if (this.manualInputPath) {
       try { unlinkSync(this.manualInputPath); } catch {}
     }
