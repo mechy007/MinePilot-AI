@@ -72,17 +72,20 @@ class VerifiedAutonomyRunner {
     if(opts.confirmed!==true)return {status:'rejected',reason:'confirmation_required'};
     const blocker=this.safety(world);
     if(blocker)return {status:'rejected',reason:blocker};
-    const path=this.route(world);
-    if(path.status!=='ready')return {status:'rejected',reason:path.reason};
-    this.world=world;this.active=true;this.phase='ready';
-    this.stepCount=0;this.verifiedSteps=0;this.predictionSteps=0;
     this.followMode=world.layerTwo?.preview(world.gameplayWorld())?.goal==='follow';
+    const path=this.route(world);
+    if(path.status!=='ready' && !(this.followMode && ['holding','waiting'].includes(path.status)))
+      return {status:'rejected',reason:path.reason};
+    this.world=world;this.active=true;
+    this.phase=path.status==='holding'?'holding_follow_distance':
+      path.status==='waiting'?'waiting_for_target':'ready';
+    this.stepCount=0;this.verifiedSteps=0;this.predictionSteps=0;
     this.startedAt=this.clock();
     this.initialDimension=world.dimension;
     this.awaiting=null;
     this.lastReason='autonomy_started_not_verified';
     this.interval=this.setInterval(()=>this.pulse(),TICK_MS);
-    return {status:'accepted',reason:'bounded_follow_autonomy_started'};
+    return {status:'accepted',reason:this.followMode?'continuous_player_follow_started':'bounded_autonomy_started'};
   }
   pulse() {
     if(!this.active)return;
