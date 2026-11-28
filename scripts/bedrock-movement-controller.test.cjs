@@ -139,6 +139,16 @@ test('analog diagonal movement combines jump and sprint flags and supports sneak
   controller.stop('session_closed');
 });
 
+test('verified step-up sends a short jump pulse while forward movement continues',()=>{
+ const {controller,world}=movementWorld();let now=1000;controller.clock=()=>now;
+ assert.equal(controller.startPresence(world),true);
+ assert.equal(controller.runVerifiedStep(world,{x:1.5,y:2.62,z:0.5},8,{jump:true,jumpPulseMs:100}).status,'accepted');
+ const jumping=controller.tick(101n);assert.ok(jumping.input_data.includes('up'));assert.ok(jumping.input_data.includes('jumping'));
+ now+=120;const continuing=controller.tick(102n);assert.ok(continuing.input_data.includes('up'));
+ assert.equal(continuing.input_data.includes('jumping'),false);assert.equal(controller.snapshot().jumpPulseActive,false);
+ controller.stop('test_cleanup');
+});
+
 test('movement controller applies horizontal and vertical camera look controls', () => {
   const { controller, world } = movementWorld();
   controller.startPresence(world);

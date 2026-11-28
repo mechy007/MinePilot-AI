@@ -52,7 +52,7 @@ class VerifiedAutonomyRunner {
       return {status:'rejected',reason:'terrain_decoder_unavailable'};
     const nav=world.routePlanner(world.terrain,world.dimension,world.position,plan.nextPoint);
     return nav?.status==='route_found' && nav.waypoint
-      ? {status:'ready',waypoint:nav.waypoint,reason:nav.reason}
+      ? {status:'ready',waypoint:nav.waypoint,jump:nav.jump===true,reason:nav.reason}
       : {status:'rejected',reason:nav?.reason??'unverified_terrain'};
   }
   safety(world) {
@@ -151,7 +151,7 @@ class VerifiedAutonomyRunner {
     if(route.status!=='ready'){this.stop(route.reason);return;}
     if(movement?.snapshot()?.active)return;
     const predictedBefore=movement?.snapshot?.()?.predictedPosition;
-    const result=movement?.runVerifiedStep(w,route.waypoint,8);
+    const result=movement?.runVerifiedStep(w,route.waypoint,8,{jump:route.jump===true});
     if(result?.status!=='accepted'){
       this.stop(result?.reason??'movement_rejected');return;
     }

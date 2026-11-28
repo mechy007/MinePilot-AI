@@ -131,6 +131,7 @@ class BedrockMovementController {
     this.history = [];
     this.controls = { x: 0, z: 0, jump: false, sprint: false, sneak: false };
     this.manualHoldDeadline = 0;
+    this.jumpPulseDeadline = null;
     this.manualHoldActive = false;
     this.lastServerPosition = null;
     this.lastServerPositionAt = null;
@@ -327,6 +328,7 @@ class BedrockMovementController {
     const vector = options.vector && Number.isFinite(options.vector.x) && Number.isFinite(options.vector.y)
       ? { x: options.vector.x, z: options.vector.y } : modes[options.mode];
     if (!vector) return { status: 'rejected', reason: 'unsupported_manual_input' };
+    this.jumpPulseDeadline = null;
     this.setControls(vector, options);
     if (options.mode === 'turn_left' || options.mode === 'turn_right') {
       const direction = options.mode === 'turn_left' ? -1 : 1;
@@ -343,7 +345,7 @@ class BedrockMovementController {
     return this.lastMovementResult;
   }
 
-  runVerifiedStep(world, target, ticks = 8) {
+  runVerifiedStep(world, target, ticks = 8, options = {}) {
     if (this.capability(world) !== 'ready')
       return { status: 'rejected', reason: 'movement_unavailable' };
     if (!this.preflightTerrain(world) || !finite3(target) ||
@@ -357,7 +359,10 @@ class BedrockMovementController {
     }
     const yawDegrees = Math.atan2(-dx, dz) * 180 / Math.PI;
     if (this.state) this.state.yaw = fromWireYaw(yawDegrees);
-    this.setControls({ x: 0, z: 1 });
+    const jump = options?.jump === true;
+    this.setControls({ x: 0, z: 1 }, { jump });
+    this.jumpPulseDeadline = jump ? this.clock() + Math.max(50, Math.min(250,
+      Number.isFinite(options.jumpPulseMs) ? options.jumpPulseMs : 150)) : null;
     this.manualHoldActive = true;
     this.manualHoldDeadline = this.clock() + ticks * TICK_MS;
     this.lastMovementResult = { status: 'accepted', reason: 'verified_navigation_step' };
@@ -372,6 +377,7 @@ class BedrockMovementController {
 
   releaseManual() {
     this.setControls();
+    this.jumpPulseDeadline = null;
     this.manualHoldActive = false;
     this.manualHoldDeadline = 0;
     this.lastMovementResult = { status: 'idle', reason: 'manual_control_released' };
@@ -395,6 +401,11 @@ class BedrockMovementController {
     // A missing correction is not a timeout: Bedrock normally sends
     // CorrectPlayerMovePrediction only when it disagrees with our prediction.
     // Keep manual input active and continue collision-checked simulation.
+    // A verified step-up uses a short jump pulse; forward motion continues afterward.
+    if (this.jumpPulseDeadline !== null && now >= this.jumpPulseDeadline) {
+      this.controls = { ...this.controls, jump: false };
+      this.jumpPulseDeadline = null;
+    }
     if (this.manualHoldActive && now > this.manualHoldDeadline) this.releaseManual();
     const control = {
       forward: this.controls.z > 0.08,
@@ -695,6 +706,7 @@ class BedrockMovementController {
       lastServerAckAt: this.lastServerAckAt,
       state: this.started ? 'running' : 'stopped',
       active: this.manualHoldActive,
+      jumpPulseActive: this.jumpPulseDeadline !== null,
       framesSent: this.framesSent,
       corrections: this.corrections,
       lastCorrection: this.lastCorrection,

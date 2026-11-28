@@ -854,6 +854,18 @@ public final class DashboardActivity extends Activity {
                 message += "\nPossible stuck state: " + stuckReason.replace('_', ' ') +
                         " · stop/reorient/repath suggested; no automatic movement issued.";
             }
+            String awarenessState = current.getString("world_awareness_state", "");
+            if (!awarenessState.isEmpty()) {
+                message += "\\nWorld awareness: " + awarenessState.replace('_', ' ') +
+                        (current.getBoolean("world_awareness_fresh", false) ? " · fresh" : " · stale");
+                message += "\\nNearby: " + current.getInt("world_nearby_players", 0) + " players · " +
+                        current.getInt("world_nearby_hostiles", 0) + " hostile · " +
+                        current.getInt("world_nearby_passive", 0) + " passive · " +
+                        current.getInt("world_nearby_drops", 0) + " drops";
+                message += "\\nLocal terrain: " + current.getInt("world_terrain_walkable", 0) +
+                        " walkable · " + current.getInt("world_terrain_hazard", 0) + " hazards · " +
+                        current.getInt("world_terrain_unknown", 0) + " unknown cells";
+            }
             String lastStatus = current.getString("last_command_status", "");
             String lastReason = current.getString("last_command_reason", "");
             if ("rejected".equals(lastStatus) && !lastReason.isEmpty() && connectedAndAlive) {

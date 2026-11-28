@@ -434,6 +434,36 @@ public final class WorldSessionProvider extends ContentProvider {
                             result.putStringArray("runtime_capability_missing", values.toArray(new String[0]));
                         }
                     }
+                    JSONObject worldAwareness = runtimeExtensions.optJSONObject("worldAwareness");
+                    if (worldAwareness != null) {
+                        String awarenessState = worldAwareness.optString("status", "");
+                        if (awarenessState.matches("[a-z_]{1,24}"))
+                            result.putString("world_awareness_state", awarenessState);
+                        JSONObject freshness = worldAwareness.optJSONObject("freshness");
+                        if (freshness != null) {
+                            result.putBoolean("world_awareness_fresh", freshness.optBoolean("fresh", false));
+                            long ageMs = freshness.optLong("ageMs", -1);
+                            if (ageMs >= 0 && ageMs <= 600000)
+                                result.putLong("world_awareness_age_ms", ageMs);
+                        }
+                        JSONObject counts = worldAwareness.optJSONObject("counts");
+                        if (counts != null) {
+                            for (String key : new String[]{"players", "hostiles", "passive", "neutral", "drops", "unknown"}) {
+                                result.putInt("world_nearby_" + key,
+                                        Math.max(0, Math.min(32, counts.optInt(key, 0))));
+                            }
+                        }
+                        JSONObject terrain = worldAwareness.optJSONObject("terrain");
+                        if (terrain != null) {
+                            for (String key : new String[]{"walkable", "blocked", "hazard", "unknown"}) {
+                                result.putInt("world_terrain_" + key,
+                                        Math.max(0, Math.min(289, terrain.optInt(key, 0))));
+                            }
+                            String terrainState = terrain.optString("status", "");
+                            if (terrainState.matches("[a-z_]{1,24}"))
+                                result.putString("world_terrain_state", terrainState);
+                        }
+                    }
                     JSONObject stuckRecovery = runtimeExtensions.optJSONObject("stuckRecovery");
                     JSONObject stuckAssessment = stuckRecovery == null ? null :
                             stuckRecovery.optJSONObject("lastAssessment");

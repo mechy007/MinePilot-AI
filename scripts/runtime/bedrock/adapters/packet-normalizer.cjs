@@ -9,6 +9,16 @@ const runtimeId=v=>{if(typeof v==='bigint')v=v.toString();if(typeof v!=='string'
 function deepFreeze(value,depth=0){if(!value||typeof value!=='object'||depth>8||Object.isFrozen(value))return value;
  for(const child of Object.values(value))deepFreeze(child,depth+1);return Object.freeze(value);}
 const eventPayload=(type,at,data)=>deepFreeze({type,at,...data});
+function actorPosition(packet,bridge,id,dimension){
+ const full=safePosition(packet?.position);if(full)return full;
+ const previous=bridge?.runtimeExtensions?.world?.getEntityPosition?.(id,dimension);
+ const result={...(previous??{})};let supplied=false;
+ const axes=[['x',['new_position_x','newPositionX','position_x','x']],['y',['new_position_y','newPositionY','position_y','y']],['z',['new_position_z','newPositionZ','position_z','z']]];
+ for(const [axis,keys] of axes)for(const key of keys){
+  if(finiteNumber(packet?.[key])){result[axis]=packet[key];supplied=true;break;}
+ }
+ return supplied?safePosition(result):null;
+}
 function normalizePacket(name,packet,bridge,at=Date.now()){
  if(!packet||typeof packet!=='object'||Array.isArray(packet))return null;
  const p=packet;
@@ -51,21 +61,24 @@ function normalizePacket(name,packet,bridge,at=Date.now()){
   if(dimension===null||!position||!finiteInt(p.block_runtime_id)||p.block_runtime_id<0||p.block_runtime_id>0xffffffff)return null;
   return eventPayload('world.block.updated',at,{dimension,position,runtimeId:p.block_runtime_id,layer:finiteInt(p.layer)?p.layer:0});
  }
- case 'move_player':{
-  const id=runtimeId(p.runtime_entity_id??p.runtime_id),position=safePosition(p.position);if(!id||!position)return null;
-  return eventPayload('world.entity.moved',at,{entityId:id,self:id===runtimeId(bridge?.self),dimension:safeDimension(bridge?.dimension),
+ case 'move_player':case 'move_actor_absolute':case 'move_actor_delta':{
+  const dimension=safeDimension(bridge?.dimension);
+  const id=runtimeId(p.runtime_entity_id??p.runtime_id??p.actor_runtime_id??p.entity_id_self??p.entity_id);
+  const position=id?actorPosition(p,bridge,id,dimension):null;if(!id||!position||dimension===null)return null;
+  return eventPayload('world.entity.moved',at,{entityId:id,self:id===runtimeId(bridge?.self),dimension,
    position,mode:typeof p.mode==='string'||finiteInt(p.mode)?p.mode:null,
    yaw:finiteNumber(p.yaw)?p.yaw:null,pitch:finiteNumber(p.pitch)?p.pitch:null});
  }
- case 'add_player':case 'add_entity':case 'add_item_entity':{
-  const id=runtimeId(p.runtime_entity_id??p.runtime_id??p.entity_runtime_id),position=safePosition(p.position);
+ case 'add_player':case 'add_actor':case 'add_entity':case 'add_item_entity':{
+  const id=runtimeId(p.runtime_entity_id??p.runtime_id??p.entity_runtime_id??p.actor_runtime_id),position=safePosition(p.position);
   if(!id||!position)return null;
-  const entityType=name==='add_player'?'player':name==='add_item_entity'?'item_drop':'entity';
-  const identifier=typeof p.entity_type==='string'?p.entity_type.replace(/^minecraft:/,'').slice(0,64):null;
+  const entityType=name==='add_player'?'player':name==='add_item_entity'?'item_drop':name==='add_actor'?'mob':'entity';
+  const rawIdentifier=p.entity_type??p.identifier??p.entityType;
+  const identifier=typeof rawIdentifier==='string'&&/^(?:minecraft:)?[a-z0-9_]{1,64}$/i.test(rawIdentifier)?rawIdentifier.replace(/^minecraft:/,'').toLowerCase().slice(0,64):null;
   return eventPayload('world.entity.added',at,{entityId:id,entityType,identifier,dimension:safeDimension(bridge?.dimension),position});
  }
  case 'remove_actor':case 'remove_entity':{
-  const id=runtimeId(p.entity_id_self??p.runtime_entity_id??p.runtime_id??p.entity_id);
+  const id=runtimeId(p.entity_id_self??p.runtime_entity_id??p.runtime_id??p.entity_id??p.actor_runtime_id);
   return id?eventPayload('world.entity.removed',at,{entityId:id}):null;
  }
  case 'set_time':return finiteInt(p.time)?eventPayload('world.time.observed',at,{time:p.time,daylightCycle:finiteNumber(p.time_of_day)?p.time_of_day:null}):null;

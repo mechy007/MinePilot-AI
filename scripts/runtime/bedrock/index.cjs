@@ -11,6 +11,7 @@ const {OutcomeVerifier}=require('./actions/outcomes.cjs');
 const inventory=require('./inventory/containers.cjs');
 const {searchGridAStar}=require('./navigation/astar.cjs');
 const {searchVoxelAStar}=require('./navigation/voxel.cjs');
+const {planLocalRoute}=require('../../bedrock-local-path.cjs');
 const navigationGoals=require('./navigation/goals.cjs');
 const navigationCosts=require('./navigation/costs.cjs');
 const {planGoap}=require('./planning/goap.cjs');
@@ -36,6 +37,7 @@ function createRuntimeExtensions(options={}) {
  const taskExecution=new TaskExecutionCoordinator({runner:tasks,capabilities,adapter:options.taskAdapter});
  const plugins=new ReadOnlyPluginRegistry(options.pluginLimits);
  let lastCapabilityAssessment=null,lastStuckAssessment=null,lastCorrectionCount=0;
+ let lastWorldAwareness=null,lastWorldAwarenessAt=0;
  function observeBridge(bridge) {
   if(closed||!bridge)return null;
   const movement=bridge.movement?.snapshot?.()??{};
@@ -51,6 +53,11 @@ function createRuntimeExtensions(options={}) {
     inventory.registryKnown===true&&inventory.unresolvedItemCount===0,
    recipeCatalogFresh:recipes.observedAt!==null&&Number.isFinite(recipes.ageMs)&&recipes.ageMs<=30000
   });
+  const now=clock();
+  if(!lastWorldAwareness||now-lastWorldAwarenessAt>=500){
+   lastWorldAwareness=perception.snapshot({position:bridge.position,dimension:bridge.dimension,terrain:bridge.terrain,radius:4});
+   lastWorldAwarenessAt=now;
+  }
   const correctionCount=Number.isInteger(movement.corrections)?movement.corrections:0;
   const serverCorrected=correctionCount>lastCorrectionCount;
   lastCorrectionCount=correctionCount;
@@ -58,7 +65,7 @@ function createRuntimeExtensions(options={}) {
    at:clock(),position:bridge.position??movement.predictedPosition,
    inputActive:movement.active===true,serverCorrected,teleport:false
   });
-  return {capabilities:lastCapabilityAssessment,stuckRecovery:lastStuckAssessment};
+  return {capabilities:lastCapabilityAssessment,stuckRecovery:lastStuckAssessment,worldAwareness:lastWorldAwareness};
  }
  let closed=false;plugins.start();
  function observePacket(name,packet,bridge) {
@@ -76,8 +83,14 @@ function createRuntimeExtensions(options={}) {
   const snapshot=terrain.snapshot();
   if(snapshot?.collisionClassificationReady!==true)
     return {status:'unverified',reason:'collision_registry_not_verified',path:[],cost:null,expanded:0,executable:false};
-  return searchVoxelAStar({...args,dimension,
-    isStandable:(x,y,z)=>terrain.tile(dimension,x,y,z)==='walkable'});
+  const target=args.target??args.goal?.position??args.goal;
+  const route=planLocalRoute(terrain,dimension,args.start,target,{
+   radius:args.radius,verticalRadius:args.verticalRadius,maxExpanded:args.maxExpanded,maxPathLength:args.maxPath
+  });
+  return route.status==='route_found'
+   ?{status:'preview',reason:route.reason,path:route.path,cost:route.cost,expanded:route.expanded,
+     executable:false,waypoint:route.waypoint,jump:route.jump,waypointMode:route.waypointMode}
+   :{status:'unverified',reason:route.reason,path:[],cost:null,expanded:route.expanded,executable:false};
  }
  return {
   envelope,outcomes,obtain,safety,tasks,curriculum,recorder,inventory,capabilities,stuckRecovery,perception,taskExecution,
@@ -97,6 +110,7 @@ function createRuntimeExtensions(options={}) {
    taskRunner:tasks.snapshot(),capabilities:capabilities.snapshot(),
    capabilityAssessment:lastCapabilityAssessment??capabilities.assess({}),
    stuckRecovery:{...stuckRecovery.snapshot(),lastAssessment:lastStuckAssessment},
+   worldAwareness:lastWorldAwareness,
    taskExecution:{configured:!!options.taskAdapter,runner:tasks.snapshot()},
    compatibilityDetection:detectCompatibility({gameVersion:options.gameVersion,protocol:options.protocol}),outcomes:outcomes.snapshot().slice(-16),curriculum:curriculum.snapshot(),
    diagnostics:{retainedEvents:recorder.events.length,recent:recorder.snapshot(12)},
@@ -109,7 +123,8 @@ function createRuntimeExtensions(options={}) {
   }),
   close:(reason='session_closed')=>{
    if(closed)return;closed=true;tasks.cancel(reason);stuckRecovery.reset();capabilities.reset();outcomes.clear();
-   plugins.close(reason);events.close();world.close();lastCapabilityAssessment=null;lastStuckAssessment=null;recorder.recordSystem('session_closed',{reason});
+   plugins.close(reason);events.close();world.close();lastCapabilityAssessment=null;lastStuckAssessment=null;
+   lastWorldAwareness=null;lastWorldAwarenessAt=0;recorder.recordSystem('session_closed',{reason});
   }
  };
 }

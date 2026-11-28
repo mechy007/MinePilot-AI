@@ -9,6 +9,7 @@ const {fallTimeCost}=require('../navigation/costs.cjs');
 const {ReadOnlyPluginRegistry}=require('../plugins/registry.cjs');
 const {describePacketFixture,comparePacketFixtures}=require('../protocol/differential.cjs');
 const {createRuntimeExtensions}=require('../index.cjs');
+const {createWorldPerception}=require('../world/perception.cjs');
 test('event bus orders listeners, isolates errors and supports unsubscribe',()=>{
  const bus=new RuntimeEventBus({clock:()=>100}),calls=[];
  bus.subscribe('world.chunk.observed',()=>calls.push('normal'));
@@ -25,6 +26,35 @@ test('normalizer projects safe fields, freezes nested data and omits player iden
  assert.equal(Object.hasOwn(event,'uuid'),false);assert.equal(Object.hasOwn(event,'username'),false);
  assert.equal(normalizePacket('chat',{message:'private'},{},1000),null);
  assert.equal(Object.isFrozen(event),true);assert.equal(Object.isFrozen(event.position),true);
+});
+test('mob spawn and sparse actor movement become shared-world observations',()=>{
+ let now=1000;const store=new WorldKnowledgeStore({clock:()=>now});
+ store.apply({type:'world.session.started',at:now,dimension:0,position:{x:0,y:64,z:0}});
+ const bridge={dimension:0,runtimeExtensions:{world:store}};
+ const added=normalizePacket('add_actor',{runtime_entity_id:12n,entity_type:'minecraft:zombie',position:{x:1,y:64,z:2}},bridge,now);
+ assert.equal(added.entityType,'mob');assert.equal(added.identifier,'zombie');store.apply(added);
+ now+=100;const moved=normalizePacket('move_actor_delta',{runtime_entity_id:12n,new_position_x:4.5},bridge,now);
+ assert.equal(moved.type,'world.entity.moved');store.apply(moved);
+ assert.deepEqual(store.getEntityPosition('12'),{x:4.5,y:64,z:2});
+ const list=createWorldPerception(store,{clock:()=>now}).nearbyEntities({x:0,y:64,z:0},{dimension:0});
+ assert.equal(list.entities[0].classification,'hostile');
+});
+test('inventory-only traffic cannot refresh spatial freshness or stale entity positions',()=>{
+ let now=1000;const store=new WorldKnowledgeStore({clock:()=>now,entityFreshMs:2000});
+ store.apply({type:'world.session.started',at:now,dimension:0,position:{x:0,y:64,z:0}});
+ store.apply({type:'world.entity.added',at:now,entityId:'9',entityType:'player',dimension:0,position:{x:1,y:64,z:1}});
+ now+=6000;store.apply({type:'inventory.snapshot.observed',at:now,counts:{'minecraft:stone':2}});
+ assert.equal(store.snapshot().lastSpatialObservationAt,1000);assert.equal(store.getEntityPosition('9'),null);
+ assert.equal(createWorldPerception(store,{clock:()=>now}).freshness().fresh,false);
+});
+test('world awareness classifies observed entities and bounds the terrain sample',()=>{
+ const now=1000,store=new WorldKnowledgeStore({clock:()=>now});
+ store.apply({type:'world.session.started',at:now,dimension:0,position:{x:0,y:65.62,z:0}});
+ store.apply({type:'world.entity.added',at:now,entityId:'2',entityType:'mob',identifier:'creeper',dimension:0,position:{x:2,y:65,z:0}});
+ store.apply({type:'world.entity.added',at:now,entityId:'3',entityType:'player',dimension:0,position:{x:1,y:65,z:1}});
+ const scan=createWorldPerception(store,{clock:()=>now}).snapshot({position:{x:0,y:65.62,z:0},dimension:0,terrain:{tile:()=> 'walkable'},radius:2});
+ assert.equal(scan.status,'observed');assert.equal(scan.counts.hostiles,1);assert.equal(scan.counts.players,1);
+ assert.equal(scan.terrain.sampledCells,25);assert.equal(scan.terrain.levels['1'].walkable,25);
 });
 test('world knowledge is bounded, dimension-aware and does not duplicate inventory',()=>{
  const store=new WorldKnowledgeStore({clock:()=>1000,maxChunks:16});
@@ -92,7 +122,7 @@ test('runtime facade connects event bus, normalizer, world store, terrain planne
  assert.equal(new GoalFollow('44',id=>runtime.world.getEntityPosition(id),2).isEnd({x:3,y:64,z:4}),true);
  const terrain={snapshot:()=>({collisionClassificationReady:true}),tile:()=> 'walkable'};
  const route=runtime.planTerrainRoute({dimension:0,terrain},{start:{x:0,y:64,z:0},goal:new GoalBlock(2,64,0)});
- assert.equal(route.status,'preview');assert.equal(route.executable,false);
+ assert.equal(route.status,'preview');assert.equal(route.executable,false);assert.equal(route.jump,false);
  assert.equal(runtime.snapshot().integrations.plugins.readOnly,true);runtime.close();
 });
 test('BedrockGameplayBridge feeds normalized events after original packet handler',()=>{
@@ -105,6 +135,13 @@ test('BedrockGameplayBridge feeds normalized events after original packet handle
  client.emit('start_game',{server_version:'1.26.60',dimension:0,player_position:{x:0,y:64,z:0},
   runtime_entity_id:1n,entity_id:1n,enable_item_stack_net_manager:false,current_tick:1n});
  client.emit('level_chunk',{x:3,z:-2,dimension:0,sub_chunk_count:4,cache_enabled:false,payload:Buffer.alloc(0)});
+ client.emit('add_actor',{runtime_entity_id:77n,entity_type:'minecraft:zombie',position:{x:4,y:64,z:-2}});
+ client.emit('move_actor_delta',{runtime_entity_id:77n,new_position_x:5});
+ assert.deepEqual(runtime.world.getEntityPosition('77'),{x:5,y:64,z:-2});
+ const awareness=runtime.observeBridge({closed:false,spawned:true,position:{x:0,y:64,z:0},dimension:0,
+  movement:{capability:()=> 'unavailable',snapshot:()=>({active:false,corrections:0})},
+  terrain:{snapshot:()=>({}),tile:()=> 'walkable'}});
+ assert.equal(awareness.worldAwareness.counts.hostiles,1);
  assert.deepEqual(seen,[3]);assert.equal(runtime.world.snapshot().dimension,0);assert.equal(runtime.world.snapshot().chunks,1);
  bridge.stop();assert.equal(runtime.snapshot().integrations.events.closed,true);
 });

@@ -236,6 +236,18 @@ test('continuous Follow starts in range, holds position, waits for stale targets
   runner.stop('test_cleanup');
 });
 
+test('continuous Follow forwards verified step-up intent to movement controller',()=>{
+ let beat,received=null;const point={x:0.5,y:65.62,z:0.5};
+ const movement={capability:()=> 'ready',snapshot:()=>({active:false,predictedPosition:{...point}}),
+  runVerifiedStep(_w,_target,_ticks,options){received=options;return {status:'accepted'};},stop(){}};
+ const world={movement,terrain:terrain(),dimension:0,position:{...point},closed:false,spawned:true,movementAuthority:1,lastServerPositionAt:1000,
+  layerTwo:{preview:()=>({goal:'follow',status:'route_unverified',nextPoint:{x:2.5,y:66.62,z:0.5}})},
+  gameplayWorld:()=>({safetyHold:false}),routePlanner:()=>({status:'route_found',waypoint:{x:1.5,y:66.62,z:0.5},jump:true})};
+ const runner=new VerifiedAutonomyRunner({clock:()=>1000,setInterval:fn=>{beat=fn;return 1;},clearInterval:()=>{}});
+ assert.equal(runner.enable(world,{confirmed:true}).status,'accepted');beat();
+ assert.deepEqual(received,{jump:true});runner.stop('test_cleanup');
+});
+
 test('continuous Follow is not terminated by the finite-task time or step budget',()=>{
   let now=1000,beat;
   const point={x:.5,y:65.62,z:.5};

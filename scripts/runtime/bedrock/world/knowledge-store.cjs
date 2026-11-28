@@ -10,13 +10,14 @@ class WorldKnowledgeStore {
   this.entityFreshMs=Math.max(1000,Math.min(30000,options.entityFreshMs??5000));
   this.generation=0;this.dimension=null;this.gameVersion=null;this.position=null;this.time=null;
   this.chunks=new Map();this.sections=new Map();this.blockUpdates=new Map();this.entities=new Map();
-  this.lastObservationAt=null;this.lastPrunedAt=0;this.closed=false;
+  this.lastObservationAt=null;this.lastSpatialObservationAt=null;this.lastPrunedAt=0;this.closed=false;
  }
  reset(meta={}) {
   this.generation++;this.dimension=Number.isInteger(meta.dimension)&&meta.dimension>=0&&meta.dimension<=2?meta.dimension:null;
   this.gameVersion=typeof meta.gameVersion==='string'?meta.gameVersion:null;this.position=meta.position??null;this.time=null;
   this.chunks.clear();this.sections.clear();this.blockUpdates.clear();this.entities.clear();
-  this.lastObservationAt=Number.isFinite(meta.at)?meta.at:this.clock();this.closed=false;return this.snapshot();
+  this.lastObservationAt=Number.isFinite(meta.at)?meta.at:this.clock();
+  this.lastSpatialObservationAt=meta.position&&Number.isFinite(meta.at)?meta.at:null;this.closed=false;return this.snapshot();
  }
  key(d,x,y,z){return [d,x,y,z].join(':');}
  matchDimension(d){
@@ -36,15 +37,18 @@ class WorldKnowledgeStore {
   const now=event.at;
   if(event.type==='world.session.started'||event.type==='world.dimension.changed'){
    this.reset({dimension:event.dimension,gameVersion:event.gameVersion??this.gameVersion,
-    position:event.position??this.position,at:now});return true;}
+    position:event.type==='world.dimension.changed'?(event.position??null):(event.position??this.position),at:now});return true;}
   this.lastObservationAt=now;
+  const markSpatial=()=>{this.lastSpatialObservationAt=now;};
   switch(event.type){
   case 'world.chunk.observed':{
    if(!this.matchDimension(event.dimension))return false;
+   markSpatial();
    this.touch(this.chunks,this.key(event.dimension,event.x,0,event.z),{dimension:event.dimension,x:event.x,z:event.z,
     subChunkCount:event.subChunkCount,cacheEnabled:event.cacheEnabled,payloadBytes:event.payloadBytes,at:now},this.maxChunks);break;}
   case 'world.subchunks.observed':{
    if(!this.matchDimension(event.dimension))return false;
+   markSpatial();
    for(const s of(event.sections??[]).slice(0,48)){
     if(![s.x,s.y,s.z].every(Number.isInteger))continue;
     this.touch(this.sections,this.key(event.dimension,s.x,s.y,s.z),{dimension:event.dimension,...s,at:now},this.maxSections);
@@ -52,17 +56,19 @@ class WorldKnowledgeStore {
   case 'world.block.updated':{
    if(!this.matchDimension(event.dimension))return false;const p=event.position;
    if(!p||![p.x,p.y,p.z,event.runtimeId].every(Number.isFinite))return false;
+   markSpatial();
    this.touch(this.blockUpdates,this.key(event.dimension,Math.floor(p.x),Math.floor(p.y),Math.floor(p.z)),
     {dimension:event.dimension,position:p,runtimeId:event.runtimeId,layer:event.layer,at:now},this.maxBlockUpdates);break;}
   case 'world.entity.added':case 'world.entity.moved':{
    if(event.dimension!==null&&event.dimension!==undefined&&!this.matchDimension(event.dimension))return false;
    const id=String(event.entityId??'');if(!/^[0-9]{1,20}$/.test(id)||!event.position)return false;
    const old=this.entities.get(id);
+   markSpatial();
    this.touch(this.entities,id,{entityId:id,entityType:event.entityType??old?.entityType??'entity',
     identifier:event.identifier??old?.identifier??null,self:event.self===true||old?.self===true,
     dimension:event.dimension??old?.dimension??this.dimension,position:event.position,seenAt:now},this.maxEntities);
    if(event.self===true)this.position=event.position;break;}
-  case 'world.entity.removed':if(event.entityId!=null)this.entities.delete(String(event.entityId));break;
+  case 'world.entity.removed':if(event.entityId!=null){this.entities.delete(String(event.entityId));markSpatial();}break;
   case 'world.time.observed':this.time={time:event.time,daylightCycle:event.daylightCycle,at:now};break;
   case 'inventory.snapshot.observed':case 'inventory.snapshot.unavailable':break;
   default:return false;
@@ -81,14 +87,16 @@ class WorldKnowledgeStore {
   this.prune();if(!position||!['x','y','z'].every(k=>Number.isFinite(position[k])))return [];
   const radius=Number.isFinite(options.radius)?Math.max(0,Math.min(256,options.radius)):32;
   const types=Array.isArray(options.types)?new Set(options.types.slice(0,8)):null;
-  return [...this.entities.values()].filter(e=>(!types||types.has(e.entityType))&&e.dimension===(options.dimension??this.dimension))
-   .map(e=>({...e,distance:Math.hypot(e.position.x-position.x,e.position.y-position.y,e.position.z-position.z)}))
+  const now=this.clock();
+  return [...this.entities.values()].filter(e=>(!types||types.has(e.entityType))&&e.dimension===(options.dimension??this.dimension)&&
+    Number.isFinite(e.seenAt)&&now>=e.seenAt&&now-e.seenAt<=this.entityFreshMs)
+   .map(e=>({...e,ageMs:now-e.seenAt,distance:Math.hypot(e.position.x-position.x,e.position.y-position.y,e.position.z-position.z)}))
    .filter(e=>e.distance<=radius).sort((a,b)=>a.distance-b.distance).slice(0,Math.max(1,Math.min(64,options.limit??16)));
  }
  snapshot(){this.prune();return {generation:this.generation,dimension:this.dimension,gameVersion:this.gameVersion,
   position:this.position?{...this.position}:null,time:this.time?{...this.time}:null,chunks:this.chunks.size,
   observedSections:this.sections.size,blockUpdates:this.blockUpdates.size,entities:this.entities.size,
-  lastObservationAt:this.lastObservationAt,bounded:true,persistent:false,closed:this.closed};}
- close(){this.closed=true;this.chunks.clear();this.sections.clear();this.blockUpdates.clear();this.entities.clear();this.position=null;this.time=null;}
+  lastObservationAt:this.lastObservationAt,lastSpatialObservationAt:this.lastSpatialObservationAt,bounded:true,persistent:false,closed:this.closed};}
+ close(){this.closed=true;this.chunks.clear();this.sections.clear();this.blockUpdates.clear();this.entities.clear();this.position=null;this.time=null;this.lastObservationAt=null;this.lastSpatialObservationAt=null;}
 }
 module.exports={WorldKnowledgeStore};
