@@ -1841,8 +1841,12 @@ class BedrockGameplayBridge {
         return { status: 'rejected', reason: 'critical_health' };
       if (this.layerFour?.critical)
         return { status: 'rejected', reason: 'survival_hold' };
-      if (this.gameplayAgent?.snapshot?.()?.active || this.autonomy?.snapshot?.()?.active)
-        return { status: 'rejected', reason: 'autonomous_controller_busy' };
+      if (this.gameplayAgent?.snapshot?.()?.active)
+        return { status: 'rejected', reason: 'gameplay_agent_busy' };
+      // Explicit manual input outranks autonomous Follow. Cancel its loop and
+      // release any active pulse before the manual controller takes ownership.
+      if (this.autonomy?.snapshot?.()?.active)
+        this.autonomy.stop('manual_control_preempted');
       if (!this.movement || typeof this.movement.runManualHold !== 'function')
         return { status: 'rejected', reason: 'movement_unavailable' };
       const envelope = this.runtimeExtensions?.envelope?.evaluate?.('manual_move', {
