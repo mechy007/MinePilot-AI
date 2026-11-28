@@ -156,7 +156,7 @@ function createManagedSession({ xbox, world, rta, subscription, controller, init
             committed = true;
             break;
           } catch {
-            publish?.({ phase: 'connection', stage: 'world_transport', reason: 'network' });
+            if (!closed) publish?.({ phase: 'connection', stage: 'world_transport', reason: 'network' });
             if (attempt < retryDelaysMs.length && pendingConnectionId === target && !closed) {
               await new Promise(resolve => setTimeout(resolve, retryDelaysMs[attempt]));
             }
@@ -178,6 +178,9 @@ function createManagedSession({ xbox, world, rta, subscription, controller, init
     void applyPendingConnection();
   };
   subscription.on('ready', updateConnection);
+  // RTA may reconnect while the nonce is being fetched, before this listener exists.
+  // Reconcile the subscription's current state immediately after attaching it.
+  updateConnection(subscription.initialData);
 
   return {
     current: initialSession,
@@ -249,6 +252,14 @@ async function joinFriendWorld({
 
     setStage('world_transport');
     rta = new XboxRTASocket(xbox);
+    // XboxRTASocket is an EventEmitter; an unhandled reconnect error would crash Node.
+    // Keep a lifetime listener and route failures through normal session cleanup.
+    rta.on('error', () => {
+      if (controller.signal.aborted) return;
+      publish({ phase: 'failed', stage: 'world_transport', reason: 'transport' });
+      if (session) void session.close();
+      else controller.abort(new Error('Xbox RTA connection failed'));
+    });
     await rta.connect({ signal: joinSignal, timeout: 15_000 });
     subscription = await rta.subscribe(RTA_CONNECTIONS_URI, { signal: joinSignal });
     const connectionId = subscription.initialData?.ConnectionId;
