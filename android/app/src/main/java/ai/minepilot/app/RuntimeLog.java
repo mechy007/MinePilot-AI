@@ -270,7 +270,10 @@ final class RuntimeLog {
         if (lastCommand != null && java.util.Arrays.asList("rejected", "failed", "blocked")
                 .contains(lastCommand.optString("status"))) return true;
         JSONObject movement = gameplay.optJSONObject("movementSystem");
-        return movement != null && !movement.optString("lastError").isEmpty();
+        if (movement == null || !movement.has("lastError") ||
+                movement.isNull("lastError")) return false;
+        String movementError = movement.optString("lastError", "");
+        return !movementError.isEmpty() && !"null".equals(movementError);
     }
 
     static String bedrockDisconnect(int code) {
